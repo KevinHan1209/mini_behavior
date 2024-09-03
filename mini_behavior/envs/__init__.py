@@ -27,4 +27,5 @@ from mini_behavior.envs.two_room_nav import *
 # extra
 from mini_behavior.envs.preparing_salad_floorplan import *
 from mini_behavior.envs.auto_env import *
-from mini_behavior.envs.toy_interaction import *
+from mini_behavior.envs.shaking_a_rattle import *
+from mini_behavior.envs.pressing_red_spiky_ball import *

@@ -6,7 +6,7 @@ from mini_behavior.window import Window
 from mini_behavior.utils.save import get_step, save_demo
 from mini_behavior.grid import GridDimension
 import numpy as np
-import mini_behavior.envs.toy_interaction
+import mini_behavior.envs.pressing_red_spiky_ball
 
 # Size in pixels of a tile in the full-scale human view
 TILE_PIXELS = 32
@@ -205,7 +205,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--env",
     help="gym environment to load",
-    default='MiniGrid-ToyInteraction-8x8-N2-v0'
+    default='MiniGrid-PressingRedSpikyBall-8x8-N2-v0'
 )
 parser.add_argument(
     "--seed",
