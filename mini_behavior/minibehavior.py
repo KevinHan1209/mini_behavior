@@ -10,6 +10,7 @@ from .objects import *
 from .grid import BehaviorGrid, GridDimension, is_obj
 from mini_behavior.window import Window
 from .utils.utils import AttrDict
+from mini_behavior.states import RelativeObjectState
 from mini_behavior.actions import Pickup, Drop, Toggle, Open, Close
 import numpy as np
 
@@ -195,7 +196,7 @@ class MiniBehaviorEnv(MiniGridEnv):
             self.agent_dir = state['agent_dir']
         return self.grid
 
-    def reset(self):
+    def reset(self, type = None):
         # Reinitialize episode-specific variables
         self.agent_pos = (-1, -1)
         self.agent_dir = -1
@@ -234,6 +235,9 @@ class MiniBehaviorEnv(MiniGridEnv):
             obs = self.gen_full_obs()
         else:
             obs = self.gen_obs()
+
+        if type == "APT":
+            obs = self.gen_APT_obs()
         return obs
 
     def gen_full_obs(self):
@@ -490,7 +494,7 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         return True
 
-    def step(self, action):
+    def step(self, action, type = None):
         # keep track of last action
         self.last_action = action
 
@@ -645,7 +649,28 @@ class MiniBehaviorEnv(MiniGridEnv):
         else:
             obs = self.gen_obs()
 
+        if type == "ATP":
+            obs = self.gen_APT_obs()
+
         return obs, reward, done, {}
+    
+    def gen_APT_obs(self):
+        # Generates all object states as well as agent's current position and direction
+        obj_states = []
+        for obj_type in self.objs.values():
+            for obj in obj_type:
+                for state_value in obj.states:
+                    if isinstance(obj.states[state_value], RelativeObjectState):
+                        continue
+                    state = obj.states[state_value].get_value(self)
+                    if state == True:
+                        obj_states.append(1)
+                    else:
+                        obj_states.append(0)
+        obs = obj_states
+        obs.append(self.agent_pos)
+        obs.append(self.agent_dir)
+        return obs
 
     def _reward(self):
         if self._end_conditions():

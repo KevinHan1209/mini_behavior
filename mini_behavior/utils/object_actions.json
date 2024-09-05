@@ -169,6 +169,11 @@
         "drop",
         "drop_in"
     ],
+    "gear": [
+        "pickup",
+        "drop",
+        "drop_in"
+    ],
     "gym_shoe": [
         "pickup",
         "drop",
@@ -252,6 +257,10 @@
         "drop",
         "drop_in",
         "cook"
+    ],
+    "mallet": [
+        "pickup",
+        "drop_in"
     ],
     "package": [
         "pickup",

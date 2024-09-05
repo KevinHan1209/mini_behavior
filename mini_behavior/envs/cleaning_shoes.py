@@ -4,7 +4,7 @@ from mini_behavior.register import register
 
 class CleaningShoesEnv(RoomGrid):
     """
-    Environment in which the agent is instructed to clean a car
+    Environment in which the agent is instructed to clean shoes
     """
 
     def __init__(
