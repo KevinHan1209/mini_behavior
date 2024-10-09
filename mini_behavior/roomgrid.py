@@ -97,6 +97,7 @@ class RoomGrid(MiniBehaviorEnv):
         highlight=True,
         init_dict=None,
         dense_reward=False,
+        exploration_type = None
     ):
         if init_dict:
             self.init_dict = init_dict
@@ -130,6 +131,7 @@ class RoomGrid(MiniBehaviorEnv):
             agent_view_size=agent_view_size,
             highlight=highlight,
             dense_reward=dense_reward,
+            exploration_type=exploration_type
         )
     
     def add_walls(self, width, height):
@@ -456,7 +458,7 @@ class RoomGrid(MiniBehaviorEnv):
                 for room in row:
                     room.reset()
                     
-        return self.gen_obs()
+        return self.gen_APT_obs()
 
     def _gen_grid(self, width, height):
         if not self.init_dict:

@@ -14,18 +14,22 @@ class PlayAlligatorEnv(RoomGrid):
             num_rows=1,
             num_cols=1,
             max_steps=1e5,
+            exploration_type = None
     ):
-        num_objs = {'mallet': 3, 'music_box': 1}
+        num_objs = {'mallet': 1, 'music_box': 1}
         self.mission = 'play music box'
         self.frames = []
+
 
         super().__init__(mode=mode,
                     num_objs=num_objs,
                     room_size=room_size,
                     num_rows=num_rows,
                     num_cols=num_cols,
-                    max_steps=max_steps
+                    max_steps=max_steps,
+                    exploration_type = exploration_type
                     )
+        '''
         for obj_type1, obj_type2 in zip(self.objs.values(), self.objs.values()):
             for obj1, obj2 in zip(obj_type1, obj_type2):
                 for state_value in obj1.states:
@@ -33,6 +37,28 @@ class PlayAlligatorEnv(RoomGrid):
                     if isinstance(obj1.states[state_value], RelativeObjectState):
                         continue
                     print(obj1.states[state_value].get_value(self))
+        '''
+
+    '''
+    def gen_APT_obs(self):
+        # Generates all object states as well as agent's current position and direction
+        obj_states = []
+        for obj_type in self.objs.values():
+            for obj in obj_type:
+                for state_value in obj.states:
+                    if isinstance(obj.states[state_value], RelativeObjectState):
+                        continue
+                    state = obj.states[state_value].get_value(self)
+                    if state == True:
+                        obj_states.append(1)
+                    else:
+                        obj_states.append(0)
+        obs = []
+        obs.append(self.agent_pos[0])
+        obs.append(self.agent_dir)
+        obs += obj_states
+        return obs
+        '''
         
     def _gen_objs(self):
         mallet = self.objs['mallet'][0]
@@ -40,6 +66,7 @@ class PlayAlligatorEnv(RoomGrid):
         self.place_obj(mallet)
         self.place_obj(music_box)
         music_box.states['playable'].set_value(False)
+
 
     def _init_conditions(self):
         for obj_type in ['mallet', 'music_box']:

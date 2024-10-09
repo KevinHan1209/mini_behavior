@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import functools
 from torch import distributions as pyd
 from torch.distributions.utils import _standard_normal
 
@@ -88,3 +88,32 @@ def hard_update_params(net, target_net):
     for param, target_param in zip(net.parameters(), target_net.parameters()):
         target_param.data.copy_(param.data)
 
+class RewardForwardFilter:
+    def __init__(self, gamma):
+        self.rewems = None
+        self.gamma = gamma
+
+    def update(self, rews):
+        if self.rewems is None:
+            self.rewems = rews
+        else:
+            self.rewems = self.rewems * self.gamma + rews
+        return self.rewems
+
+def recursive_getattr(obj, attr, *args):
+    """
+    Recursive version of getattr
+    taken from https://stackoverflow.com/questions/31174295
+
+    Ex:
+    > MyObject.sub_object = SubObject(name='test')
+    > recursive_getattr(MyObject, 'sub_object.name')  # return test
+    :param obj:
+    :param attr: Attribute to retrieve
+    :return: The attribute
+    """
+
+    def _getattr(obj, attr):
+        return getattr(obj, attr, *args)
+
+    return functools.reduce(_getattr, [obj, *attr.split(".")])

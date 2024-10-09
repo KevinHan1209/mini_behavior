@@ -12,8 +12,9 @@ from mini_behavior.window import Window
 from .utils.utils import AttrDict
 from mini_behavior.states import RelativeObjectState
 from mini_behavior.actions import Pickup, Drop, Toggle, Open, Close
-import numpy as np
 
+import numpy as np
+import torch
 
 # Size in pixels of a tile in the full-scale human view
 TILE_PIXELS = 32
@@ -63,8 +64,10 @@ class MiniBehaviorEnv(MiniGridEnv):
         highlight=True,
         tile_size=TILE_PIXELS,
         dense_reward=False,
+        exploration_type = None
     ):
 
+        self.exploration_type = exploration_type
         self.episode = 0
         self.teleop = False  # True only when set manually
         self.last_action = None
@@ -121,16 +124,20 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         pixel_dim = self.grid.pixel_dim
 
-        # The observation space is different from mini-grid due to the z dimension
-        self.observation_space = spaces.Box(
-            low=0,
-            high=255,
-            shape=(self.agent_view_size, self.agent_view_size, pixel_dim),
-            dtype='uint8'
-        )
-        self.observation_space = spaces.Dict({
-            'image': self.observation_space
-        })
+        # Modify observation type attribute if applicable
+        if self.exploration_type == "ATP":
+            self.observation_space = self.get_APT_obs_space()
+        else:
+            # The observation space is different from mini-grid due to the z dimension
+            self.observation_space = spaces.Box(
+                low=0,
+                high=255,
+                shape=(self.agent_view_size, self.agent_view_size, pixel_dim),
+                dtype='uint8'
+            )
+            self.observation_space = spaces.Dict({
+                'image': self.observation_space
+            })
 
         self.mode = mode
         assert self.mode in ["cartesian", "primitive"]
@@ -196,7 +203,7 @@ class MiniBehaviorEnv(MiniGridEnv):
             self.agent_dir = state['agent_dir']
         return self.grid
 
-    def reset(self, type = None):
+    def reset(self):
         # Reinitialize episode-specific variables
         self.agent_pos = (-1, -1)
         self.agent_dir = -1
@@ -231,13 +238,13 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.previous_progress = self.get_progress()
 
         # Return first observation
-        if self.use_full_obs:
+        if self.exploration_type == "ATP":
+            obs = self.gen_APT_obs()
+        elif self.use_full_obs:
             obs = self.gen_full_obs()
         else:
             obs = self.gen_obs()
 
-        if type == "APT":
-            obs = self.gen_APT_obs()
         return obs
 
     def gen_full_obs(self):
@@ -494,7 +501,7 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         return True
 
-    def step(self, action, type = None):
+    def step(self, action):
         # keep track of last action
         self.last_action = action
 
@@ -644,22 +651,41 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.update_states()
         reward = self._reward()
         done = self._end_conditions() or self.step_count >= self.max_steps
-        if self.use_full_obs:
+        if self.exploration_type == "ATP":
+            obs = self.gen_APT_obs()
+        elif self.use_full_obs:
             obs = self.gen_full_obs()
         else:
             obs = self.gen_obs()
 
-        if type == "ATP":
-            obs = self.gen_APT_obs()
-
         return obs, reward, done, {}
+
+    def get_APT_obs_space(self):
+        # Returns APT observation space. Used during initialization when some states have a None value rather than a Boolean
+        obj_states = []
+        for obj_type in self.objs.values():
+            for obj in obj_type:
+                for state_value in obj.states:
+                    # Only want absolute object states
+                    if isinstance(obj.states[state_value], RelativeObjectState):
+                        continue
+                    obj_states.append(0)
+
+        # Combine agent position, direction, and object states
+        obs = []
+        obs.extend([0,0,0]) 
+        obs += obj_states
+        return spaces.Box(low=0, high = max(self.width, self.height), shape = (len(obs),), dtype = 'uint8')
+
     
+
     def gen_APT_obs(self):
         # Generates all object states as well as agent's current position and direction
         obj_states = []
         for obj_type in self.objs.values():
             for obj in obj_type:
                 for state_value in obj.states:
+                    # Only want absolute object states
                     if isinstance(obj.states[state_value], RelativeObjectState):
                         continue
                     state = obj.states[state_value].get_value(self)
@@ -667,10 +693,16 @@ class MiniBehaviorEnv(MiniGridEnv):
                         obj_states.append(1)
                     else:
                         obj_states.append(0)
-        obs = obj_states
-        obs.append(self.agent_pos)
+
+        # Combine agent position, direction, and object states
+        obs = []
+        obs.extend(self.agent_pos)
         obs.append(self.agent_dir)
-        return obs
+        obs += obj_states
+
+        # Convert list to tensor
+        obs_tensor = torch.tensor(np.array(obs), dtype=torch.float32)  
+        return obs_tensor
 
     def _reward(self):
         if self._end_conditions():
@@ -733,7 +765,6 @@ class MiniBehaviorEnv(MiniGridEnv):
         for grid in self.grid.grid:
             furniture, obj = grid.get(*pos)
             state_values = obj.get_ability_values(self) if obj else None
-            print(state_values)
             img = GridDimension.render_tile(furniture, obj, state_values, draw_grid_lines=False)
             imgs.append(img)
 
