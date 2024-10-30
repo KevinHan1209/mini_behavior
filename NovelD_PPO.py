@@ -8,6 +8,7 @@ import gym
 import os
 
 class NovelD_PPO:
+    """PPO implementation with Random Network Distillation for novelty detection"""
     def __init__(self, env, device="cpu", total_timesteps=1000, learning_rate=3e-4,
                  num_envs=1, num_steps=100, gamma=0.99, gae_lambda=0.95,
                  num_minibatches=4, update_epochs=4, clip_coef=0.2,
@@ -55,7 +56,10 @@ class NovelD_PPO:
         self.rnd_model = RNDModel(self.obs_dim).to(self.device).float()
 
     def train(self):
-        print(f"Starting training: {self.total_timesteps} timesteps, {self.batch_size} batch size")
+        print("\n=== Training Configuration ===")
+        print(f"Total timesteps: {self.total_timesteps:,}")
+        print(f"Batch size: {self.batch_size}")
+        print(f"Learning rate: {self.learning_rate}")
         
         # Initialize optimizer
         optimizer = optim.Adam(list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()),
@@ -168,17 +172,26 @@ class NovelD_PPO:
             # Optimize policy and value networks
             self.optimize(b_obs, b_logprobs, b_actions, b_advantages, b_ext_returns, b_int_returns, optimizer, global_step)
 
-            if update % 10 == 0:  # Log periodically
-                print(f"Update {update}/{num_updates}")
-                print(f"Average reward: {rewards.mean():.3f}")
-                print(f"Average novelty: {curiosity_rewards.mean():.3f}")
+            if update % 5 == 0:  # Changed from 10 to 5
+                print(f"\n=== Update {update}/{num_updates} ===")
+                print(f"Steps: {global_step:,}")
                 print(f"Learning rate: {optimizer.param_groups[0]['lr']:.6f}")
-                print("-" * 30)
+                print("\nPerformance:")
+                print(f"  External reward: {rewards.mean():.3f} ± {rewards.std():.3f}")
+                print(f"  Novelty reward: {curiosity_rewards.mean():.3f} ± {curiosity_rewards.std():.3f}")
+                print(f"  Value estimates:")
+                print(f"    External: {ext_values.mean():.3f}")
+                print(f"    Internal: {int_values.mean():.3f}")
 
-        print(f"Training completed in {time.time() - start_time:.2f}s")
+            # === Reward Statistics ===
+            if update % 10 == 0:
+                print("\n=== Reward Statistics ===")
+                print(f"Mean: {self.reward_rms.mean:.3f}")
+                print(f"Variance: {self.reward_rms.var:.3f}")
+                print(f"Normalized range: [{curiosity_rewards.min():.3f}, {curiosity_rewards.max():.3f}]")
 
     def compute_advantages(self, next_value_ext, next_value_int, rewards, curiosity_rewards, ext_values, int_values, dones, next_done):
-        # Compute GAE for extrinsic and intrinsic rewards
+        # Calculate GAE advantages for both extrinsic and intrinsic rewards
         ext_advantages = torch.zeros_like(rewards, device=self.device)
         int_advantages = torch.zeros_like(curiosity_rewards, device=self.device)
         ext_lastgaelam = 0
@@ -261,7 +274,7 @@ class NovelD_PPO:
                         break
 
     def calculate_novelty(self, obs):
-        # Calculate novelty using RND model
+        # Compute novelty score using RND model
         normalized_obs = self.normalize_obs(obs)
         target_feature = self.rnd_model.target(normalized_obs)
         predict_feature = self.rnd_model.predictor(normalized_obs)
@@ -304,13 +317,13 @@ class NovelD_PPO:
                 }
             }
             torch.save(model_state, filename)
-            print(f"Model successfully saved to {filename}")
+            print(f"\n✓ Model saved to {filename}")
         except Exception as e:
-            print(f"Error saving model: {e}")
+            print(f"\n✗ Error saving model: {e}")
 
     def load_model(self, filename):
         if not os.path.exists(filename):
-            raise FileNotFoundError(f"No model file found at {filename}")
+            raise FileNotFoundError(f"\n✗ No model file found at {filename}")
         
         try:
             model_state = torch.load(filename, map_location=self.device)
@@ -336,13 +349,17 @@ class NovelD_PPO:
             
             # Optionally load hyperparameters if they exist
             if 'hyperparameters' in model_state:
-                print("Loaded hyperparameters:", model_state['hyperparameters'])
+                print("\nHyperparameters:")
+                for k, v in model_state['hyperparameters'].items():
+                    print(f"  {k}: {v}")
             
-            print(f"Model successfully loaded from {filename}")
+            print(f"\n=== Model Loading ===")
+            print(f"✓ Successfully loaded from {filename}")
         except Exception as e:
-            raise ValueError(f"Error loading model: {e}")
+            raise ValueError(f"\n✗ Error loading model: {e}")
 
 class RunningMeanStd:
+    """Tracks running mean and standard deviation of input data"""
     def __init__(self, shape=()):
         self.mean = np.zeros(shape, 'float64')
         self.var = np.ones(shape, 'float64')
@@ -381,6 +398,7 @@ class RunningMeanStd:
         self.count = new_count
 
 class Agent(nn.Module):
+    """Neural network for policy and value functions"""
     # Agent class implementing the policy and value functions
     def __init__(self, obs_dim, action_dim):
         super().__init__()
@@ -412,6 +430,7 @@ class Agent(nn.Module):
         return action, probs.log_prob(action), probs.entropy(), self.critic_ext(hidden), self.critic_int(hidden)
 
 class RNDModel(nn.Module):
+    """Random Network Distillation model for novelty detection"""
     # Random Network Distillation model
     def __init__(self, input_size, hidden_size=256):
         super().__init__()

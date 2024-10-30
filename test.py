@@ -8,8 +8,9 @@ import os
 import time
 from array2gif import write_gif
 
+# === Environment Wrapper ===
 class CustomObservationWrapper(gym.ObservationWrapper):
-    """Wrapper that converts environment observations into a flat vector of agent position and object states"""
+    """Converts environment observations into a flat vector containing agent position and object states"""
     def __init__(self, env):
         super().__init__(env)
         self.observation_space = self.get_obs_space()
@@ -28,7 +29,8 @@ class CustomObservationWrapper(gym.ObservationWrapper):
 
         obs = [0, 0, 0]  # Agent position (x, y) and direction
         obs += obj_states
-        return gym.spaces.Box(low=0, high=max(self.env.width, self.env.height), shape=(len(obs),), dtype=np.float32)
+        return gym.spaces.Box(low=0, high=max(self.env.width, self.env.height), 
+                            shape=(len(obs),), dtype=np.float32)
 
     def gen_obs(self):
         obj_states = []
@@ -43,28 +45,31 @@ class CustomObservationWrapper(gym.ObservationWrapper):
         return np.array(obs, dtype=np.float32)
 
 def train_agent(env):
-    print("Training agent...")
+    print("\n=== Training New Agent ===")
     noveld_ppo = NovelD_PPO(env)
     noveld_ppo.train()
-    # Save the model after training
     noveld_ppo.save_model("noveld_ppo_model.pth")
     return noveld_ppo
 
 def test_agent(env, noveld_ppo, device, num_episodes=1, max_steps_per_episode=100):
-    print(f"\n=== Testing agent for {num_episodes} episodes ===")
+    print(f"\n=== Testing Agent ===")
+    print(f"Episodes: {num_episodes}")
+    print(f"Max steps per episode: {max_steps_per_episode}")
     
     for episode in range(num_episodes):
+        print(f"\n=== Episode {episode + 1}/{num_episodes} ===")
         obs = env.reset()
-        done = False  # Add this line
+        done = False
         total_reward = 0
         steps = 0
         novelty_values = []
         frames = []
-
+        
         while not done and steps < max_steps_per_episode:
             frames.append(np.moveaxis(env.render(), 2, 0))
             
-            action, _, _, _, _ = noveld_ppo.agent.get_action_and_value(torch.FloatTensor(obs).unsqueeze(0).to(device))
+            action, _, _, ext_value, int_value = noveld_ppo.agent.get_action_and_value(
+                torch.FloatTensor(obs).unsqueeze(0).to(device))
             obs, reward, done, _ = env.step(action.cpu().numpy().item())
             
             total_reward += reward
@@ -72,31 +77,33 @@ def test_agent(env, noveld_ppo, device, num_episodes=1, max_steps_per_episode=10
             novelty = noveld_ppo.calculate_novelty(torch.FloatTensor(obs).unsqueeze(0).to(device))
             novelty_values.append(novelty)
             
-            if steps % 10 == 0:  # Log progress periodically
-                print(f"Step {steps}: Action={env.actions(action.item()).name}, Reward={total_reward:.2f}, Novelty={novelty:.4f}")
+            print(f"Step {steps:3d} | Action: {env.actions(action.item()).name:15s}")
+            print(f"  Reward: {reward:6.2f} | Novelty: {novelty:6.4f}")
+            print(f"  Values - Ext: {ext_value.item():6.2f} | Int: {int_value.item():6.2f}")
             
             time.sleep(0.1)
         
         # Save episode results
         write_gif(np.array(frames), f"episode_{episode + 1}.gif", fps=1)
-        print(f"\nEpisode {episode + 1} Summary:")
-        print(f"Steps: {steps}, Total Reward: {total_reward:.2f}")
-        print(f"Novelty - Avg: {np.mean(novelty_values):.4f}, Max: {max(novelty_values):.4f}")
+        print(f"\n=== Episode {episode + 1} Summary ===")
+        print(f"Steps: {steps}")
+        print(f"Total Reward: {total_reward:.2f}")
 
 def main():
+    print("\n=== Initializing Environment ===")
     env = gym.make('MiniGrid-ShakingARattle-6x6-N2-v0')
     env = CustomObservationWrapper(env)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     
     # Load or train model
     model_path = "noveld_ppo_model.pth"
     try:
-        print("Attempting to load existing model...")
+        print("\n=== Loading Existing Model ===")
         noveld_ppo = NovelD_PPO(env, device=device)
         noveld_ppo.load_model(model_path)
-    except (FileNotFoundError, ValueError) as e:
-        print(f"Could not load model: {e}")
-        print("Training new model...")
+    except (FileNotFoundError, ValueError):
+        print("\n=== No Existing Model Found ===")
         noveld_ppo = train_agent(env)
 
     test_agent(env, noveld_ppo, device)
