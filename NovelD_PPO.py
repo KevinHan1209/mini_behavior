@@ -5,18 +5,19 @@ import torch.optim as optim
 import torch.nn.functional as F
 import time
 import gym
+import os
 
 class NovelD_PPO:
-    def __init__(self, env, device="cpu", total_timesteps=20000, learning_rate=3e-4,
-                 num_envs=1, num_steps=2048, gamma=0.99, gae_lambda=0.95,
-                 num_minibatches=32, update_epochs=10, clip_coef=0.2,
-                 ent_coef=0.0, vf_coef=0.5, max_grad_norm=0.5, target_kl=None,
+    def __init__(self, env, device="cpu", total_timesteps=1000, learning_rate=3e-4,
+                 num_envs=1, num_steps=100, gamma=0.99, gae_lambda=0.95,
+                 num_minibatches=4, update_epochs=4, clip_coef=0.2,
+                 ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5, target_kl=None,
                  int_coef=1.0, ext_coef=2.0, int_gamma=0.99, alpha=0.5,
                  update_proportion=0.25):
         # Initialize hyperparameters and environment
         self.env = env
         self.device = torch.device(device)
-        self.total_timesteps = total_timesteps
+        self.total_timesteps = total_timesteps  # Changed default value to 20000
         self.learning_rate = learning_rate
         self.num_envs = num_envs
         self.num_steps = num_steps
@@ -54,6 +55,8 @@ class NovelD_PPO:
         self.rnd_model = RNDModel(self.obs_dim).to(self.device).float()
 
     def train(self):
+        print(f"Starting training: {self.total_timesteps} timesteps, {self.batch_size} batch size")
+        
         # Initialize optimizer
         optimizer = optim.Adam(list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()),
                                lr=self.learning_rate, eps=1e-5)
@@ -124,28 +127,28 @@ class NovelD_PPO:
             self.obs_rms.update(obs.cpu().numpy().reshape(-1, self.obs_dim))
 
             # Normalize curiosity rewards
-            print("Shape of curiosity_rewards:", curiosity_rewards.shape)
-            print("Sample of curiosity_rewards:", curiosity_rewards[:5])
+            curiosity_rewards_np = curiosity_rewards.cpu().numpy()
+            flattened_rewards = curiosity_rewards_np.reshape(-1)  # Flatten to 1D array
 
-            curiosity_reward_per_env = np.array([self.reward_rms.update(reward_per_step.cpu().numpy()) for reward_per_step in curiosity_rewards])
-            print("Shape of curiosity_reward_per_env:", curiosity_reward_per_env.shape)
-            print("Sample of curiosity_reward_per_env:", curiosity_reward_per_env[:5])
-
-            # Check if curiosity_reward_per_env is empty or contains None values
-            if curiosity_reward_per_env.size == 0 or np.any(curiosity_reward_per_env == None):
-                print("Warning: curiosity_reward_per_env is empty or contains None values. Skipping reward normalization.")
+            # Skip normalization if rewards are empty or invalid
+            if flattened_rewards.size == 0 or np.any(np.isnan(flattened_rewards)):
+                print("Warning: Invalid rewards detected. Skipping normalization.")
                 continue
 
-            # Calculate mean and variance, handling potential NaN values
-            mean_reward = np.nanmean(curiosity_reward_per_env)
-            var_reward = np.nanvar(curiosity_reward_per_env)
+            # Update running statistics with flattened rewards
+            self.reward_rms.update(flattened_rewards)
 
-            if np.isnan(mean_reward) or np.isnan(var_reward):
-                print("Warning: Mean or variance is NaN. Skipping reward normalization.")
-                continue
+            # Normalize the rewards using running statistics
+            # Convert running statistics to tensor and move to correct device
+            rms_var_tensor = torch.FloatTensor([self.reward_rms.var]).to(self.device)
+            curiosity_rewards = curiosity_rewards / torch.sqrt(rms_var_tensor + 1e-8)
 
-            self.reward_rms.update_from_moments(mean_reward, var_reward, curiosity_reward_per_env.size)
-            curiosity_rewards /= np.sqrt(self.reward_rms.var + 1e-8)
+            # Optional debugging prints
+            if update % 10 == 0:  # Only print every 10 updates to avoid spam
+                print(f"Reward statistics:")
+                print(f"  Mean: {self.reward_rms.mean:.3f}")
+                print(f"  Var: {self.reward_rms.var:.3f}")
+                print(f"  Normalized rewards range: [{curiosity_rewards.min():.3f}, {curiosity_rewards.max():.3f}]")
 
             # Compute advantages and returns
             with torch.no_grad():
@@ -165,7 +168,14 @@ class NovelD_PPO:
             # Optimize policy and value networks
             self.optimize(b_obs, b_logprobs, b_actions, b_advantages, b_ext_returns, b_int_returns, optimizer, global_step)
 
-            print(f"Update: {update}, Total Timesteps: {global_step}, Time Elapsed: {time.time() - start_time}s")
+            if update % 10 == 0:  # Log periodically
+                print(f"Update {update}/{num_updates}")
+                print(f"Average reward: {rewards.mean():.3f}")
+                print(f"Average novelty: {curiosity_rewards.mean():.3f}")
+                print(f"Learning rate: {optimizer.param_groups[0]['lr']:.6f}")
+                print("-" * 30)
+
+        print(f"Training completed in {time.time() - start_time:.2f}s")
 
     def compute_advantages(self, next_value_ext, next_value_int, rewards, curiosity_rewards, ext_values, int_values, dones, next_done):
         # Compute GAE for extrinsic and intrinsic rewards
@@ -277,19 +287,83 @@ class NovelD_PPO:
         return ((obs - torch.FloatTensor(self.obs_rms.mean).to(self.device)) / 
                 torch.sqrt(torch.FloatTensor(self.obs_rms.var).to(self.device) + 1e-8)).clip(-5, 5)
 
+    def save_model(self, filename):
+        try:
+            model_state = {
+                'agent': self.agent.state_dict(),
+                'rnd_model': self.rnd_model.state_dict(),
+                'obs_rms_mean': self.obs_rms.mean,
+                'obs_rms_var': self.obs_rms.var,
+                'reward_rms_mean': self.reward_rms.mean,
+                'reward_rms_var': self.reward_rms.var,
+                'hyperparameters': {
+                    'learning_rate': self.learning_rate,
+                    'gamma': self.gamma,
+                    'int_coef': self.int_coef,
+                    'ext_coef': self.ext_coef
+                }
+            }
+            torch.save(model_state, filename)
+            print(f"Model successfully saved to {filename}")
+        except Exception as e:
+            print(f"Error saving model: {e}")
+
+    def load_model(self, filename):
+        if not os.path.exists(filename):
+            raise FileNotFoundError(f"No model file found at {filename}")
+        
+        try:
+            model_state = torch.load(filename, map_location=self.device)
+            
+            # Verify model components
+            required_keys = ['agent', 'rnd_model', 'obs_rms_mean', 'obs_rms_var', 
+                            'reward_rms_mean', 'reward_rms_var']
+            if not all(k in model_state for k in required_keys):
+                raise ValueError("Model file is missing required components")
+            
+            # Verify observation space matches
+            if model_state['obs_rms_mean'].shape != self.obs_rms.mean.shape:
+                raise ValueError(f"Model observation space {model_state['obs_rms_mean'].shape} "
+                               f"does not match environment {self.obs_rms.mean.shape}")
+            
+            # Load state dictionaries
+            self.agent.load_state_dict(model_state['agent'])
+            self.rnd_model.load_state_dict(model_state['rnd_model'])
+            self.obs_rms.mean = model_state['obs_rms_mean']
+            self.obs_rms.var = model_state['obs_rms_var']
+            self.reward_rms.mean = model_state['reward_rms_mean']
+            self.reward_rms.var = model_state['reward_rms_var']
+            
+            # Optionally load hyperparameters if they exist
+            if 'hyperparameters' in model_state:
+                print("Loaded hyperparameters:", model_state['hyperparameters'])
+            
+            print(f"Model successfully loaded from {filename}")
+        except Exception as e:
+            raise ValueError(f"Error loading model: {e}")
+
 class RunningMeanStd:
-    # Class for calculating running mean and standard deviation
     def __init__(self, shape=()):
         self.mean = np.zeros(shape, 'float64')
         self.var = np.ones(shape, 'float64')
         self.count = 1e-4
 
     def update(self, x):
+        if not isinstance(x, np.ndarray):
+            x = np.asarray(x)
+        
+        if x.size == 0:
+            return x
+
         batch_mean = np.mean(x, axis=0)
         batch_var = np.var(x, axis=0)
         batch_count = x.shape[0]
+
+        if np.any(np.isnan(batch_mean)) or np.any(np.isnan(batch_var)):
+            return x
+
         self.update_from_moments(batch_mean, batch_var, batch_count)
-        return x  # Return the input value
+        return x
 
     def update_from_moments(self, batch_mean, batch_var, batch_count):
         delta = batch_mean - self.mean

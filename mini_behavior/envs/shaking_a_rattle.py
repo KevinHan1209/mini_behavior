@@ -3,9 +3,10 @@ from mini_behavior.register import register
 from enum import IntEnum
 from gym import spaces
 
+
 class ShakingARattleEnv(RoomGrid):
     """
-    Environment in which the agent interacts with a rattle
+    Environment in which the agent picks up a rattle from the floor
     """
 
     def __init__(
@@ -18,7 +19,7 @@ class ShakingARattleEnv(RoomGrid):
     ):
         num_objs = {'rattle': 1}
 
-        self.mission = 'interact with the rattle'
+        self.mission = 'pick up the rattle'
 
         super().__init__(mode=mode,
                          num_objs=num_objs,
@@ -36,21 +37,18 @@ class ShakingARattleEnv(RoomGrid):
         self.place_obj(rattle)
 
     def _init_conditions(self):
-        assert 'rattle' in self.objs.keys(), "No Rattle"
-
+        assert 'rattle' in self.objs.keys(), "No rattle"
         rattle = self.objs['rattle'][0]
-        # Initial state: rattle is silent
-        assert rattle.check_abs_state(self, 'silent')
-
+        assert rattle.check_abs_state(self, 'onfloor')
         return True
 
     def _end_conditions(self):
         rattle = self.objs['rattle'][0]
-        # End condition: rattle is making noise (shaken)
-        if rattle.check_abs_state(self, 'noise'):
+        # End condition: rattle is in agent's inventory (not on floor)
+        if not rattle.check_abs_state(self, 'onfloor'):
             return True
-        else:
-            return False
+        return False
+
 
 register(
     id='MiniGrid-ShakingARattle-16x16-N2-v0',
@@ -67,4 +65,10 @@ register(
     id='MiniGrid-ShakingARattle-6x6-N2-v0',
     entry_point='mini_behavior.envs:ShakingARattleEnv',
     kwargs={"room_size": 6, "max_steps": 1000}
+)
+
+register(
+    id='MiniGrid-ShakingARattle-16x16-N2-v1',
+    entry_point='mini_behavior.envs:ShakingARattleEnv',
+    kwargs={'mode': 'cartesian'}
 )
