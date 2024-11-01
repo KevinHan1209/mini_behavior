@@ -1,4 +1,5 @@
 # Active Pre-Training without Contrastive Learning for Discrete State and Action Spaces
+
 import numpy as np
 import torch 
 import torch.optim as optim
@@ -6,7 +7,7 @@ from networks.actor import Agent
 import numpy as np
 from numpy import linalg as LA
 from mini_behavior.roomgrid import *
-from mini_behavior.utils.utils import RewardForwardFilter, dir_to_rad, schedule, recursive_getattr
+from mini_behavior.utils.utils import RewardForwardFilter, RMS, dir_to_rad, schedule, recursive_getattr
 import random
 from gym.wrappers.normalize import RunningMeanStd
 from collections import deque
@@ -18,6 +19,7 @@ class APT_PPO():
     def __init__(self,
                  env,                     
                  device = "cpu",
+                 save_freq: int = 100,                 # number of updates per model save
                  total_timesteps: int = 2000000000,    # total timesteps of the experiments
                  learning_rate: float = 1e-4,          # the learning rate of the optimizer
                  num_envs: int = 128,                  # the number of parallel game environments
@@ -37,11 +39,12 @@ class APT_PPO():
                  int_coef: float = 1.0,                # coefficient of intrinsic reward
                  ext_coef: float = 2.0,                # coefficient of extrinsic reward
                  int_gamma: float = 0.99,              # intrinsic reward discount rate
-                 th: float = 10,                       # threshold distance for k-nearest neighbors
+                 k: int = 50,                          # number of neighbors
                  c: float = 1                          # numerical stability constant
                  ): 
         self.env = env
         self.device = device
+        self.save_freq = save_freq
         self.total_timesteps = total_timesteps
         self.learning_rate = learning_rate
         self.num_envs = num_envs
@@ -61,14 +64,28 @@ class APT_PPO():
         self.int_coef = int_coef
         self.ext_coef = ext_coef
         self.int_gamma = int_gamma
-        self.th = th
+        self.k = k
         self.c = c
 
         self.batch_size = int(num_envs * num_steps)
         self.minibatch_size = int(self.batch_size // num_minibatches)
         self.num_iterations = total_timesteps // self.batch_size
 
+        self.rms  = RMS(self.device)
+
     def train(self):
+        print("TRAINING PARAMETERS\n---------------------------------------")
+        print("Total timesteps:", self.total_timesteps)
+        print("Learning rate:", self.learning_rate)
+        print("Number of total updates:", int(self.total_timesteps // self.batch_size))
+        print("Number of parallel environments:", self.num_envs)
+        print("Number of steps per rollout (Used for each kNN update and curiosity reward calculation):", self.num_steps)
+        print("Batch size:", self.batch_size)
+        print("Number of PPO update epochs:", self.update_epochs)
+        print("Minibatch size:", self.minibatch_size)
+        print("K parameter:", self.k)
+        print("---------------------------------------")
+        assert self.total_timesteps % self.batch_size == 0
 
         self.agent = Agent(self.env.action_space.n, self.env.observation_space.shape[0]).to(self.device)
         self.optimizer = optim.Adam(
@@ -79,15 +96,20 @@ class APT_PPO():
         combined_parameters = list(self.agent.parameters())
 
         reward_rms = RunningMeanStd()
-        obs_rms = RunningMeanStd(shape=(1, 1, 84, 84))
         discounted_reward = RewardForwardFilter(self.int_gamma)
 
          # ALGO Logic: Storage setup
         actions = torch.zeros((self.num_steps, self.num_envs) + self.env.action_space.shape).to(self.device)
-        obs = torch.zeros((self.num_steps, self.num_envs) + self.env.observation_space.shape).to(self.device)
+        obs = torch.zeros((self.num_steps, self.num_envs) + self.env.observation_space.shape).to(self.device) 
         logprobs = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
         rewards = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
         self.curiosity_rewards = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
+
+        self.total_actions = []
+        self.total_obs = []
+        self.total_avg_curiosity_rewards = []
+        self.model_saves = []
+
         dones = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
         ext_values = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
         int_values = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
@@ -98,10 +120,13 @@ class APT_PPO():
         start_time = time.time()
         next_obs = torch.Tensor(self.env.reset()).to(self.device)
         next_done = torch.zeros(self.num_envs).to(self.device)
-        assert self.total_timesteps % self.batch_size == 0
         num_updates = int(self.total_timesteps // self.batch_size)
+
         for update in range(1, num_updates + 1):
             print("UPDATE: " + str(update) + "/" + str(num_updates))
+            if update % self.save_freq == 0:
+                print('Saving model...')
+                self.model_saves.append([self.agent.state_dict(), self.optimizer.state_dict()])
             # Annealing the rate if instructed to do so.
             if self.anneal_lr:
                 frac = 1.0 - (update - 1.0) / num_updates
@@ -131,17 +156,14 @@ class APT_PPO():
                 next_obs, reward, done, info = self.env.step(action.cpu().numpy())
                 rewards[step] = torch.tensor(reward).to(self.device).view(-1)
                 next_obs, next_done = torch.Tensor(next_obs).to(self.device), torch.Tensor(done).to(self.device)
+            
+            self.total_actions.append(actions)
+            self.total_obs.append(obs)
 
-            # MODIFICATION FOR ATP: REPLACE CURIOSITY REWARDS FROM RND TO THAT FROM ATP
-            batch_obs = obs[update * self.num_steps - self.num_steps : update * self.num_steps]
-            for observation, ind in zip(batch_obs, range(len(batch_obs))):
-                env_rewards = []
-                for env_idx, env_observation in enumerate(observation):  # `observation` is (num_envs, obs_shape)
-                    # Collect other steps in the same environment (from the `obs` tensor)
-                    other_steps_in_env = [obs[step, env_idx] for step in range(obs.shape[0])]  # Extract for this environment
-                    # Compute curiosity reward for the current environment
-                    env_rewards.append(self.compute_reward(main=env_observation, others=[x for x in other_steps_in_env if not torch.equal(x, env_observation)]))
-                self.curiosity_rewards[ind] = torch.tensor(env_rewards)
+            # Refactor: Construct similarity matrices for each of the parallel environments
+            # obs shape: torch.Size([128, 8, 14]) or torch.Size([# of rollout steps, # of parallel envs, dim of 1 observation])
+            sim_matrix = self.construct_matrix(obs)
+            self.curiosity_rewards = self.compute_reward(sim_matrix)
 
             curiosity_reward_per_env = np.array(
                 [discounted_reward.update(reward_per_step) for reward_per_step in self.curiosity_rewards.cpu().data.numpy().T]
@@ -151,7 +173,9 @@ class APT_PPO():
                 np.std(curiosity_reward_per_env),
                 len(curiosity_reward_per_env),
             )
+
             print("Average reward:", mean)
+            self.total_avg_curiosity_rewards.append(mean)
 
             reward_rms.update_from_moments(mean, std**2, count)
             self.curiosity_rewards /= np.sqrt(reward_rms.var)
@@ -263,52 +287,109 @@ class APT_PPO():
                     if approx_kl > self.target_kl:
                         break
 
-    def save(self, path):
+    def save(self, path, env_kwargs):
         """
         Save the model parameters to the specified path.
         """
-        torch.save({
-            'model_state_dict': self.agent.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
+        torch.save({ # add model saving every 100 steps or so
+            'env_kwargs': env_kwargs,
+            'model_saves': self.model_saves,
+            'final_model_state_dict': self.agent.state_dict(),
+            'final_optimizer_state_dict': self.optimizer.state_dict(),
             'learning_rate': self.learning_rate,
             'total_timesteps': self.total_timesteps,
             'num_envs': self.num_envs,
             'num_steps': self.num_steps,
-            'curiosity_rewards': self.curiosity_rewards
+            'curiosity_rewards': self.total_avg_curiosity_rewards,
+            'actions': self.total_actions,
+            'observations': self.total_obs
         }, path)
 
-    def compute_distance(self, p1, p2, d1, d2, objs1, objs2):
-        """
-        Compute distance between two states in the MDP
-        """
-        p1, p2 = np.array(p1), np.array(p2)
-        dp = LA.norm((p1 - p2), 1)
-        hd = 0 # hamming distance
-        for obj1, obj2 in zip(objs1, objs2):
-            if obj1 != obj2:
-                hd += 1
-        # map direction to radians
-        d1_r, d2_r = dir_to_rad(d1), dir_to_rad(d2)
-        dd = abs(d1_r - d2_r)
-        return dp + dd + hd
+    def construct_matrix(self, observations):
+        # Get the dimensions
+        num_steps, num_envs, obs_dim = observations.shape
+
+        # Initialize the similarity matrix for each parallel environment
+        similarity_matrices = []
+        
+        # Loop through each environment
+        for env_idx in range(num_envs):
+            # Extract the observations for the current environment
+            env_obs = observations[:, env_idx, :]  # Shape: [num_steps, obs_dim]
+            
+            # Initialize an empty matrix to store distances
+            similarity_matrix = torch.zeros((num_steps, num_steps))  # Shape: [num_steps, num_steps]
+            
+            # Fill the similarity matrix
+            for i in range(num_steps):
+                for j in range(i, num_steps):
+                    # Compute distance between observation i and observation j
+                    distance = self.compute_distance(np.array(env_obs[i]), np.array(env_obs[j]))
+                    similarity_matrix[i, j] = distance
+                    similarity_matrix[j, i] = distance  # Symmetric property
+            
+            # Add the matrix for this environment to the list
+            similarity_matrices.append(similarity_matrix)
+        
+        # Stack all similarity matrices along a new dimension for the environments
+        return torch.stack(similarity_matrices, dim=-1)  # Shape: [num_steps, num_steps, num_envs]
+
+    def compute_distance(self, obs1, obs2):
+            """
+            Compute distance between two states in the MDP
+            """
+            p1, p2 = np.array([obs1[0], obs1[1]]), np.array(obs2[0], obs2[1])
+            dp = LA.norm((p1 - p2), 1)
+            hd = 0 # hamming distance
+            for obj1, obj2 in zip(obs1[3: len(obs1)], obs2[3: len(obs2)]):
+                if obj1 != obj2:
+                    hd += 1
+            # map direction to radians
+            d1_r, d2_r = dir_to_rad(obs1[2]), dir_to_rad(obs2[2])
+            dd = abs(d1_r - d2_r)
+            return dp + dd + hd
     
-    def compute_reward(self, main, others):
+    def compute_reward(self, similarity_matrix):
         """
-        Compute the entropic reward based on k-nearest neighbors
-        main: The current state containing [position, direction, objs]
-        others: A list of other states each containing [position, direction, objs]
+        Compute entropic rewards based on k-nearest neighbors for each observation across environments.
+        
+        Parameters:
+            similarity_matrix (torch.Tensor): Similarity matrix of shape [# of rollout steps, # of rollout steps, # of parallel envs].
+        
+        Returns:
+            torch.Tensor: A tensor of rewards with shape [# of rollout steps, # of parallel envs].
         """
-        k = 0
-        total_distance = 0
-        for z in others:
-            assert len(main) == len(z)
-            distance = self.compute_distance([main[0], main[1]], [z[0], z[1]], main[2], z[2], main[3: len(main)], z[3: len(z)])
-            if distance <= self.th:
-                total_distance += distance
-                k += 1
-        if k == 0:
-            return 0
-        return np.log(self.c + (total_distance) / k)
+        # Get the number of steps and environments
+        num_steps, _, num_envs = similarity_matrix.shape
+        
+        # Initialize a tensor to store rewards for each step and environment
+        rewards = torch.zeros(num_steps, num_envs)
+        
+        for step in range(num_steps):
+            for env in range(num_envs):
+                # Get the distances from the current step to all other steps in the current environment
+                distances = similarity_matrix[step, :, env].tolist()
+                
+                # Remove the self-distance (usually zero at step index)
+                distances.pop(step)
+                
+                # Sort distances to find the k-nearest neighbors
+                distances.sort()
+                k_nearest = distances[:self.k] if len(distances) >= self.k else distances
+                
+                # Compute reward based on the average distance of k-nearest neighbors
+                if len(k_nearest) == 0:
+                    reward = 0
+                else:
+                    total_distance = sum(k_nearest)
+                    reward = np.log(self.c + total_distance / len(k_nearest))
+                
+                # Store the computed reward for the current step and environment
+                rewards[step, env] = reward
+        
+        return rewards  # Shape: [num_steps, num_envs]
+
+
 
 
 

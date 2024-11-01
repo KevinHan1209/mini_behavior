@@ -29,36 +29,7 @@ class PlayAlligatorEnv(RoomGrid):
                     max_steps=max_steps,
                     exploration_type = exploration_type
                     )
-        '''
-        for obj_type1, obj_type2 in zip(self.objs.values(), self.objs.values()):
-            for obj1, obj2 in zip(obj_type1, obj_type2):
-                for state_value in obj1.states:
-                    print(state_value)
-                    if isinstance(obj1.states[state_value], RelativeObjectState):
-                        continue
-                    print(obj1.states[state_value].get_value(self))
-        '''
 
-    '''
-    def gen_APT_obs(self):
-        # Generates all object states as well as agent's current position and direction
-        obj_states = []
-        for obj_type in self.objs.values():
-            for obj in obj_type:
-                for state_value in obj.states:
-                    if isinstance(obj.states[state_value], RelativeObjectState):
-                        continue
-                    state = obj.states[state_value].get_value(self)
-                    if state == True:
-                        obj_states.append(1)
-                    else:
-                        obj_states.append(0)
-        obs = []
-        obs.append(self.agent_pos[0])
-        obs.append(self.agent_dir)
-        obs += obj_states
-        return obs
-        '''
         
     def _gen_objs(self):
         mallet = self.objs['mallet'][0]
@@ -86,8 +57,12 @@ class PlayAlligatorEnv(RoomGrid):
             if not music_box.check_abs_state(self, 'playable'):
                 return False
         return True
+
+    def save_attributes_to_dict(self):
+        return self.__dict__.copy()
+
     
-    '''
+'''
     def step(self):
         super().step()
         self.frames.append(np.moveaxis(super().render("rgb_array"), 2, 0))
@@ -100,8 +75,8 @@ class PlayAlligatorEnv(RoomGrid):
                     gif_name,
                     fps=1 / .25)
         self.frames = []
-    '''
 
+'''
     
  # non human input env
 register(
