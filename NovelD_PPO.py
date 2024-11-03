@@ -18,8 +18,8 @@ def make_env(env_id, seed, idx):
 
 class NovelD_PPO:
     """PPO implementation with Random Network Distillation for novelty detection"""
-    def __init__(self, env_id, device="cpu", total_timesteps=1000, learning_rate=3e-4,
-                 num_envs=8, num_steps=100, gamma=0.99, gae_lambda=0.95,
+    def __init__(self, env_id, device="cpu", total_timesteps=1000000, learning_rate=3e-4,
+                 num_envs=8, num_steps=125, gamma=0.99, gae_lambda=0.95,
                  num_minibatches=4, update_epochs=4, clip_coef=0.2,
                  ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5, target_kl=None,
                  int_coef=1.0, ext_coef=2.0, int_gamma=0.99, alpha=0.5,
