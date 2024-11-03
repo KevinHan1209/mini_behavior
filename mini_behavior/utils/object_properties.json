@@ -204,6 +204,9 @@
         "dustyable",
         "stainable"
     ],
+    "music_box": [
+        "playable"
+    ],
     "necklace": [
         "dustyable",
         "stainable"

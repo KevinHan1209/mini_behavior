@@ -1,28 +1,32 @@
 OBJECTS = [
     "apple", "ashcan",
-    "backpack", "ball", "banana", "basket", "bed", "beef", "bin", "blender", "book", "bow", "box", "bread", "broom", "bucket",
-    "cabinet", "cake", "calculator", "candle", "candy", "car", "carton", "carving_knife", "casserole", "chicken", "chip", "cookie", "countertop",
+    "backpack", "ball", "banana", "basket", "beach_ball", "bed", "beef", "bin", "blender", "book", "bow", "box", "bread", "broom", "broom_set", "bucket", "bucket_toy",
+    "cabinet", "cake", "calculator", "candle", "candy", "car", "cart_toy", "carton", "carving_knife", "casserole", "chicken", "chip", "cookie", "countertop",
     "date", "dustpan", # door
     "egg", "electric_refrigerator",
-    "fish", "folder", "fork", # "floor",
+    "farm_toy", "fish", "folder", "fork", # "floor",
+    "gear", "gear_pole",
     "gym_shoe",
     "hamburger", "hammer", "hardback",
     "jar", "jewelry", "juice",
     "kettle", "knife",
     "lemon", "lettuce",
+    "mallet", "music_box", # New object for infantRL
     "necklace", "notebook",
     "olive",
-    "package", "pan", "pen", "pencil", "plate", "plywood", "pop", "printer",
-    "radish", "rag",
-    "salad", "sandwich", "saw", "scrub_brush", "shelf", "shoe", "shower", "sink", "soap", "sock", "sofa", "soup", "spoon", "stove", "strawberry",
-    "table", "tea_bag", "teapot", "toilet", "tomato", "towel",
+    "package", "pan", "pen", "pencil", "plate", "piggie_bank", "plywood", "pop", "printer",
+    "rattle", "radish", "rag", "ring_toy",
+    "salad", "sandwich", "saw", "scrub_brush", "shape_sorter", "shelf", "shoe", "shower", "sink", "soap", "sock", "sofa", "soup", "spiky_ball", "spoon", "stove", "strawberry", "stroller",
+    "table", "tea_bag", "teapot", "tree_busy_box", "toilet", "tomato", "towel",
     "vegetable_oil",
+    "water", "window", "winnie", "winnie_cabinet",
+    "pot_plant", "marker", "chair", "document", "oatmeal", "sugar"
     "water", "window",
     "pot_plant", "marker", "chair", "document", "oatmeal", "sugar",
     "rattle", "red_spiky_ball"
 ]
 
-FURNITURE = ['ashcan', 'bed', 'bin', 'box', 'bucket', 'cabinet', 'chair', 'car', 'countertop', 'electric_refrigerator', 'shelf', 'shower', 'sink', 'sofa', 'stove', 'table', 'window']
+FURNITURE = ['ashcan', 'bed', 'bin', 'box', 'bucket', 'cabinet', 'chair', 'car', 'countertop', 'electric_refrigerator', 'gear_pole', 'music_box', 'shelf', 'shower', 'sink', 'sofa', 'stove', 'table', 'window']
 # Map of object type to integers
 OBJECT_TO_IDX = {
     'unseen': 0,
@@ -123,9 +127,26 @@ OBJECT_TO_IDX = {
     "hardback": 95,
     "goal": 96,
     "agent": 97,
-    "rattle": 98,
-    "red_spiky_ball": 99
+    "mallet": 98,
+    "music_box": 99,
+    "gear": 100,
+    "gear_pole": 101,
+    "beach_ball": 102,
+    "broom_set": 103,
+    "bucket_toy": 104,
+    "cart_toy": 105,
+    "farm_toy": 106,
+    "ring_toy": 107,
+    "shape_sorter": 108,
+    "spiky_ball": 109,
+    "stroller": 110,
+    "tree_busy_box": 111,
+    "winnie": 112,
+    "winnie_cabinet": 113
+    "rattle": 114,
+    "red_spiky_ball": 115
 }
+
 
 IDX_TO_OBJECT = dict(zip(OBJECT_TO_IDX.values(), OBJECT_TO_IDX.keys()))
 
@@ -167,6 +188,8 @@ OBJECT_TO_STR = {
     "floor": "F",
     "folder": "F",
     "fork": "F",
+    "gear": "G",
+    "gear_pole": "G",
     "gym_shoe": "G",
     "hamburger": "H",
     "hammer": "H",
@@ -178,6 +201,8 @@ OBJECT_TO_STR = {
     "knife": "K",
     "lemon": "L",
     "lettuce": "L",
+    "mallet": "M",
+    "music_box": "M",
     "necklace": "N",
     "notebook": "N",
     "olive": "O",

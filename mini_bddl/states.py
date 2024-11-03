@@ -17,6 +17,7 @@ ALL_STATES = [
     'onfloor',
     'onTop',
     'openable',
+    'playable',
     'sliceable',
     'slicer',
     'soakable',
@@ -43,12 +44,13 @@ DEFAULT_STATES = [
     'under'
 ]
 
-
+# ATTENTION: Must change init function in BehaviorGrid class in mini_behavior/grid.py to accomodate for new sizes 
+# in ABILITIES and FURNATURE_STATES
 ABILITIES = [
     'cookable',
-    'dustyable',
     'freezable',
     'openable',
+    'playable',
     'sliceable',
     'soakable',
     'stainable',
@@ -56,8 +58,8 @@ ABILITIES = [
 ]
 
 FURNATURE_STATES = [
-    'dustyable',
     'openable',
+    'playable',
     'stainable',
     'toggleable',
 ]
@@ -80,6 +82,7 @@ STATE_FUNC_MAPPING = {
     'onfloor': OnFloor,
     'onTop': OnTop,
     'openable': Opened,
+    'playable': Played,
     'sliceable': Sliced,
     'slicer': Slicer,
     'soakable': Soaked,

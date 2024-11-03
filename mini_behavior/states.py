@@ -14,19 +14,19 @@ def get_obj_cell(self, env):
 # TODO: check that .in_view works correctly
 class InFOVOfRobot(AbsoluteObjectState):
     # return true if obj is in front of agent
-    def _get_value(self, env):
+    def get_value(self, env):
         return env.in_view(*self.obj.cur_pos)
 
 
 class InHandOfRobot(AbsoluteObjectState):
     # return true if agent is carrying the object
-    def _get_value(self, env=None):
+    def get_value(self, env=None):
         return np.all(self.obj.cur_pos == np.array([-1, -1]))
 
 
 class InReachOfRobot(AbsoluteObjectState):
     # return true if obj is reachable by agent
-    def _get_value(self, env):
+    def get_value(self, env):
         # obj not reachable if inside closed obj2
         inside = self.obj.inside_of
         if inside is not None and 'openable' in inside.states.keys() and not inside.check_abs_state(env, 'openable'):
@@ -48,7 +48,7 @@ class InReachOfRobot(AbsoluteObjectState):
 
 class InSameRoomAsRobot(AbsoluteObjectState):
     # return true if agent is in same room as the object
-    def _get_value(self, env):
+    def get_value(self, env):
         if self.obj.check_abs_state(env, 'inhandofrobot'):
             return True
 
@@ -93,7 +93,7 @@ class Frozen(AbilityState):
         super(Frozen, self).__init__(obj, key)
         self.tools = ["electric_refrigerator"]
 
-    def _get_value(self, env):
+    def get_value(self, env):
         """
         True: coldSource is toggled on AND obj, cold source are at same location
         False: coldsource is toggled off OR obj, cold source are not at same location
@@ -117,11 +117,28 @@ class Opened(AbilityState):
         """
         super(Opened, self).__init__(obj, key)
 
+    def get_value(self, env):
+        return self.value
+
+class Played(AbilityState):
+    def __init__(self, obj, key):
+        super(Played, self).__init__(obj, key)
+        self.tools = ['mallet']
+
+    def _update(self, env):
+        if self.obj.check_rel_state(env, env.objs.get(self.tools[0], [])[0], 'atsamelocation'):
+            self.value = True
+
+    def get_value(self, env):
+        return self.value
+        
 
 class Sliced(AbilityState):
     def _set_value(self, new_value=True):
         self.value = True
 
+    def get_value(self, env):
+        return self.value
 
 class Soaked(AbilityState):
     def __init__(self, obj, key):
@@ -138,6 +155,9 @@ class Soaked(AbilityState):
                 if water_source.check_abs_state(env, 'toggleable'):
                     if self.obj.check_rel_state(env, water_source, 'atsamelocation'):
                         self.value = True
+
+    def get_value(self, env):
+        return self.value
 
 
 class Stained(AbilityState):
@@ -159,10 +179,15 @@ class Stained(AbilityState):
                     if self.obj.check_rel_state(env, cleaning_tool, 'atsamelocation'):
                         self.value = False
 
+    def get_value(self, env):
+        return self.value
 
 class ToggledOn(AbilityState):
     def __init__(self, obj, key): # env
         super(ToggledOn, self).__init__(obj, key)
+
+    def get_value(self, env):
+        return self.value
 
 
 ###########################################################################################################
