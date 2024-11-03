@@ -21,6 +21,9 @@ OBJECTS = [
     "vegetable_oil",
     "water", "window", "winnie", "winnie_cabinet",
     "pot_plant", "marker", "chair", "document", "oatmeal", "sugar"
+    "water", "window",
+    "pot_plant", "marker", "chair", "document", "oatmeal", "sugar",
+    "rattle", "red_spiky_ball"
 ]
 
 FURNITURE = ['ashcan', 'bed', 'bin', 'box', 'bucket', 'cabinet', 'chair', 'car', 'countertop', 'electric_refrigerator', 'gear_pole', 'music_box', 'shelf', 'shower', 'sink', 'sofa', 'stove', 'table', 'window']
@@ -140,6 +143,8 @@ OBJECT_TO_IDX = {
     "tree_busy_box": 111,
     "winnie": 112,
     "winnie_cabinet": 113
+    "rattle": 114,
+    "red_spiky_ball": 115
 }
 
 
@@ -243,7 +248,9 @@ OBJECT_TO_STR = {
     "sugar": "S",
     "box": "B",
     "hardback": "H",
-    "candle": "C"
+    "candle": "C",
+    "rattle": "R",
+    "red_spiky_ball": "R"
 }
 
 FURNITURE_CANNOT_ON = ['ashcan', 'bed', 'bin', 'chair', 'shower', 'car', 'sink', 'window']

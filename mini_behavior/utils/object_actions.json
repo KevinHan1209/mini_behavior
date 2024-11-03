@@ -431,5 +431,10 @@
     "window ": [
         "open",
         "close"
+    ],
+    "rattle": [
+        "pickup",
+        "drop",
+        "drop_in"
     ]
 }
