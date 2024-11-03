@@ -8,3 +8,8 @@ trained_models
 build/*
 dist/*
 .idea/
+
+.venv/
+runs/
+wandb/
+models/
