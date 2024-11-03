@@ -11,12 +11,7 @@ from env_wrapper import CustomObservationWrapper
 def train_agent(env_id):
     print("\n=== Starting Agent Training ===")
     try:
-        noveld_ppo = NovelD_PPO(
-            env_id,
-            total_timesteps=1000,
-            num_envs=4,
-            num_steps=128
-        )
+        noveld_ppo = NovelD_PPO(env_id)
         noveld_ppo.train()
         print("\nSaving model to noveld_ppo_model.pth")
         noveld_ppo.save_model("noveld_ppo_model.pth")

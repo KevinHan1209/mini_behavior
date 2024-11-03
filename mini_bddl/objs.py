@@ -142,7 +142,7 @@ OBJECT_TO_IDX = {
     "stroller": 110,
     "tree_busy_box": 111,
     "winnie": 112,
-    "winnie_cabinet": 113
+    "winnie_cabinet": 113,
     "rattle": 114,
     "red_spiky_ball": 115
 }
