@@ -21,7 +21,7 @@ def train_agent(env_id):
         print(f"\nError during training: {e}")
         raise
 
-def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode=100):
+def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episode=1000):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     test_env = gym.make(env_id)
