@@ -67,7 +67,7 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episod
 
 def main():
     print("Initializing Environment")
-    env_id = 'MiniGrid-ShakingARattle-6x6-N2-v0'
+    env_id = 'MiniGrid-PickingUpARattle-6x6-N2-v0'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
