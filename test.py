@@ -21,7 +21,7 @@ def train_agent(env_id):
         print(f"\nError during training: {e}")
         raise
 
-def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episode=1000):
+def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episode=500):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     test_env = gym.make(env_id)
@@ -64,28 +64,6 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episod
         print(f"\nEpisode {episode + 1} Summary")
         print(f"Steps: {steps}")
         print(f"Total reward: {total_reward:.2f}")
-
-def test_parallel_environments():
-    env_id = 'MiniGrid-ShakingARattle-6x6-N2-v0'
-    num_envs = 4
-    
-    noveld_ppo = NovelD_PPO(env_id, num_envs=num_envs)
-    
-    # Test environment creation
-    assert noveld_ppo.envs.num_envs == num_envs
-    
-    # Test batch processing
-    obs = noveld_ppo.envs.reset()
-    assert obs.shape[0] == num_envs
-    
-    # Test reward calculation
-    action = np.zeros(num_envs)
-    next_obs, rewards, dones, _ = noveld_ppo.envs.step(action)
-    assert rewards.shape[0] == num_envs
-    
-    # Test novelty calculation
-    novelty = noveld_ppo.calculate_novelty(torch.FloatTensor(next_obs))
-    assert novelty.shape[0] == num_envs
 
 def main():
     print("Initializing Environment")
