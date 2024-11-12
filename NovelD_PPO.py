@@ -241,6 +241,8 @@ class NovelD_PPO:
             if len(running_rewards) > 10:
                 if np.std(running_rewards[-10:]) > 10 * np.mean(np.abs(running_rewards[-10:])):
                     print("Warning: Unstable rewards")
+            
+            self.envs.close()
 
     def compute_advantages(self, next_value_ext, next_value_int, rewards, curiosity_rewards, ext_values, int_values, dones, next_done):
         # Ensure all inputs are properly shaped
@@ -363,8 +365,7 @@ class NovelD_PPO:
         return normalized.squeeze(0) if len(obs.shape) == 1 else normalized
 
     def save_model(self, filename):
-        try:
-            model_state = {
+        model_state = {
                 'agent': self.agent.state_dict(),
                 'rnd_model': self.rnd_model.state_dict(),
                 'obs_rms_mean': self.obs_rms.mean,
@@ -378,10 +379,8 @@ class NovelD_PPO:
                     'ext_coef': self.ext_coef
                 }
             }
-            torch.save(model_state, filename)
-            print(f"Model saved to {filename}")
-        except Exception as e:
-            print(f"Error saving model: {e}")
+        torch.save(model_state, filename)
+        print(f"Model saved to {filename}")
 
     def normalize_reward(self, reward):
         return reward / torch.sqrt(torch.FloatTensor([self.reward_rms.var]).to(self.device) + 1e-8)

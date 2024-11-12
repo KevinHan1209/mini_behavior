@@ -11,17 +11,13 @@ from env_wrapper import CustomObservationWrapper
 
 def train_agent(env_id):
     print("\n=== Starting Agent Training ===")
-    try:
-        noveld_ppo = NovelD_PPO(env_id)
-        noveld_ppo.train()
-        print("\nSaving model to noveld_ppo_model.pth")
-        noveld_ppo.save_model("noveld_ppo_model.pth")
-        return noveld_ppo
-    except Exception as e:
-        print(f"\nError during training: {e}")
-        raise
+    noveld_ppo = NovelD_PPO(env_id, "cpu")
+    noveld_ppo.train()
+    print("\nSaving model to noveld_ppo_model.pth")
+    noveld_ppo.save_model("noveld_ppo_model.pth")
+    return noveld_ppo
 
-def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode=100):
+def test_agent(env_id, noveld_ppo, num_episodes=1, max_steps_per_episode=100):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
@@ -46,12 +42,12 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode
         while not done and steps < max_steps_per_episode:
             frames.append(np.moveaxis(test_env.render(), 2, 0))
             
-            obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
+            obs_tensor = torch.FloatTensor(obs).unsqueeze(0)
             with torch.no_grad():
                 action, _, _, ext_value, int_value = noveld_ppo.agent.get_action_and_value(obs_tensor)
-                novelty = noveld_ppo.calculate_novelty(torch.FloatTensor(obs).unsqueeze(0).to(device))
+                novelty = noveld_ppo.calculate_novelty(torch.FloatTensor(obs).unsqueeze(0))
             
-            obs, reward, done, _ = test_env.step(action.cpu().numpy()[0])
+            obs, reward, done, _ = test_env.step(action.numpy()[0])
             episode_reward += reward
             episode_novelty.append(novelty.item())
             
@@ -95,8 +91,6 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode
 def main():
     print("Initializing Environment")
     env_id = 'MiniGrid-PickingUpARattle-6x6-N2-v0'
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
     
     # Train model
     print("Training Model")
@@ -104,7 +98,7 @@ def main():
     
     # Test model
     print("Testing Model")
-    test_agent(env_id, noveld_ppo, device)
+    test_agent(env_id, noveld_ppo)
 
 if __name__ == "__main__":
     main()
