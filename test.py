@@ -21,8 +21,8 @@ def test_agent(env_id, noveld_ppo, num_episodes=1, max_steps_per_episode=100):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
-    wandb.init(project="NovelD_PPO_Testing", 
-              config={"env_id": env_id, 
+    wandb.init(project="noveld-ppo-test",
+              config={"env_id": env_id,
                      "mode": "testing",
                      "num_episodes": num_episodes,
                      "max_steps": max_steps_per_episode})

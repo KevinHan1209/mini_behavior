@@ -99,20 +99,43 @@ class NovelD_PPO:
         self.int_reward_scale = 1.0
 
     def train(self):
-        # Print basic training configuration
+        # Initialize wandb with more comprehensive config
+        wandb.init(
+            project="noveld-ppo-train",
+            config={
+                "env_id": self.envs,
+                "total_timesteps": self.total_timesteps,
+                "learning_rate": self.learning_rate,
+                "num_envs": self.num_envs,
+                "num_steps": self.num_steps,
+                "gamma": self.gamma,
+                "gae_lambda": self.gae_lambda,
+                "num_minibatches": self.num_minibatches,
+                "update_epochs": self.update_epochs,
+                "clip_coef": self.clip_coef,
+                "ent_coef": self.ent_coef,
+                "vf_coef": self.vf_coef,
+                "int_coef": self.int_coef,
+                "ext_coef": self.ext_coef,
+                "device": str(self.device)
+            }
+        )
+        
         print("\n=== Training Configuration ===")
         print(f"Total Steps: {self.total_timesteps:,}")
         print(f"Batch Size: {self.batch_size}")
         print(f"Learning Rate: {self.learning_rate}")
         print(f"Device: {self.device}\n")
         
-        # Initialize optimizer
         optimizer = optim.Adam(
             list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()),
             lr=self.learning_rate, eps=1e-5
         )
 
-        # Initialize tensors for storing episode data
+        # Initialize tracking variables
+        episode_rewards = []
+        episode_lengths = []
+        
         next_obs = torch.FloatTensor(self.envs.reset()).to(self.device)
         obs = torch.zeros((self.num_steps, self.num_envs) + self.obs_space.shape, dtype=torch.float32).to(self.device)
         actions = torch.zeros((self.num_steps, self.num_envs) + self.envs.single_action_space.shape, dtype=torch.float32).to(self.device)
@@ -123,22 +146,21 @@ class NovelD_PPO:
         ext_values = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         int_values = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
 
-        # Main training loop
+        # Training loop variables
         global_step = 0
         next_done = torch.zeros(self.num_envs).to(self.device)
         num_updates = self.total_timesteps // self.batch_size
-
-        prev_novelties = torch.zeros(self.num_envs).to(self.device)
-        running_rewards = []
 
         # Add validation
         sample_info = self.envs.step(self.envs.action_space.sample())[3]
         if not any('first_visit' in info for info in sample_info):
             print("Warning: Environment does not provide 'first_visit' info")
 
+        # Episode tracking
+        episode_info = {i: {"reward": 0.0, "length": 0} for i in range(self.num_envs)}
+
         for update in range(1, num_updates + 1):
-            
-            # Learning rate annealing
+            # Anneal learning rate if enabled
             if self.anneal_lr:
                 frac = 1.0 - (update - 1.0) / num_updates
                 lrnow = frac * self.learning_rate
@@ -152,74 +174,48 @@ class NovelD_PPO:
 
                 # Get action and value
                 with torch.no_grad():
-                    value_ext, value_int = self.agent.get_value(obs[step])
-                    ext_values[step], int_values[step] = value_ext.flatten(), value_int.flatten()
-                    action, logprob, _, _, _ = self.agent.get_action_and_value(obs[step])
-
+                    action, logprob, _, value_ext, value_int = self.agent.get_action_and_value(obs[step])
                 actions[step] = action
                 logprobs[step] = logprob
+                ext_values[step] = value_ext.flatten()
+                int_values[step] = value_int.flatten()
 
-                # Execute action in environment
-                action = action.cpu().numpy()
-                next_obs, reward, done, info = self.envs.step(action)
-                next_obs = torch.FloatTensor(next_obs).to(self.device)
+                # Execute action
+                next_obs, reward, done, info = self.envs.step(action.cpu().numpy())
                 rewards[step] = torch.FloatTensor(reward).to(self.device)
+                next_obs = torch.FloatTensor(next_obs).to(self.device)
                 next_done = torch.FloatTensor(done).to(self.device)
 
-                # Calculate NovelD intrinsic reward
+                # Track episode stats
+                for i, d in enumerate(done):
+                    episode_info[i]["reward"] += reward[i]
+                    episode_info[i]["length"] += 1
+                    
+                    if d:
+                        episode_rewards.append(episode_info[i]["reward"])
+                        episode_lengths.append(episode_info[i]["length"])
+                        
+                        wandb.log({
+                            "episode_reward": episode_info[i]["reward"],
+                            "episode_length": episode_info[i]["length"],
+                            "global_step": global_step,
+                        })
+                        
+                        episode_info[i]["reward"] = 0.0
+                        episode_info[i]["length"] = 0
+
+                # Calculate novelty rewards
                 with torch.no_grad():
-                    novelty_curr = self.calculate_novelty(next_obs)
-                    
-                    # Handle vectorized environment info structure
-                    first_visits = torch.ones(self.num_envs, device=self.device)
-                    for idx, info_dict in enumerate(info):
-                        if 'first_visit' in info_dict:
-                            first_visits[idx] = float(info_dict['first_visit'])
-                    
-                    # Calculate novelty rewards with proper scaling
-                    zeros = torch.zeros_like(novelty_curr, device=self.device)
-                    noveld_rewards = torch.maximum(novelty_curr - self.alpha * prev_novelties, zeros)
-                    noveld_rewards = noveld_rewards * first_visits * self.novelty_scale
-                    
-                    # Update previous novelties with proper detachment
-                    prev_novelties = novelty_curr.detach()
-                    
-                    # Normalize and store curiosity rewards
-                    curiosity_rewards[step] = self.normalize_rewards(noveld_rewards)
+                    novelty = self.calculate_novelty(next_obs)
+                    curiosity_rewards[step] = self.normalize_rewards(novelty)
 
-                # Update observation normalization with proper reshaping
-                self.obs_rms.update(next_obs.cpu().numpy().reshape(-1, self.obs_dim))
-
-            # Update observation normalization
-            self.obs_rms.update(obs.cpu().numpy().reshape(-1, self.obs_dim))
-
-            # Normalize curiosity rewards
-            curiosity_rewards_np = curiosity_rewards.detach().cpu().numpy()
-            flattened_rewards = curiosity_rewards_np.reshape(-1)  # Flatten to 1D array
-
-            # Skip normalization if rewards are empty or invalid
-            if flattened_rewards.size == 0 or np.any(np.isnan(flattened_rewards)):
-                print("Warning: Invalid rewards detected. Skipping normalization.")
-                continue
-
-            # Update running statistics with flattened rewards
-            self.reward_rms.update(flattened_rewards)
-
-            # Normalize the rewards using running statistics
-            # Convert running statistics to tensor and move to correct device
-            rms_var_tensor = torch.FloatTensor([self.reward_rms.var]).to(self.device)
-            curiosity_rewards = curiosity_rewards.detach() / torch.sqrt(rms_var_tensor + 1e-8)
-
-            if update % 10 == 0:
-                print(f"Reward statistics:")
-                print(f"  Mean: {self.reward_rms.mean:.3f}")
-                print(f"  Variance: {self.reward_rms.var:.3f}")
-                print(f"  Normalized rewards range: [{curiosity_rewards.min():.3f}, {curiosity_rewards.max():.3f}]")
-
-            # Compute advantages and returns
+            # Perform PPO update
             with torch.no_grad():
                 next_value_ext, next_value_int = self.agent.get_value(next_obs)
-                ext_advantages, int_advantages = self.compute_advantages(next_value_ext, next_value_int, rewards, curiosity_rewards, ext_values, int_values, dones, next_done)
+                ext_advantages, int_advantages = self.compute_advantages(
+                    next_value_ext, next_value_int, rewards, curiosity_rewards,
+                    ext_values, int_values, dones, next_done
+                )
 
             # Flatten the batch
             b_obs = obs.reshape((-1,) + (self.obs_dim,))
@@ -234,15 +230,26 @@ class NovelD_PPO:
             # Optimize policy and value networks
             self.optimize(b_obs, b_logprobs, b_actions, b_advantages, b_ext_returns, b_int_returns, optimizer, global_step)
 
-            mean_reward = rewards.mean().item()
-            running_rewards.append(mean_reward)
-            
-            # Check for reward stability
-            if len(running_rewards) > 10:
-                if np.std(running_rewards[-10:]) > 10 * np.mean(np.abs(running_rewards[-10:])):
-                    print("Warning: Unstable rewards")
-            
-            self.envs.close()
+            # Log training metrics
+            if update % 10 == 0:
+                mean_reward = np.mean(episode_rewards[-100:]) if episode_rewards else 0
+                mean_length = np.mean(episode_lengths[-100:]) if episode_lengths else 0
+                
+                wandb.log({
+                    "learning_rate": optimizer.param_groups[0]["lr"],
+                    "mean_reward": mean_reward,
+                    "mean_episode_length": mean_length,
+                    "global_step": global_step,
+                    "updates": update
+                })
+
+                print(f"Update {update}/{num_updates}")
+                print(f"Mean Reward (100 ep): {mean_reward:.2f}")
+                print(f"Mean Length (100 ep): {mean_length:.2f}")
+                print("-" * 50)
+
+        wandb.finish()
+        self.envs.close()
 
     def compute_advantages(self, next_value_ext, next_value_int, rewards, curiosity_rewards, ext_values, int_values, dones, next_done):
         # Ensure all inputs are properly shaped
