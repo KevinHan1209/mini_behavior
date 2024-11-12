@@ -4,6 +4,7 @@ from mini_behavior.register import register
 from algorithms.APT_PPO import APT_PPO
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
 from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
+import wandb
 
 
 
@@ -69,7 +70,7 @@ if __name__ == "__main__":
         
     print('begin training')
     # Policy training
-    model = APT_PPO(env, num_envs=NUM_ENVS, total_timesteps = TOTAL_TIMESTEPS, num_steps=NUM_STEPS, save_freq = 100)
+    model = APT_PPO(env, env_id = env_name, num_envs=NUM_ENVS, total_timesteps = TOTAL_TIMESTEPS, num_steps=NUM_STEPS, save_freq = 100)
 
     model.train()
 

@@ -14,10 +14,12 @@ from collections import deque
 import time
 import torch.nn.functional as F
 import torch.nn as nn
+import wandb
 
 class APT_PPO():
     def __init__(self,
-                 env,                     
+                 env,
+                 env_id,                                                
                  device = "cpu",
                  save_freq: int = 100,                 # number of updates per model save
                  total_timesteps: int = 2000000000,    # total timesteps of the experiments
@@ -43,6 +45,7 @@ class APT_PPO():
                  c: float = 1                          # numerical stability constant
                  ): 
         self.env = env
+        self.env_id = env_id
         self.device = device
         self.save_freq = save_freq
         self.total_timesteps = total_timesteps
@@ -86,6 +89,20 @@ class APT_PPO():
         print("K parameter:", self.k)
         print("---------------------------------------")
         assert self.total_timesteps % self.batch_size == 0
+
+
+        wandb.init(project="APT_PPO_Training", 
+                    config={"env_id": self.env_id, 
+                     "Mode": "training",
+                    "Total timesteps": self.total_timesteps,
+                    "Learning rate": self.learning_rate,
+                    "Number of total updates": int(self.total_timesteps // self.batch_size),
+                    "Number of parallel environments": self.num_envs,
+                    "Number of steps per rollout": self.num_steps,  # Used for each kNN update and curiosity reward calculation
+                    "Batch size": self.batch_size,
+                    "Number of PPO update epochs": self.update_epochs,
+                    "Minibatch size": self.minibatch_size,
+                    "K parameter": self.k})
 
         self.agent = Agent(self.env.action_space.n, self.env.observation_space.shape[0]).to(self.device)
         self.optimizer = optim.Adam(
@@ -156,7 +173,9 @@ class APT_PPO():
                 next_obs, reward, done, info = self.env.step(action.cpu().numpy())
                 rewards[step] = torch.tensor(reward).to(self.device).view(-1)
                 next_obs, next_done = torch.Tensor(next_obs).to(self.device), torch.Tensor(done).to(self.device)
-            
+                # Log step metrics
+
+                
             self.total_actions.append(actions)
             self.total_obs.append(obs)
 
@@ -179,6 +198,13 @@ class APT_PPO():
 
             reward_rms.update_from_moments(mean, std**2, count)
             self.curiosity_rewards /= np.sqrt(reward_rms.var)
+            wandb.log({
+                    "Update": update,
+                    "Average Reward": mean,
+                    "Standard Deviation in Reweard": std,
+                    "Actions": actions,
+                    "Observations:": obs
+                })
 
             # bootstrap value if not done
             with torch.no_grad():
