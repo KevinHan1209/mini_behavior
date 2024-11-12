@@ -6,7 +6,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import time
 import gym
-import os
+import wandb
 from env_wrapper import CustomObservationWrapper
 
 def make_env(env_id, seed, idx):
@@ -18,14 +18,34 @@ def make_env(env_id, seed, idx):
     return thunk
 
 class NovelD_PPO:
-    """PPO implementation with Random Network Distillation for novelty detection"""
-    def __init__(self, env_id, device="cpu", total_timesteps=2000000, learning_rate=3e-4,
-                 num_envs=8, num_steps=125, gamma=0.99, gae_lambda=0.95,
-                 num_minibatches=4, update_epochs=4, clip_coef=0.2,
-                 ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5, target_kl=None,
-                 int_coef=1.0, ext_coef=2.0, int_gamma=0.99, alpha=0.5,
-                 update_proportion=0.25, seed=1):
-        # Correct vectorized environment creation
+    """
+    PPO implementation with Random Network Distillation for novelty detection
+    """
+    def __init__(
+            self,
+            env_id,
+            device="cpu",
+            total_timesteps=1000,
+            learning_rate=3e-4,
+            num_envs=8,
+            num_steps=125,
+            gamma=0.99,
+            gae_lambda=0.95,
+            num_minibatches=4,
+            update_epochs=4,
+            clip_coef=0.2,
+            ent_coef=0.01,
+            vf_coef=0.5,
+            max_grad_norm=0.5,
+            target_kl=None,
+            int_coef=1.0,
+            ext_coef=2.0,
+            int_gamma=0.99,
+            alpha=0.5,
+            update_proportion=0.25,
+            seed=1
+            ):
+        
         self.envs = gym.vector.SyncVectorEnv(
             [make_env(env_id, seed, i) for i in range(num_envs)]
         )
@@ -49,7 +69,7 @@ class NovelD_PPO:
         self.int_gamma = int_gamma
         self.alpha = alpha
         self.update_proportion = update_proportion
-        self.anneal_lr = True  # Add this line to define the anneal_lr attribute
+        self.anneal_lr = True
 
         # Calculate batch sizes
         self.batch_size = int(num_envs * num_steps)
@@ -75,8 +95,6 @@ class NovelD_PPO:
         # Add better reward scaling parameters
         self.reward_scale = 1.0
         self.novelty_scale = 1.0
-
-        # Add these parameters
         self.ext_reward_scale = 1.0
         self.int_reward_scale = 1.0
 
@@ -107,7 +125,6 @@ class NovelD_PPO:
 
         # Main training loop
         global_step = 0
-        start_time = time.time()
         next_done = torch.zeros(self.num_envs).to(self.device)
         num_updates = self.total_timesteps // self.batch_size
 
@@ -120,6 +137,7 @@ class NovelD_PPO:
             print("Warning: Environment does not provide 'first_visit' info")
 
         for update in range(1, num_updates + 1):
+            
             # Learning rate annealing
             if self.anneal_lr:
                 frac = 1.0 - (update - 1.0) / num_updates
@@ -148,8 +166,8 @@ class NovelD_PPO:
                 rewards[step] = torch.FloatTensor(reward).to(self.device)
                 next_done = torch.FloatTensor(done).to(self.device)
 
-                # Calculate NovelD intrinsic reward - needs better error handling and device management
-                with torch.no_grad():  # Add this for efficiency
+                # Calculate NovelD intrinsic reward
+                with torch.no_grad():
                     novelty_curr = self.calculate_novelty(next_obs)
                     
                     # Handle vectorized environment info structure
@@ -192,11 +210,10 @@ class NovelD_PPO:
             rms_var_tensor = torch.FloatTensor([self.reward_rms.var]).to(self.device)
             curiosity_rewards = curiosity_rewards.detach() / torch.sqrt(rms_var_tensor + 1e-8)
 
-            # Optional debugging prints
-            if update % 10 == 0:  # Only print every 10 updates to avoid spam
+            if update % 10 == 0:
                 print(f"Reward statistics:")
                 print(f"  Mean: {self.reward_rms.mean:.3f}")
-                print(f"  Var: {self.reward_rms.var:.3f}")
+                print(f"  Variance: {self.reward_rms.var:.3f}")
                 print(f"  Normalized rewards range: [{curiosity_rewards.min():.3f}, {curiosity_rewards.max():.3f}]")
 
             # Compute advantages and returns
@@ -216,18 +233,6 @@ class NovelD_PPO:
 
             # Optimize policy and value networks
             self.optimize(b_obs, b_logprobs, b_actions, b_advantages, b_ext_returns, b_int_returns, optimizer, global_step)
-
-            if update % 5 == 0:
-                print(f"\n=== Update {update}/{num_updates} ({(update/num_updates)*100:.1f}%) ===")
-                print(f"Total Steps: {global_step:,}")
-                print(f"Current LR: {optimizer.param_groups[0]['lr']:.6f}")
-                print(f"Rewards - External: {rewards.mean():.3f}, Novelty: {curiosity_rewards.mean():.3f}")
-
-            if update % 10 == 0:
-                print("\n=== Reward Statistics ===")
-                print(f"Mean: {self.reward_rms.mean:.3f}")
-                print(f"Variance: {self.reward_rms.var:.3f}")
-                print(f"Range: [{curiosity_rewards.min():.3f}, {curiosity_rewards.max():.3f}]")
 
             mean_reward = rewards.mean().item()
             running_rewards.append(mean_reward)
@@ -449,7 +454,6 @@ class Agent(nn.Module):
         self.critic_ext = nn.Linear(448, 1)
         self.critic_int = nn.Linear(448, 1)
         
-        # Ensure all parameters are float32
         self.float()
 
     def get_value(self, x):
@@ -484,7 +488,6 @@ class RNDModel(nn.Module):
             nn.Linear(hidden_size, hidden_size)
         )
         
-        # Ensure all parameters are float32
         self.float()
 
     def forward(self, x):
