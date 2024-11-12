@@ -25,7 +25,7 @@ class NovelD_PPO:
             self,
             env_id,
             device="cpu",
-            total_timesteps=1000,
+            total_timesteps=1000000,
             learning_rate=3e-4,
             num_envs=8,
             num_steps=125,
