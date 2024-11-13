@@ -7,7 +7,7 @@ from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
 
 
 
-TASK = 'PlayAlligator'
+TASK = 'GearToy'
 PARTIAL_OBS = True
 ROOM_SIZE = 10
 MAX_STEPS = 1000
@@ -74,7 +74,7 @@ if __name__ == "__main__":
     model.train()
 
     # Define the directory path
-    save_dir = "models/ATP_PPO_PlayAlligator"
+    save_dir = "models/ATP_PPO_GearToy"
 
     # Check if the directory exists, and if not, create it
     if not os.path.exists(save_dir):

@@ -325,8 +325,9 @@ class APT_PPO():
                 for j in range(i, num_steps):
                     # Compute distance between observation i and observation j
                     distance = self.compute_distance(np.array(env_obs[i]), np.array(env_obs[j]))
-                    similarity_matrix[i, j] = distance
-                    similarity_matrix[j, i] = distance  # Symmetric property
+                    similarity_matrix[i, j] = torch.tensor(distance, dtype=similarity_matrix.dtype, device=similarity_matrix.device)
+                    similarity_matrix[j, i] = torch.tensor(distance, dtype=similarity_matrix.dtype, device=similarity_matrix.device)
+
             
             # Add the matrix for this environment to the list
             similarity_matrices.append(similarity_matrix)
