@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import time
 import gym
 import wandb
 from env_wrapper import CustomObservationWrapper
@@ -25,7 +24,7 @@ class NovelD_PPO:
             self,
             env_id,
             device="cpu",
-            total_timesteps=1000000,
+            total_timesteps=5000,
             learning_rate=3e-4,
             num_envs=8,
             num_steps=125,
@@ -150,11 +149,6 @@ class NovelD_PPO:
         global_step = 0
         next_done = torch.zeros(self.num_envs).to(self.device)
         num_updates = self.total_timesteps // self.batch_size
-
-        # Add validation
-        sample_info = self.envs.step(self.envs.action_space.sample())[3]
-        if not any('first_visit' in info for info in sample_info):
-            print("Warning: Environment does not provide 'first_visit' info")
 
         # Episode tracking
         episode_info = {i: {"reward": 0.0, "length": 0} for i in range(self.num_envs)}
