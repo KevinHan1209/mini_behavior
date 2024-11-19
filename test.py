@@ -17,7 +17,7 @@ def train_agent(env_id):
     noveld_ppo.save_model("noveld_ppo_model.pth")
     return noveld_ppo
 
-def test_agent(env_id, noveld_ppo, num_episodes=10, max_steps_per_episode=500):
+def test_agent(env_id, noveld_ppo, num_episodes=1, max_steps_per_episode=500):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     # Initialize wandb for testing

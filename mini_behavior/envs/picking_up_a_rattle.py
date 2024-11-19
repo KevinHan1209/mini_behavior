@@ -42,10 +42,13 @@ class PickingUpARattleEnv(RoomGrid):
         assert rattle.check_abs_state(self, 'onfloor')
         return True
 
+    # def _end_conditions(self):
+    #     rattle = self.objs['rattle'][0]
+    #     if not rattle.check_abs_state(self, 'onfloor'):
+    #         return True
+    #     return False
+
     def _end_conditions(self):
-        rattle = self.objs['rattle'][0]
-        if not rattle.check_abs_state(self, 'onfloor'):
-            return True
         return False
 
 
