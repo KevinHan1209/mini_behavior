@@ -2,29 +2,24 @@ from mini_behavior.states import *
 
 ALL_STATES = [
     'atsamelocation',
-    'cleaningTool',
-    'coldSource',
-    'cookable',
-    'dustyable',
-    'freezable',
-    'heatSource',
+    'deform',
+    'detach',
+    'hidden',
     'infovofrobot',
     'inhandofrobot',
     'inreachofrobot',
     'insameroomasrobot',
     'inside',
     'nextto',
+    'noise',
     'onfloor',
     'onTop',
-    'openable',
-    'playable',
-    'sliceable',
-    'slicer',
-    'soakable',
-    'stainable',
+    'popup',
+    'reattach',
+    'takeout',
     'toggleable',
-    'under'
-    'waterSource'
+    'under',
+    ''
     # 'touching', TODO: uncomment once implemented
 ]
 
