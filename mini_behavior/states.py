@@ -67,6 +67,10 @@ class Cooked(AbilityState):
     def __init__(self, obj, key):
         super(Cooked, self).__init__(obj, key)
 
+class Deform(AbilityState):
+    def __init__(self, obj, key):
+        super(Deform, self).__init__(obj, key)
+
 
 class Dusty(AbilityState):
     def __init__(self, obj, key):
