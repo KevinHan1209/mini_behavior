@@ -38,7 +38,7 @@ class NovelD_PPO:
             max_grad_norm=0.5,
             target_kl=None,
             int_coef=1.0,
-            ext_coef=2.0,
+            ext_coef=0.0,
             int_gamma=0.99,
             alpha=0.5,
             update_proportion=0.25,
@@ -219,7 +219,7 @@ class NovelD_PPO:
             b_int_advantages = int_advantages.reshape(-1)
             b_ext_returns = (b_ext_advantages + ext_values.reshape(-1))
             b_int_returns = (b_int_advantages + int_values.reshape(-1))
-            b_advantages = b_int_advantages * self.int_coef + b_ext_advantages * self.ext_coef
+            b_advantages = b_int_advantages * self.int_coef
 
             # Optimize policy and value networks
             self.optimize(b_obs, b_logprobs, b_actions, b_advantages, b_ext_returns, b_int_returns, optimizer, global_step)
@@ -320,7 +320,7 @@ class NovelD_PPO:
                 new_int_values = new_int_values.view(-1)
                 ext_v_loss = 0.5 * ((new_ext_values - b_ext_returns[mb_inds]) ** 2).mean()
                 int_v_loss = 0.5 * ((new_int_values - b_int_returns[mb_inds]) ** 2).mean()
-                v_loss = ext_v_loss + int_v_loss
+                v_loss = int_v_loss
 
                 # Combined loss
                 entropy_loss = entropy.mean()
