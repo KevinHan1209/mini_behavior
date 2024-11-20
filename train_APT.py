@@ -2,8 +2,7 @@ import gym
 import os
 from mini_behavior.register import register
 from algorithms.APT_PPO import APT_PPO
-from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
-from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
+from env_wrapper import CustomObservationWrapper
 import wandb
 
 
@@ -18,55 +17,32 @@ POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
 NUM_STEPS = 125
 env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-v0"
-env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "exploration_type": "ATP"}
+env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
 
-def get_single_env() -> gym.Env:
-    '''
-    policy_kwargs = dict(
-    features_extractor_class=MinigridFeaturesExtractor,
-    features_extractor_kwargs=dict(features_dim=128)
-)
-    '''
 
-    # Env wrapping
-    env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-v0"
+def make_env(env_id, seed, idx):
+    def thunk():
+        env = gym.make(env_id)
+        env = CustomObservationWrapper(env)
+        env.seed(seed + idx)
+        return env
+    return thunk
 
-    kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "exploration_type": "ATP"}
 
-    if DENSE_REWARD:
-        assert TASK in ["PuttingAwayDishesAfterCleaning", "WashingPotsAndPans"]
-        kwargs["dense_reward"] = True
+def init_env(num_envs: int, seed):
 
+    return gym.vector.SyncVectorEnv(
+                [make_env(env_name, seed, i) for i in range(num_envs)]
+                )
+    
+        
+if __name__ == "__main__":
     register(
         id=env_name,
         entry_point=f'mini_behavior.envs:{TASK}Env',
-        kwargs=kwargs
+        kwargs=env_kwargs
     )
-
-    '''
-    config = {
-        "policy_type": POLICY_TYPE,
-        "total_timesteps": TOTAL_TIMESTEPS,
-        "env_name": env_name,
-    }
-    '''
-    
-    env = gym.make(env_name)
-
-    return env
-
-
-def init_env(num_envs: int):
-
-    env_fns = [lambda: get_single_env() for _ in range(num_envs)]
-    if num_envs == 1:
-        return DummyVecEnv(env_fns)
-    else:
-        return SubprocVecEnv(env_fns)
-    
-    
-if __name__ == "__main__":
-    env = init_env(NUM_ENVS)
+    env = init_env(NUM_ENVS, seed = 1)
         
     print('begin training')
     # Policy training
