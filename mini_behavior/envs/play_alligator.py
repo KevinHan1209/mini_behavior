@@ -13,8 +13,7 @@ class PlayAlligatorEnv(RoomGrid):
             room_size=8,
             num_rows=1,
             num_cols=1,
-            max_steps=1e5,
-            exploration_type = None
+            max_steps=1e5
     ):
         num_objs = {'mallet': 1, 'music_box': 1}
         self.mission = 'play music box'
@@ -26,8 +25,7 @@ class PlayAlligatorEnv(RoomGrid):
                     room_size=room_size,
                     num_rows=num_rows,
                     num_cols=num_cols,
-                    max_steps=max_steps,
-                    exploration_type = exploration_type
+                    max_steps=max_steps
                     )
 
         
