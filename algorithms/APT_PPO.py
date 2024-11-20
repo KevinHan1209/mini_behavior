@@ -14,10 +14,13 @@ from collections import deque
 import time
 import torch.nn.functional as F
 import torch.nn as nn
+from array2gif import write_gif
+import wandb
 
 class APT_PPO():
     def __init__(self,
-                 env,                     
+                 env,
+                 env_id,                                                
                  device = "cpu",
                  save_freq: int = 100,                 # number of updates per model save
                  total_timesteps: int = 2000000000,    # total timesteps of the experiments
@@ -43,6 +46,7 @@ class APT_PPO():
                  c: float = 1                          # numerical stability constant
                  ): 
         self.env = env
+        self.env_id = env_id
         self.device = device
         self.save_freq = save_freq
         self.total_timesteps = total_timesteps
@@ -87,20 +91,38 @@ class APT_PPO():
         print("---------------------------------------")
         assert self.total_timesteps % self.batch_size == 0
 
-        self.agent = Agent(self.env.action_space.n, self.env.observation_space.shape[0]).to(self.device)
+        '''
+        wandb.init(project="APT_PPO_Training", 
+                    config={"env_id": self.env_id, 
+                     "Mode": "training",
+                    "Total timesteps": self.total_timesteps,
+                    "Learning rate": self.learning_rate,
+                    "Number of total updates": int(self.total_timesteps // self.batch_size),
+                    "Number of parallel environments": self.num_envs,
+                    "Number of steps per rollout": self.num_steps,  # Used for each kNN update and curiosity reward calculation
+                    "Batch size": self.batch_size,
+                    "Number of PPO update epochs": self.update_epochs,
+                    "Minibatch size": self.minibatch_size,
+                    "K parameter": self.k})
+        '''
+        print((self.env.observation_space.shape[1],))
+        print(self.env.single_observation_space.shape[0])
+        print(self.env.action_space[0].n)
+        print(self.env.action_space[0].n * self.num_envs)
+        self.agent = Agent(self.env.action_space[0].n, self.env.single_observation_space.shape[0]).to(self.device)
         self.optimizer = optim.Adam(
             self.agent.parameters(),
             lr=self.learning_rate,
             eps=1e-5,
         )
-        combined_parameters = list(self.agent.parameters())
 
+        combined_parameters = list(self.agent.parameters())
         reward_rms = RunningMeanStd()
         discounted_reward = RewardForwardFilter(self.int_gamma)
 
          # ALGO Logic: Storage setup
-        actions = torch.zeros((self.num_steps, self.num_envs) + self.env.action_space.shape).to(self.device)
-        obs = torch.zeros((self.num_steps, self.num_envs) + self.env.observation_space.shape).to(self.device) 
+        actions = torch.zeros((self.num_steps, self.num_envs) + self.env.action_space[0].shape).to(self.device)
+        obs = torch.zeros((self.num_steps, self.num_envs) + (self.env.observation_space.shape[1],)).to(self.device)                     
         logprobs = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
         rewards = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
         self.curiosity_rewards = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
@@ -114,6 +136,7 @@ class APT_PPO():
         ext_values = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
         int_values = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
         avg_returns = deque(maxlen=20)
+        save_gif = False
 
         # TRY NOT TO MODIFY: start the game
         global_step = 0
@@ -121,12 +144,16 @@ class APT_PPO():
         next_obs = torch.Tensor(self.env.reset()).to(self.device)
         next_done = torch.zeros(self.num_envs).to(self.device)
         num_updates = int(self.total_timesteps // self.batch_size)
+        frames = []
 
         for update in range(1, num_updates + 1):
             print("UPDATE: " + str(update) + "/" + str(num_updates))
+            save_gif = False
             if update % self.save_freq == 0:
                 print('Saving model...')
                 self.model_saves.append([self.agent.state_dict(), self.optimizer.state_dict()])
+                save_gif = True
+                
             # Annealing the rate if instructed to do so.
             if self.anneal_lr:
                 frac = 1.0 - (update - 1.0) / num_updates
@@ -137,6 +164,9 @@ class APT_PPO():
                 global_step += 1 * self.num_envs
                 obs[step] = next_obs
                 dones[step] = next_done
+                
+                if save_gif:
+                    frames.append(np.moveaxis(self.env.render(), 2, 0))
 
                 # ALGO LOGIC: action logic
                 with torch.no_grad():
@@ -156,7 +186,15 @@ class APT_PPO():
                 next_obs, reward, done, info = self.env.step(action.cpu().numpy())
                 rewards[step] = torch.tensor(reward).to(self.device).view(-1)
                 next_obs, next_done = torch.Tensor(next_obs).to(self.device), torch.Tensor(done).to(self.device)
-            
+                # Log step metrics
+
+            if save_gif:
+                gif_path = f"update{update + 1}.gif"
+                write_gif(np.array(frames), f"update{update + 1}.gif", fps=1)
+                #wandb.log({"episode_replay:": wandb.Video(gif_path, fps=10, format="gif")})
+                frames = []
+
+
             self.total_actions.append(actions)
             self.total_obs.append(obs)
 
@@ -179,6 +217,16 @@ class APT_PPO():
 
             reward_rms.update_from_moments(mean, std**2, count)
             self.curiosity_rewards /= np.sqrt(reward_rms.var)
+
+            '''
+            wandb.log({
+                    "Update": update,
+                    "Average Reward": mean,
+                    "Standard Deviation in Reweard": std,
+                    "Actions": actions,
+                    "Observations:": obs
+                })
+            '''
 
             # bootstrap value if not done
             with torch.no_grad():
@@ -211,7 +259,7 @@ class APT_PPO():
                 int_returns = int_advantages + int_values
 
             # flatten the batch
-            b_obs = obs.reshape((-1,) + self.env.observation_space.shape)
+            b_obs = obs.reshape((-1,) + (self.env.observation_space.shape[1],))
             b_logprobs = logprobs.reshape(-1)
             b_actions = actions.reshape(-1)
             b_ext_advantages = ext_advantages.reshape(-1)
@@ -327,7 +375,7 @@ class APT_PPO():
                     distance = self.compute_distance(np.array(env_obs[i]), np.array(env_obs[j]))
                     similarity_matrix[i, j] = torch.tensor(distance, dtype=similarity_matrix.dtype, device=similarity_matrix.device)
                     similarity_matrix[j, i] = torch.tensor(distance, dtype=similarity_matrix.dtype, device=similarity_matrix.device)
-
+  # Symmetric property
             
             # Add the matrix for this environment to the list
             similarity_matrices.append(similarity_matrix)

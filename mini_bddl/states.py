@@ -2,29 +2,23 @@ from mini_behavior.states import *
 
 ALL_STATES = [
     'atsamelocation',
-    'cleaningTool',
-    'coldSource',
-    'cookable',
-    'dustyable',
-    'freezable',
-    'heatSource',
+    'deform',
+    'detach',
+    'hidden',
     'infovofrobot',
     'inhandofrobot',
     'inreachofrobot',
     'insameroomasrobot',
     'inside',
     'nextto',
+    'noise',
     'onfloor',
     'onTop',
-    'openable',
-    'playable',
-    'sliceable',
-    'slicer',
-    'soakable',
-    'stainable',
-    'toggleable',
-    'under'
-    'waterSource'
+    'popup',
+    'reattach',
+    'takeout',
+    'under',
+    ''
     # 'touching', TODO: uncomment once implemented
 ]
 
@@ -47,49 +41,37 @@ DEFAULT_STATES = [
 # ATTENTION: Must change init function in BehaviorGrid class in mini_behavior/grid.py to accomodate for new sizes 
 # in ABILITIES and FURNATURE_STATES
 ABILITIES = [
-    'cookable',
-    'freezable',
-    'openable',
-    'playable',
-    'sliceable',
-    'soakable',
-    'stainable',
-    'toggleable',
+    'deform',
+    'detach',
+    'hidden',
+    'noise',
+    'popup',
+    'reattach',
+    'takeout',
 ]
 
-FURNATURE_STATES = [
-    'openable',
-    'playable',
-    'stainable',
-    'toggleable',
-]
+FURNATURE_STATES = []
 
 # state (str) to state (function) mapping
 STATE_FUNC_MAPPING = {
     'atsamelocation': AtSameLocation,
     'cleaningTool': CleaningTool,
-    'coldSource': HeatSourceOrSink,
-    'cookable': Cooked,
-    'dustyable': Dusty,
-    'freezable': Frozen,
-    'heatSource': HeatSourceOrSink,
+    'deform': ,
+    'detach': ,
+    'hidden': ,
     'infovofrobot': InFOVOfRobot,
     'inhandofrobot': InHandOfRobot,
     'inreachofrobot': InReachOfRobot,
     'insameroomasrobot': InSameRoomAsRobot,
     'inside': Inside,
     'nextto': NextTo,
+    'noise': ,
     'onfloor': OnFloor,
     'onTop': OnTop,
-    'openable': Opened,
-    'playable': Played,
-    'sliceable': Sliced,
-    'slicer': Slicer,
-    'soakable': Soaked,
-    'stainable': Stained,
-    'toggleable': ToggledOn,
-    'under': Under,
-    'waterSource': WaterSource
+    'popup': ,
+    'reattach': ,
+    'takeout': ,
+    'under': Under
     # 'touching', TODO: uncomment once implemented
 }
 

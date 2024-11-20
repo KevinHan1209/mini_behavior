@@ -63,11 +63,9 @@ class MiniBehaviorEnv(MiniGridEnv):
         agent_view_size=7,
         highlight=True,
         tile_size=TILE_PIXELS,
-        dense_reward=False,
-        exploration_type = None
+        dense_reward=False
     ):
 
-        self.exploration_type = exploration_type
         self.episode = 0
         self.teleop = False  # True only when set manually
         self.last_action = None
@@ -124,20 +122,15 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         pixel_dim = self.grid.pixel_dim
 
-        # Modify observation type attribute if applicable
-        if self.exploration_type == "ATP":
-            self.observation_space = self.get_APT_obs_space()
-        else:
-            # The observation space is different from mini-grid due to the z dimension
-            self.observation_space = spaces.Box(
-                low=0,
-                high=255,
-                shape=(self.agent_view_size, self.agent_view_size, pixel_dim),
-                dtype='uint8'
-            )
-            self.observation_space = spaces.Dict({
-                'image': self.observation_space
-            })
+        self.observation_space = spaces.Box(
+            low=0,
+            high=255,
+            shape=(self.agent_view_size, self.agent_view_size, pixel_dim),
+            dtype='uint8'
+        )
+        self.observation_space = spaces.Dict({
+            'image': self.observation_space
+        })
 
         self.mode = mode
         assert self.mode in ["cartesian", "primitive"]
@@ -238,9 +231,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.previous_progress = self.get_progress()
 
         # Return first observation
-        if self.exploration_type == "ATP":
-            obs = self.gen_APT_obs()
-        elif self.use_full_obs:
+        if self.use_full_obs:
             obs = self.gen_full_obs()
         else:
             obs = self.gen_obs()
@@ -651,9 +642,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.update_states()
         reward = self._reward()
         done = self._end_conditions() or self.step_count >= self.max_steps
-        if self.exploration_type == "ATP":
-            obs = self.gen_APT_obs()
-        elif self.use_full_obs:
+        if self.use_full_obs:
             obs = self.gen_full_obs()
         else:
             obs = self.gen_obs()
