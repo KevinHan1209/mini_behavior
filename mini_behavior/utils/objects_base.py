@@ -76,6 +76,9 @@ class WorldObj:
         self.contains = None
         self.inside_of = None
 
+    def get_name(self):
+        return self.name
+
     def check_abs_state(self, env=None, state=None):
         if state is not None:
             return state in self.states.keys() and self.states[state].get_value(env)

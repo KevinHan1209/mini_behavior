@@ -10,7 +10,6 @@ def find_tool(env, possible_tool_types):
                 return True
     return False
 
-
 class BaseAction:
     def __init__(self, env):
         """
@@ -41,6 +40,45 @@ class BaseAction:
         """
         assert self.can(obj), 'Cannot perform action'
 
+class Assemble(BaseAction):
+    def __init__(self, env):
+        super(Assemble, self).__init__(env)
+        self.key = 'assemble'
+        self.tools = ["broom", "gear"]
+
+    def can(self, obj):
+        """
+        can only do this if baby is holding the correct object, and if existing state is Attached = False
+        """
+        if super().can(obj) and obj.states['attached'].get_value() == False:
+            if obj.states['attached'] == True:
+                return False
+            if obj.get_name() == "gear_toy" and find_tool(self.env, "gear"):
+                return True
+            if obj.get_name() == "broom_set" and find_tool(self.env, "broom"):
+                return True
+        return False
+
+    def do(self, obj):
+        super().do(obj)
+        obj.states['inside'].set_value(, True)
+        obj.states['attached'].set_value(True)
+
+class Disassemble(BaseAction):
+    def __init__(self, env):
+        super(Disassemble, self).__init__(env)
+        self.key = 'disassemble'
+    
+    def can(self, obj):
+        """
+        can only do this if Attached is True
+        """
+        return super().can(obj) and obj.states['attached'].get_value()
+
+    def do(self, obj):
+        super().do(obj)
+        obj.states['attached'].set_value(False)
+
 
 class Close(BaseAction):
     def __init__(self, env):
@@ -49,7 +87,7 @@ class Close(BaseAction):
 
     def do(self, obj):
         super().do(obj)
-        obj.states['openable'].set_value(False)
+        obj.states['open'].set_value(False)
         obj.update(self.env)
 
 
@@ -272,6 +310,16 @@ class Slice(BaseAction):
     def do(self, obj):
         super().do(obj)
         obj.states['sliceable'].set_value()
+
+class Shake_Bang(BaseAction):
+    def __init__(self, env):
+        super(Shake_Bang, self).__init__(env)
+        self.key =  'shake/bang'
+        
+    def do(self, obj):
+        super().do(obj)
+        obj.states['noise'].set_value(True)
+        
 
 
 class Toggle(BaseAction):
