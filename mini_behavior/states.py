@@ -60,59 +60,56 @@ class InSameRoomAsRobot(AbsoluteObjectState):
 ###########################################################################################################
 # ABSOLUTE OBJECT STATES
 
-class Cooked(AbilityState):
-    """
-    Cooked(obj) only changes when Cook action is done on the obj
-    """
+class Attached(AbilityState):
     def __init__(self, obj, key):
-        super(Cooked, self).__init__(obj, key)
-
-class Deform(AbilityState):
-    def __init__(self, obj, key):
-        super(Deform, self).__init__(obj, key)
-
-
-class Dusty(AbilityState):
-    def __init__(self, obj, key):
-        """
-        not reversible
-        """
-        super(Dusty, self).__init__(obj, key)
-        self.tools = ["broom", "rag", "scrub_brush", "towel"]
+        super(Attached, self).__init__(obj, key)
 
     def _update(self, env):
-        """
-        Always init True
-        False if at any point, obj and cleaningTool are in the same location
-        """
-        # for tool_type in env.state_objs['cleaningTool']:
-        for tool_type in self.tools:
-            for tool in env.objs.get(tool_type, []):
-                if self.obj.check_rel_state(env, tool, 'atsamelocation'):
-                    self.value = False
+        '''
+        Attached combines two or more objects into one. 
+        Used for actions which require more sophistication than just dropping an object into another.
 
+        Applies for broom with broom_set, gear with gear_toy, and winnie with winnie_cabinet.
 
-class Frozen(AbilityState):
+        True if Assemble action is performed
+        False if Disassemble action is performed
+        '''
+        return self.value
+
+class Flipped(AbilityState):
     def __init__(self, obj, key):
-        super(Frozen, self).__init__(obj, key)
-        self.tools = ["electric_refrigerator"]
+        super(Flipped, self).__init__(obj, key)
+
+    def get_value(self, env):
+        '''
+        NON-BINARY STATE
+        Flipped can take on a set of values depending on how many ways you can flip the object
+        Done through flip action
+        '''
+        return self.value
+
+class Noise(AbilityState):
+    def __init__(self, obj, key):
+        super(Noise, self).__init__(obj, key)
 
     def get_value(self, env):
         """
-        True: coldSource is toggled on AND obj, cold source are at same location
-        False: coldsource is toggled off OR obj, cold source are not at same location
-
-        NOTE: refrigerator isnt togglebale
+        True depending on the action performed and object
+        TODO: If True, False if no other action is performed which could induce noise. Probably do this in environment step?
         """
-        self.value = False
-
-        for tool_type in self.tools:
-            for cold_source in env.objs.get(tool_type, []):
-                if self.obj.check_rel_state(env, cold_source, 'inside'):
-                    self.value = True
-
         return self.value
+    
+class Popup(AbilityState):
+    def __init__(self, obj, key):
+        super(Popup, self).__init__(obj, key)
 
+    def get_value(self, env):
+        """
+        True if toggle action is performed on certain objects
+        False if toggle action is performed again
+        Will duplicate with ToggledOn state
+        """
+        return self.value
 
 class Opened(AbilityState):
     def __init__(self, obj, key):
@@ -120,68 +117,6 @@ class Opened(AbilityState):
         Value changes only when Open action is done on obj
         """
         super(Opened, self).__init__(obj, key)
-
-    def get_value(self, env):
-        return self.value
-
-class Played(AbilityState):
-    def __init__(self, obj, key):
-        super(Played, self).__init__(obj, key)
-        self.tools = ['mallet']
-
-    def _update(self, env):
-        if self.obj.check_rel_state(env, env.objs.get(self.tools[0], [])[0], 'atsamelocation'):
-            self.value = True
-
-    def get_value(self, env):
-        return self.value
-        
-
-class Sliced(AbilityState):
-    def _set_value(self, new_value=True):
-        self.value = True
-
-    def get_value(self, env):
-        return self.value
-
-class Soaked(AbilityState):
-    def __init__(self, obj, key):
-        super(Soaked, self).__init__(obj, key)
-        self.tools = ['sink', 'teapot']
-
-    def _update(self, env):
-        """
-        not reversible
-        True if at any point, the obj is at the same location as a water source that is toggled on
-        """
-        for tool_type in self.tools:
-            for water_source in env.objs.get(tool_type, []):
-                if water_source.check_abs_state(env, 'toggleable'):
-                    if self.obj.check_rel_state(env, water_source, 'atsamelocation'):
-                        self.value = True
-
-    def get_value(self, env):
-        return self.value
-
-
-class Stained(AbilityState):
-    def __init__(self, obj, key):
-        """
-        Always init True
-        """
-        super(Stained, self).__init__(obj, key)
-        self.tools = ['rag', 'scrub_brush', 'towel']
-
-    def _update(self, env):
-        """
-        not reversible
-        False if at any point, the obj is at the same location as a soaked cleaning tool
-        """
-        for tool_type in self.tools:
-            for cleaning_tool in env.objs.get(tool_type, []):
-                if cleaning_tool.check_abs_state(env, 'soakable'):
-                    if self.obj.check_rel_state(env, cleaning_tool, 'atsamelocation'):
-                        self.value = False
 
     def get_value(self, env):
         return self.value
@@ -320,28 +255,3 @@ class Under(RelativeObjectState):
 
         return False
 
-###########################################################################################################
-# OBJECT PROPERTIES
-
-
-class CleaningTool(ObjectProperty):
-    def __init__(self, obj, key):
-        super(CleaningTool, self).__init__(obj, key)
-
-
-class HeatSourceOrSink(ObjectProperty):
-    def __init__(self, obj, key):
-        super(HeatSourceOrSink, self).__init__(obj, key)
-
-
-# class ObjectsInFOVOfRobot(AbsoluteObjectState):
-
-
-class Slicer(ObjectProperty):
-    def __init__(self, obj, key):
-        super(Slicer, self).__init__(obj, key)
-
-
-class WaterSource(ObjectProperty):
-    def __init__(self, obj, key):
-        super(WaterSource, self).__init__(obj, key)

@@ -649,49 +649,6 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         return obs, reward, done, {}
 
-    def get_APT_obs_space(self):
-        # Returns APT observation space. Used during initialization when some states have a None value rather than a Boolean
-        obj_states = []
-        for obj_type in self.objs.values():
-            for obj in obj_type:
-                for state_value in obj.states:
-                    # Only want absolute object states
-                    if isinstance(obj.states[state_value], RelativeObjectState):
-                        continue
-                    obj_states.append(0)
-
-        # Combine agent position, direction, and object states
-        obs = []
-        obs.extend([0,0,0]) 
-        obs += obj_states
-        return spaces.Box(low=0, high = max(self.width, self.height), shape = (len(obs),), dtype = 'uint8')
-
-    
-
-    def gen_APT_obs(self):
-        # Generates all object states as well as agent's current position and direction
-        obj_states = []
-        for obj_type in self.objs.values():
-            for obj in obj_type:
-                for state_value in obj.states:
-                    # Only want absolute object states
-                    if isinstance(obj.states[state_value], RelativeObjectState):
-                        continue
-                    state = obj.states[state_value].get_value(self)
-                    if state == True:
-                        obj_states.append(1)
-                    else:
-                        obj_states.append(0)
-
-        # Combine agent position, direction, and object states
-        obs = []
-        obs.extend(self.agent_pos)
-        obs.append(self.agent_dir)
-        obs += obj_states
-
-        # Convert list to tensor
-        obs_tensor = torch.tensor(np.array(obs), dtype=torch.float32)  
-        return obs_tensor
 
     def _reward(self):
         if self._end_conditions():

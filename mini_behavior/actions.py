@@ -10,7 +10,6 @@ def find_tool(env, possible_tool_types):
                 return True
     return False
 
-
 class BaseAction:
     def __init__(self, env):
         """
@@ -41,6 +40,85 @@ class BaseAction:
         """
         assert self.can(obj), 'Cannot perform action'
 
+class Assemble(BaseAction):
+    def __init__(self, env):
+        super(Assemble, self).__init__(env)
+        self.key = 'assemble'
+        self.tools = ["broom", "gear"]
+
+    def can(self, obj):
+        """
+        can only do this if 
+        -baby is holding the correct object, 
+        -the existing state is Attached = False, 
+        """
+        if super().can(obj) and obj.states['attached'].get_value() == False:
+            if obj.get_name() == "gear_toy" and find_tool(self.env, ["gear"]):
+                return True
+            if obj.get_name() == "broom_set" and find_tool(self.env, ["broom"]):
+                return True
+        return False
+
+    def do(self, obj):
+        super().do(obj)
+        obj.states['attached'].set_value(True)
+        # find correct tool that is in hand of the agent
+        if obj.get_name() == "gear_toy":
+            toys = self.env.objs.get("gear", []) 
+        elif obj.get_name() == "broom_set":
+            toys = self.env.objs.get("broom, []")
+        for toy in toys:
+            if toy.check_abs_state(self.env, 'inhandofrobot'):
+                # once found, put tool "inside" of obj
+                toy.states['inside'].set_value(obj, True)
+                self.env.carrying.discard(obj)
+                fwd_pos = self.env.front_pos
+                obj.cur_pos = fwd_pos
+
+        fwd_pos = self.env.front_pos
+        obj.cur_pos = fwd_pos
+        self.env.grid.set(*fwd_pos, obj)
+
+class Disassemble(BaseAction):
+    """
+    Disassembles two objects. Ends with the object that was inside in agent's hand.
+    """
+    def __init__(self, env):
+        super(Disassemble, self).__init__(env)
+        self.key = 'disassemble'
+    
+    def can(self, obj):
+        """
+        can only do this if Attached is True
+        """
+
+        # For primitive action type, can only carry one object at a time
+        if len(self.env.carrying) != 0 and self.env.mode == "primitive":
+            assert len(self.env.carrying) == 1
+            return False
+
+        # cannot pickup if carrying
+        if obj.check_abs_state(self.env, 'inhandofrobot'):
+            return False
+        
+        return super().can(obj) and obj.states['attached'].get_value()
+
+    def do(self, obj):
+        super().do(obj)
+        objs = self.env.grid.get_all_objs(*obj.cur_pos)
+        for toy in objs:
+            # Find the toy inside
+            if toy.get_name() != obj.get_name():
+                self.env.carrying.add(toy) # carry toy
+                self.env.grid.remove(*obj.cur_pos, toy) # remove the toy from inside other object
+                toy.states['inside'].set_value(obj, False)
+                found = True
+
+        obj.states['attached'].set_value(False)
+
+        # check dependencies
+        assert found
+
 
 class Close(BaseAction):
     def __init__(self, env):
@@ -49,7 +127,7 @@ class Close(BaseAction):
 
     def do(self, obj):
         super().do(obj)
-        obj.states['openable'].set_value(False)
+        obj.states['open'].set_value(False)
         obj.update(self.env)
 
 
@@ -272,6 +350,16 @@ class Slice(BaseAction):
     def do(self, obj):
         super().do(obj)
         obj.states['sliceable'].set_value()
+
+class Shake_Bang(BaseAction):
+    def __init__(self, env):
+        super(Shake_Bang, self).__init__(env)
+        self.key =  'shake/bang'
+        
+    def do(self, obj):
+        super().do(obj)
+        obj.states['noise'].set_value(True)
+        
 
 
 class Toggle(BaseAction):

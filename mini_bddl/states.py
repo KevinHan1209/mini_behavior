@@ -2,9 +2,8 @@ from mini_behavior.states import *
 
 ALL_STATES = [
     'atsamelocation',
-    'deform',
-    'detach',
-    'hidden',
+    'attached',
+    'flipped',
     'infovofrobot',
     'inhandofrobot',
     'inreachofrobot',
@@ -14,11 +13,9 @@ ALL_STATES = [
     'noise',
     'onfloor',
     'onTop',
+    'open',
     'popup',
-    'reattach',
-    'takeout',
     'under',
-    ''
     # 'touching', TODO: uncomment once implemented
 ]
 
@@ -41,37 +38,34 @@ DEFAULT_STATES = [
 # ATTENTION: Must change init function in BehaviorGrid class in mini_behavior/grid.py to accomodate for new sizes 
 # in ABILITIES and FURNATURE_STATES
 ABILITIES = [
-    'deform',
-    'detach',
-    'hidden',
+    'attached',
     'noise',
+    'open',
     'popup',
-    'reattach',
-    'takeout',
+    'flipped',
+    "toggled"
 ]
 
 FURNATURE_STATES = []
 
 # state (str) to state (function) mapping
 STATE_FUNC_MAPPING = {
+    'attached': Attached,
     'atsamelocation': AtSameLocation,
-    'cleaningTool': CleaningTool,
-    'deform': ,
-    'detach': ,
-    'hidden': ,
+    'flipped': Flipped,
     'infovofrobot': InFOVOfRobot,
     'inhandofrobot': InHandOfRobot,
     'inreachofrobot': InReachOfRobot,
     'insameroomasrobot': InSameRoomAsRobot,
     'inside': Inside,
     'nextto': NextTo,
-    'noise': ,
+    'noise': Noise,
     'onfloor': OnFloor,
     'onTop': OnTop,
-    'popup': ,
-    'reattach': ,
-    'takeout': ,
-    'under': Under
+    'open': Opened,
+    'popup': Popup,
+    'under': Under,
+    'toggled': ToggledOn
     # 'touching', TODO: uncomment once implemented
 }
 
