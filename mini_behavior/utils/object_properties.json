@@ -1,6 +1,6 @@
 {
     "alligator_busy_box": [
-        "toggled"
+       "toggled"
     ],
     "ball": [
 
@@ -9,71 +9,67 @@
 
     ],
     "broom": [
-        "flipped"
+
     ],
     "broom_set": [
-        "attached",
-        "flipped"
+
     ],
     "bucket_toy": [
-        "flipped"
+
     ],
     "cart_toy": [
 
     ],
     "coin": [
-        "flipped"
+
     ],
     "cube": [
-        "flipped"
+
     ],
     "cube_cabinet": [
 
     ],
     "farm_toy": [
-        "popout",
-        "flipped"
+        "popout"
+
     ],
     "gear": [
 
     ],
     "gear_pole": [
-        "attached",
-        "flipped"
+
     ],
     "music_toy": [
         "noise",
-        "flipped",
+
         "toggled"
     ],
     "piggie_bank": [
         "noise",
-        "flipped",
         "open",
         "toggled"
     ],
     "rattle": [
-        "noise",
-        "flipped"
+        "noise"
     ],
     "red_spiky_ball": [
 
     ],
     "ring_toy": [
-        "flipped"
+
     ],
     "shape_sorter": [
-        "flipped"
+
     ],
     "stroller": [
 
     ],
     "tree_busy_box": [
-        "toggleable",
-        "flipped"
+        "toggleable"
+
     ],
     "winnie": [
-        "flipped"
+
     ],
     "winnie_cabinet": [
         "open"

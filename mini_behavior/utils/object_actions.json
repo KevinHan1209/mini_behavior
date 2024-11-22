@@ -1,25 +1,98 @@
 {
-    "alligator_busy_box": [],
-    "ball": [],
-    "beach_ball": [],
-    "broom": [],
-    "broom_set": [],
-    "bucket_toy": [],
-    "cart_toy": [],
-    "coin": [],
-    "cube": [],
-    "cube_cabinet": [],
-    "farm_toy": [],
-    "gear": [],
-    "gear_pole": [],
-    "music_toy": [],
-    "piggie_bank": [],
-    "rattle": [],
-    "red_spiky_ball": [],
-    "ring_toy": [],
-    "shape_sorter": [],
-    "stroller": [],
-    "tree_busy_box": [],
-    "winnie": [],
-    "winnie_cabinet": []
+    "alligator_busy_box": [
+        "toggle",
+        "pickup",
+        "drop"
+    ],
+    "ball": [
+        "pickup",
+        "drop"
+    ],
+    "beach_ball": [
+        "pickup",
+        "drop"
+    ],
+    "broom": [
+        "pickup",
+        "drop"
+    ],
+    "broom_set": [
+        "pickup",
+        "drop"
+    ],
+    "bucket_toy": [
+        "pickup",
+        "drop"
+    ],
+    "cart_toy": [
+        "pickup",
+        "drop"
+    ],
+    "coin": [
+        "pickup",
+        "drop"
+    ],
+    "cube": [
+        "pickup",
+        "drop"
+    ],
+    "cube_cabinet": [
+        "pickup",
+        "drop"
+    ],
+    "farm_toy": [
+        "toggle",
+        "pickup",
+        "drop"
+    ],
+    "gear": [
+        "pickup",
+        "drop"
+    ],
+    "gear_pole": [
+        "pickup",
+        "drop"
+    ],
+    "music_toy": [
+        "pickup",
+        "drop"
+    ],
+    "piggie_bank": [
+        "toggle",
+        "pickup",
+        "drop"
+    ],
+    "rattle": [
+        "pickup",
+        "drop"
+    ],
+    "red_spiky_ball": [
+        "pickup",
+        "drop"
+    ],
+    "ring_toy": [
+        "pickup",
+        "drop"
+    ],
+    "shape_sorter": [
+        "pickup",
+        "drop"
+    ],
+    "stroller": [
+        "pickup",
+        "drop"
+    ],
+    "tree_busy_box": [
+        "pickup",
+        "drop"
+    ],
+    "winnie": [
+        "pickup",
+        "drop"
+    ],
+    "winnie_cabinet": [
+        "pickup",
+        "drop"
+    ]
 }
+

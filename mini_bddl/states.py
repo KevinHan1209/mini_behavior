@@ -38,11 +38,11 @@ DEFAULT_STATES = [
 # ATTENTION: Must change init function in BehaviorGrid class in mini_behavior/grid.py to accomodate for new sizes 
 # in ABILITIES and FURNATURE_STATES
 ABILITIES = [
-    'attached',
+    #'attached',
     'noise',
     'open',
     'popup',
-    'flipped',
+    #'flipped',
     "toggled"
 ]
 

@@ -372,6 +372,16 @@ class Toggle(BaseAction):
         toggle from on to off, or off to on
         """
         super().do(obj)
-        cur = obj.check_abs_state(self.env, 'toggleable')
-        obj.states['toggleable'].set_value(not cur)
+        cur = obj.check_abs_state(self.env, 'toggled')
+        obj.states['toggled'].set_value(not cur)
+        if obj.get_name() in ["music_toy", "piggie_bank"] :
+            obj.states['noise'].set_value(True)
+        if obj.get_name() in ["winnie_cabinet", "piggie_bank"]:
+            open_cur = obj.check_abs_state(self.env, 'open')
+            obj.states['open'].set_value(not open_cur)
+        if obj.get_name() in ["farm_toy"]:
+            popup_cur = obj.check_abs_state(self.env, 'popup')
+            obj.states['popup'].set_value(not popup_cur)
+        
+
 
