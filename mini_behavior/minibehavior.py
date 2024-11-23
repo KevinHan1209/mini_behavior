@@ -33,6 +33,7 @@ class MiniBehaviorEnv(MiniGridEnv):
     }
 
     # Enumeration of possible actions
+    '''
     class Actions(IntEnum):
         left = 0
         right = 1
@@ -49,6 +50,20 @@ class MiniBehaviorEnv(MiniGridEnv):
         drop_0 = 12
         drop_1 = 13
         drop_2 = 14
+    '''
+    class Actions(IntEnum):
+        left = 0
+        right = 1
+        forward = 2
+        toggle = 3
+        shake_bang = 4
+        pickup_0 = 5
+        pickup_1 = 6
+        pickup_2 = 7
+        drop_0 = 8
+        drop_1 = 9
+        drop_2 = 10
+
 
     def __init__(
         self,
@@ -109,6 +124,8 @@ class MiniBehaviorEnv(MiniGridEnv):
             applicable_actions = obj_instance.actions
             for action_name in applicable_actions:
                 action_list.append(obj_type + "/" + action_name)
+
+
 
         super().__init__(grid_size=grid_size,
                          width=width,
@@ -531,6 +548,9 @@ class MiniBehaviorEnv(MiniGridEnv):
             if self.mode == "primitive":
                 action = self.actions(action)
                 action_name = action.name
+                # Handle noise state
+                if "toggle" not in action_name or "shake/bang" not in action_name:
+                    self.silence()
                 if "pickup" in action_name or "drop" in action_name:
                     action_dim = action_name.split('_')  # list: [action, dim]
                     if action_name == "drop_in":
@@ -568,6 +588,9 @@ class MiniBehaviorEnv(MiniGridEnv):
                             if is_obj(obj) and action_class(self).can(obj):
                                 action_class(self).do(obj)
                                 self.action_done = True
+                                # Take care of noise state if action is toggle but not on a noisy object
+                                if action_name == "toggle" and obj.get_name() not in ["music_toy", "piggie_bank"]:
+                                    self.silence()
                                 break
                         if self.action_done:
                             break
@@ -648,6 +671,16 @@ class MiniBehaviorEnv(MiniGridEnv):
             obs = self.gen_obs()
 
         return obs, reward, done, {}
+    
+    def silence(self):
+        '''
+        Set all noise states to false
+        '''
+        for obj_type in self.objs.values():
+                        for obj in obj_type:
+                            for state_name in obj.states:
+                                if state_name == "noise":
+                                    obj.states[state_name].set_value(False)
 
 
     def _reward(self):

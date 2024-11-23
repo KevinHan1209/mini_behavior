@@ -2,8 +2,8 @@ from mini_behavior.states import *
 
 ALL_STATES = [
     'atsamelocation',
-    'attached',
-    'flipped',
+    #'attached',
+    #'flipped',
     'infovofrobot',
     'inhandofrobot',
     'inreachofrobot',

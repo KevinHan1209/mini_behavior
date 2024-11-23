@@ -30,8 +30,8 @@
 
     ],
     "farm_toy": [
-        "popout"
-
+        "popup",
+        "toggled"
     ],
     "gear": [
 
@@ -41,7 +41,6 @@
     ],
     "music_toy": [
         "noise",
-
         "toggled"
     ],
     "piggie_bank": [
@@ -65,13 +64,14 @@
 
     ],
     "tree_busy_box": [
-        "toggleable"
+        "toggled"
 
     ],
     "winnie": [
 
     ],
     "winnie_cabinet": [
-        "open"
+        "open",
+        "toggled"
     ]
 }

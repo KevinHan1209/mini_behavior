@@ -7,9 +7,9 @@ import wandb
 
 
 
-TASK = 'GearToy'
+TASK = 'MultiToy'
 PARTIAL_OBS = True
-ROOM_SIZE = 10
+ROOM_SIZE = 32
 MAX_STEPS = 1000
 TOTAL_TIMESTEPS = 1e6
 DENSE_REWARD = False
@@ -20,9 +20,9 @@ env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-v0"
 env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
 
 
-def make_env(env_id, seed, idx):
+def make_env(env_id, seed, idx, env_kwargs):
     def thunk():
-        env = gym.make(env_id)
+        env = gym.make(env_id, **env_kwargs)
         env = CustomObservationWrapper(env)
         env.seed(seed + idx)
         return env
@@ -32,7 +32,7 @@ def make_env(env_id, seed, idx):
 def init_env(num_envs: int, seed):
 
     return gym.vector.SyncVectorEnv(
-                [make_env(env_name, seed, i) for i in range(num_envs)]
+                [make_env(env_name, seed, i, env_kwargs) for i in range(num_envs)]
                 )
     
         
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     model.train()
 
     # Define the directory path
-    save_dir = "models/ATP_PPO_GearToy"
+    save_dir = "models/ATP_PPO_MultiToy"
 
     # Check if the directory exists, and if not, create it
     if not os.path.exists(save_dir):

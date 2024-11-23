@@ -31,8 +31,9 @@ OBJECT_TO_IDX = {
     'shape_sorter': 20,
     'stroller': 21,
     'tree_busy_box': 22,
-    "winnie": 23,
-    'winnie_cabinet': 24
+    'wall': 23,
+    "winnie": 24,
+    'winnie_cabinet': 25
 }
 
 
@@ -62,6 +63,7 @@ OBJECT_TO_STR = {
     "shape_sorter": "S",
     "stroller": "S",
     "tree_busy_box": "T",
+    "wall": "W",
     "winnie": "W",
     "winnie_cabinet": "W",
 }

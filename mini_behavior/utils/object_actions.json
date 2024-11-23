@@ -64,7 +64,8 @@
     ],
     "rattle": [
         "pickup",
-        "drop"
+        "drop",
+        "shake_bang"
     ],
     "red_spiky_ball": [
         "pickup",

@@ -17,7 +17,7 @@ class MultiToyEnv(RoomGrid):
             num_cols=1,
             max_steps=1e5,
     ):
-        num_objs = {'alligator_busy_box': 1, 'ball': 1, 'beach_ball': 1, 'music_toy': 1, 'farm_toy': 1, 'rattle': 1, 'red_spiky_ball': 1, 'winnie_cabinet': 1}
+        num_objs = {'alligator_busy_box': 1, 'ball': 1, 'beach_ball': 1, 'music_toy': 1, 'farm_toy': 1, 'piggie_bank': 1, 'rattle': 1, 'red_spiky_ball': 1, 'winnie_cabinet': 1}
 
         self.mission = 'explore'
 
@@ -89,7 +89,7 @@ class MultiToyEnv(RoomGrid):
     def _end_conditions(self):
         return False
 
-
+'''
 register(
     id='MiniGrid-MultiToy-32x32-N2-v0',
     entry_point='mini_behavior.envs:PickingUpARattleEnv'
@@ -112,3 +112,4 @@ register(
     entry_point='mini_behavior.envs:PickingUpARattleEnv',
     kwargs={'mode': 'cartesian'}
 )
+'''

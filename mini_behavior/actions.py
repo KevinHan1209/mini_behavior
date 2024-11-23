@@ -354,7 +354,7 @@ class Slice(BaseAction):
 class Shake_Bang(BaseAction):
     def __init__(self, env):
         super(Shake_Bang, self).__init__(env)
-        self.key =  'shake/bang'
+        self.key =  'shake_bang'
         
     def do(self, obj):
         super().do(obj)

@@ -29,8 +29,8 @@ class BehaviorGrid(Grid):
 
         # Parameters related to observation encoding
         self.null_encoding_value = 0
-        self.furniture_encoding_length = 4
-        self.obj_encoding_length = 8
+        self.furniture_encoding_length = len(FURNATURE_STATES)
+        self.obj_encoding_length = len(ABILITIES)
         self.pixel_dim = 3 * self.obj_encoding_length + self.furniture_encoding_length + 4
 
         self.walls = []
@@ -410,7 +410,6 @@ class BehaviorGrid(Grid):
                         item_list.append(np.array([OBJECT_TO_IDX[obj_n]] +
                                                    self.state_dict_encoding(state_dict,
                                                                             ABILITIES)))
-
                     array[i, j] = np.concatenate(item_list)
 
         return array

@@ -7,6 +7,7 @@ from mini_behavior.envs.gear_toy import *
 from mini_behavior.envs.installing_a_printer import *
 from mini_behavior.envs.laying_wood_floors import *
 from mini_behavior.envs.making_tea import *
+from mini_behavior.envs.multitoy import *
 from mini_behavior.envs.moving_boxes_to_storage import *
 from mini_behavior.envs.opening_packages import *
 from mini_behavior.envs.organizing_file_cabinet import *

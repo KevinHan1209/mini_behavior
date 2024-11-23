@@ -119,6 +119,7 @@ class RoomGrid(MiniBehaviorEnv):
             width = (room_size - 1) * num_cols + 1
             self.init_dict = None
 
+
         super().__init__(
             mode=mode,
             width=width,
@@ -456,7 +457,7 @@ class RoomGrid(MiniBehaviorEnv):
                 for room in row:
                     room.reset()
                     
-        return self.gen_APT_obs()
+        return self.gen_obs()
 
     def _gen_grid(self, width, height):
         if not self.init_dict:
