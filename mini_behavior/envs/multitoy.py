@@ -89,27 +89,26 @@ class MultiToyEnv(RoomGrid):
     def _end_conditions(self):
         return False
 
-'''
+
 register(
     id='MiniGrid-MultiToy-32x32-N2-v0',
-    entry_point='mini_behavior.envs:PickingUpARattleEnv'
+    entry_point='mini_behavior.envs:MultiToyEnv'
 )
 
 register(
     id='MiniGrid-MultiToy-8x8-N2-v0',
-    entry_point='mini_behavior.envs:PickingUpARattleEnv',
+    entry_point='mini_behavior.envs:MultiToyEnv',
     kwargs={"room_size": 8, "max_steps": 1000}
 )
 
 register(
     id='MiniGrid-MultiToy-6x6-N2-v0',
-    entry_point='mini_behavior.envs:PickingUpARattleEnv',
+    entry_point='mini_behavior.envs:MultiToyEnv',
     kwargs={"room_size": 6, "max_steps": 1000}
 )
 
 register(
     id='MiniGrid-MultiToy-16x16-N2-v1',
-    entry_point='mini_behavior.envs:PickingUpARattleEnv',
+    entry_point='mini_behavior.envs:MultiToyEnv',
     kwargs={'mode': 'cartesian'}
 )
-'''
