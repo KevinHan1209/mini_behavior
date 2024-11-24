@@ -1,6 +1,6 @@
 from mini_behavior.actions import *
 
-ALL_ACTIONS = ['pickup', 'drop', 'toggle', 'shake/bang' ]
+ALL_ACTIONS = ['pickup', 'drop', 'toggle', 'shake_bang' ]
 DEFAULT_ACTIONS = []
 
 ACTION_FUNC_MAPPING = {
