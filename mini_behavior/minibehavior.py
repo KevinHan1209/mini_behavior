@@ -58,11 +58,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         toggle = 3
         shake_bang = 4
         pickup_0 = 5
-        pickup_1 = 6
-        pickup_2 = 7
-        drop_0 = 8
-        drop_1 = 9
-        drop_2 = 10
+        drop_0 = 6
 
 
     def __init__(

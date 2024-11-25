@@ -3,19 +3,19 @@ import os
 from mini_behavior.register import register
 from algorithms.APT_PPO import APT_PPO
 from env_wrapper import CustomObservationWrapper
-import wandb
-
 
 
 TASK = 'MultiToy'
 PARTIAL_OBS = True
-ROOM_SIZE = 32
+ROOM_SIZE = 16
 MAX_STEPS = 1000
 TOTAL_TIMESTEPS = 1e6
 DENSE_REWARD = False
 POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
 NUM_STEPS = 125
+SAVE_FREQUENCY = 100
+
 env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-v0"
 env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
 
@@ -35,6 +35,7 @@ def init_env(num_envs: int, seed):
                 [make_env(env_name, seed, i, env_kwargs) for i in range(num_envs)]
                 )
     
+
         
 if __name__ == "__main__":
     register(
@@ -46,7 +47,7 @@ if __name__ == "__main__":
         
     print('begin training')
     # Policy training
-    model = APT_PPO(env, env_id = env_name, num_envs=NUM_ENVS, total_timesteps = TOTAL_TIMESTEPS, num_steps=NUM_STEPS, save_freq = 100)
+    model = APT_PPO(env, env_id = env_name, num_envs=NUM_ENVS, total_timesteps = TOTAL_TIMESTEPS, num_steps=NUM_STEPS, save_freq = SAVE_FREQUENCY)
 
     model.train()
 

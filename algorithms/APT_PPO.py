@@ -7,15 +7,17 @@ from networks.actor import Agent
 import numpy as np
 from numpy import linalg as LA
 from mini_behavior.roomgrid import *
-from mini_behavior.utils.utils import RewardForwardFilter, RMS, dir_to_rad, schedule, recursive_getattr
+from mini_behavior.utils.utils import RewardForwardFilter, RMS, dir_to_rad
+from env_wrapper import CustomObservationWrapper
 import random
 from gym.wrappers.normalize import RunningMeanStd
 from collections import deque
 import time
 import torch.nn.functional as F
-import torch.nn as nn
 from array2gif import write_gif
+import torch.nn as nn
 import wandb
+import gym
 
 class APT_PPO():
     def __init__(self,
@@ -91,7 +93,6 @@ class APT_PPO():
         print("---------------------------------------")
         assert self.total_timesteps % self.batch_size == 0
 
-        '''
         wandb.init(project="APT_PPO_Training", 
                     config={"env_id": self.env_id, 
                      "Mode": "training",
@@ -103,8 +104,9 @@ class APT_PPO():
                     "Batch size": self.batch_size,
                     "Number of PPO update epochs": self.update_epochs,
                     "Minibatch size": self.minibatch_size,
-                    "K parameter": self.k})
-        '''
+                    "K parameter": self.k,
+                    "Save frequency": self.save_freq})
+
         print((self.env.observation_space.shape[1],))
         print(self.env.single_observation_space.shape[0])
         print(self.env.action_space[0].n)
@@ -148,11 +150,11 @@ class APT_PPO():
 
         for update in range(1, num_updates + 1):
             print("UPDATE: " + str(update) + "/" + str(num_updates))
-            save_gif = False
             if update % self.save_freq == 0:
                 print('Saving model...')
                 self.model_saves.append([self.agent.state_dict(), self.optimizer.state_dict()])
-                save_gif = True
+                self.test_agent(save_episode=update)
+
                 
             # Annealing the rate if instructed to do so.
             if self.anneal_lr:
@@ -164,9 +166,7 @@ class APT_PPO():
                 global_step += 1 * self.num_envs
                 obs[step] = next_obs
                 dones[step] = next_done
-                
-                if save_gif:
-                    frames.append(np.moveaxis(self.env.render(), 2, 0))
+
 
                 # ALGO LOGIC: action logic
                 with torch.no_grad():
@@ -186,13 +186,6 @@ class APT_PPO():
                 next_obs, reward, done, info = self.env.step(action.cpu().numpy())
                 rewards[step] = torch.tensor(reward).to(self.device).view(-1)
                 next_obs, next_done = torch.Tensor(next_obs).to(self.device), torch.Tensor(done).to(self.device)
-                # Log step metrics
-
-            if save_gif:
-                gif_path = f"update{update + 1}.gif"
-                write_gif(np.array(frames), f"update{update + 1}.gif", fps=1)
-                #wandb.log({"episode_replay:": wandb.Video(gif_path, fps=10, format="gif")})
-                frames = []
 
 
             self.total_actions.append(actions)
@@ -218,7 +211,6 @@ class APT_PPO():
             reward_rms.update_from_moments(mean, std**2, count)
             self.curiosity_rewards /= np.sqrt(reward_rms.var)
 
-            '''
             wandb.log({
                     "Update": update,
                     "Average Reward": mean,
@@ -226,7 +218,6 @@ class APT_PPO():
                     "Actions": actions,
                     "Observations:": obs
                 })
-            '''
 
             # bootstrap value if not done
             with torch.no_grad():
@@ -437,9 +428,55 @@ class APT_PPO():
                 rewards[step, env] = reward
         
         return rewards  # Shape: [num_steps, num_envs]
-
-
-
-
-
+    
+    def test_agent(self, save_episode, num_episodes=1, max_steps_per_episode=500):
+        print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
         
+        test_env = gym.make(self.env_id)
+        test_env = CustomObservationWrapper(test_env)
+        
+        for episode in range(num_episodes):
+            print(f"\n=== Episode {episode + 1}/{num_episodes} ===")
+            obs = test_env.reset()
+            done = False
+            steps = 0
+            frames = []
+            episode_reward = 0
+            episode_novelty = []
+            
+            while not done and steps < max_steps_per_episode:
+                frames.append(np.moveaxis(test_env.render(), 2, 0))
+                
+                obs_tensor = torch.FloatTensor(obs).unsqueeze(0)
+                with torch.no_grad():
+                    action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
+                
+                obs, reward, done, _ = test_env.step(action.numpy()[0])
+                episode_reward += reward
+                
+                # Log step metrics
+                wandb.log({
+                    "step_reward": reward,
+                    "episode": episode,
+                    "step": steps
+                })
+                
+                # Print step information
+                print(f"Step {steps:3d} | "
+                    f"Action: {test_env.actions(action.item()).name:10s} | "
+                    f"Reward: {reward:6.2f} | ")
+                
+                steps += 1
+                time.sleep(0.1)
+            
+            # Save gif as wandb artifact
+            gif_path = f"episode_{save_episode}.gif"
+            write_gif(np.array(frames), gif_path, fps=10)
+            wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+        test_env.close()
+
+
+
+
+
+            

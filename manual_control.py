@@ -8,11 +8,16 @@ from mini_behavior.grid import GridDimension
 import numpy as np
 import mini_behavior.envs.picking_up_a_rattle
 import mini_behavior.envs.multitoy
+from mini_behavior.register import register
 
 # Size in pixels of a tile in the full-scale human view
 TILE_PIXELS = 32
 show_furniture = False
 
+register(
+    id='MiniGrid-MultiToy-16x16-N2-v0',
+    entry_point='mini_behavior.envs:MultiToyEnv'
+)
 
 def redraw(img):
     if not args.agent_view:
@@ -165,34 +170,13 @@ def key_handler_primitive(event):
         step(env.actions.pickup_0)
         return
     if event.key == '1':
-        step(env.actions.pickup_1)
-        return
-    if event.key == '2':
-        step(env.actions.pickup_2)
-        return
-    if event.key == '3':
         step(env.actions.drop_0)
-        return
-    if event.key == '4':
-        step(env.actions.drop_1)
-        return
-    if event.key == '5':
-        step(env.actions.drop_2)
         return
     if event.key == 't':
         step(env.actions.toggle)
         return
-    if event.key == 'o':
-        step(env.actions.open)
-        return
-    if event.key == 'c':
-        step(env.actions.close)
-        return
-    if event.key == 'k':
-        step(env.actions.cook)
-        return
     if event.key == 's':
-        step(env.actions.slice)
+        step(env.actions.shake_bang)
         return
     if event.key == 'i':
         step(env.actions.drop_in)
@@ -206,7 +190,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--env",
     help="gym environment to load",
-    default='MiniGrid-MultiToy-8x8-N2-v0'
+    default='MiniGrid-MultiToy-16x16-N2-v0'
 )
 parser.add_argument(
     "--seed",

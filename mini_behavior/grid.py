@@ -552,7 +552,7 @@ class GridDimension(Grid):
         Render a tile and cache the result
         """
         # assert not is_obj(obj) or state_values is not None, 'no states passed in for obj'
-        obj_size = int(tile_size * 7 / 8)
+        obj_size = int(tile_size * (len(ABILITIES) - 1) / len(ABILITIES))
 
         # if obj is inside closed obj, don't render it
         if is_obj(obj) and obj.inside_of and 'openable' in obj.inside_of.states.keys() and not obj.inside_of.check_abs_state(state='openable'):

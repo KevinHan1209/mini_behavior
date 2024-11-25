@@ -12,7 +12,7 @@ class MultiToyEnv(RoomGrid):
     def __init__(
             self,
             mode='primitive',
-            room_size=32,
+            room_size=16,
             num_rows=1,
             num_cols=1,
             max_steps=1e5,
@@ -89,9 +89,9 @@ class MultiToyEnv(RoomGrid):
     def _end_conditions(self):
         return False
 
-
+'''
 register(
-    id='MiniGrid-MultiToy-32x32-N2-v0',
+    id='MiniGrid-MultiToy-16x16-N2-v0',
     entry_point='mini_behavior.envs:MultiToyEnv'
 )
 
@@ -112,3 +112,4 @@ register(
     entry_point='mini_behavior.envs:MultiToyEnv',
     kwargs={'mode': 'cartesian'}
 )
+'''
