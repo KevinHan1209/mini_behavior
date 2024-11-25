@@ -131,36 +131,6 @@ class Close(BaseAction):
         obj.update(self.env)
 
 
-class Cook(BaseAction):
-    def __init__(self, env):
-        super(Cook, self).__init__(env)
-        self.key = 'cook'
-        self.tools = ['pan']
-        self.heat_sources = ['stove']
-
-    def can(self, obj):
-        """
-        can perform action if:
-        - obj is cookable
-        - agent is carrying a cooking tool
-        - agent is infront of a heat source
-        - the heat source is toggled on
-        """
-        if not super().can(obj):
-            return False
-
-        if find_tool(self.env, self.tools):
-            front_cell = self.env.grid.get_all_items(*self.env.agent_pos)
-            for obj2 in front_cell:
-                if obj2 is not None and obj2.type in self.heat_sources:
-                    return obj2.check_abs_state(self.env, 'toggleable')
-        return False
-
-    def do(self, obj):
-        super().do(obj)
-        obj.states['cookable'].set_value(True)
-
-
 class Drop(BaseAction):
     def __init__(self, env):
         super(Drop, self).__init__(env)
@@ -331,26 +301,6 @@ class Pickup(BaseAction):
         assert not obj.check_abs_state(self.env, 'onfloor')
 
 
-class Slice(BaseAction):
-    def __init__(self, env):
-        super(Slice, self).__init__(env)
-        self.key = 'slice'
-        self.slicers = ['carving_knife', 'knife']
-
-    def can(self, obj):
-        """
-        can perform action if:
-        - action is sliceable
-        - agent is holding a slicer
-        """
-        if not super().can(obj):
-            return False
-        return find_tool(self.env, self.slicers)
-
-    def do(self, obj):
-        super().do(obj)
-        obj.states['sliceable'].set_value()
-
 class Shake_Bang(BaseAction):
     def __init__(self, env):
         super(Shake_Bang, self).__init__(env)
@@ -360,7 +310,6 @@ class Shake_Bang(BaseAction):
         super().do(obj)
         obj.states['noise'].set_value(True)
         
-
 
 class Toggle(BaseAction):
     def __init__(self, env):

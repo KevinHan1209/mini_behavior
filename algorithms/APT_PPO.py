@@ -107,10 +107,6 @@ class APT_PPO():
                     "K parameter": self.k,
                     "Save frequency": self.save_freq})
 
-        print((self.env.observation_space.shape[1],))
-        print(self.env.single_observation_space.shape[0])
-        print(self.env.action_space[0].n)
-        print(self.env.action_space[0].n * self.num_envs)
         self.agent = Agent(self.env.action_space[0].n, self.env.single_observation_space.shape[0]).to(self.device)
         self.optimizer = optim.Adam(
             self.agent.parameters(),
@@ -146,7 +142,6 @@ class APT_PPO():
         next_obs = torch.Tensor(self.env.reset()).to(self.device)
         next_done = torch.zeros(self.num_envs).to(self.device)
         num_updates = int(self.total_timesteps // self.batch_size)
-        frames = []
 
         for update in range(1, num_updates + 1):
             print("UPDATE: " + str(update) + "/" + str(num_updates))
@@ -175,7 +170,6 @@ class APT_PPO():
                         value_ext.flatten(),
                         value_int.flatten(),
                     )
-                    #print("OBSERVATION:", len(obs[step]))
                     action, logprob, _, _, _ = self.agent.get_action_and_value(obs[step])
                 
                 actions[step] = action
@@ -365,8 +359,7 @@ class APT_PPO():
                     # Compute distance between observation i and observation j
                     distance = self.compute_distance(np.array(env_obs[i]), np.array(env_obs[j]))
                     similarity_matrix[i, j] = torch.tensor(distance, dtype=similarity_matrix.dtype, device=similarity_matrix.device)
-                    similarity_matrix[j, i] = torch.tensor(distance, dtype=similarity_matrix.dtype, device=similarity_matrix.device)
-  # Symmetric property
+                    similarity_matrix[j, i] = torch.tensor(distance, dtype=similarity_matrix.dtype, device=similarity_matrix.device) # symmetric property
             
             # Add the matrix for this environment to the list
             similarity_matrices.append(similarity_matrix)
@@ -456,9 +449,9 @@ class APT_PPO():
                 
                 # Log step metrics
                 wandb.log({
-                    "step_reward": reward,
-                    "episode": episode,
-                    "step": steps
+                    "test_step": steps,
+                    "test_action": action,
+                    "test_observation": obs,
                 })
                 
                 # Print step information
