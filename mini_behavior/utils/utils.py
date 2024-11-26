@@ -11,6 +11,7 @@ import functools
 from torch import distributions as pyd
 from torch.distributions.utils import _standard_normal
 
+
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
@@ -77,11 +78,11 @@ def dir_to_rad(dir):
     if dir == 0:
         return 0
     if dir == 1: 
-        return 270
+        return 4.5
     if dir == 2:
-        return 180
+        return 3
     if dir == 3: 
-        return 90
+        return 1.5
     
 def schedule(schdl, step):
     try:

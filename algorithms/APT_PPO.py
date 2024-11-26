@@ -142,13 +142,15 @@ class APT_PPO():
         next_obs = torch.Tensor(self.env.reset()).to(self.device)
         next_done = torch.zeros(self.num_envs).to(self.device)
         num_updates = int(self.total_timesteps // self.batch_size)
+        num_test = 0
 
         for update in range(1, num_updates + 1):
             print("UPDATE: " + str(update) + "/" + str(num_updates))
             if update % self.save_freq == 0:
                 print('Saving model...')
                 self.model_saves.append([self.agent.state_dict(), self.optimizer.state_dict()])
-                self.test_agent(save_episode=update)
+                self.test_agent(save_episode=update, num_test = num_test)
+                num_test += 1
 
                 
             # Annealing the rate if instructed to do so.
@@ -422,7 +424,7 @@ class APT_PPO():
         
         return rewards  # Shape: [num_steps, num_envs]
     
-    def test_agent(self, save_episode, num_episodes=1, max_steps_per_episode=500):
+    def test_agent(self, save_episode, num_test, num_episodes=1, max_steps_per_episode=500):
         print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
         
         test_env = gym.make(self.env_id)
@@ -449,7 +451,7 @@ class APT_PPO():
                 
                 # Log step metrics
                 wandb.log({
-                    "test_step": steps,
+                    "test_step": steps + num_test * max_steps_per_episode,
                     "test_action": action,
                     "test_observation": obs,
                 })
