@@ -473,7 +473,7 @@ class APT_PPO():
             
             # Save gif as wandb artifact
             gif_path = f"{self.save_dir}/test_replays/episode_{save_episode}.gif"
-	    os.makedirs(os.path.dirname(gif_path), exist_ok=True)  # Create the directory if it doesn't exist
+            os.makedirs(os.path.dirname(gif_path), exist_ok=True)  
             write_gif(np.array(frames), gif_path, fps=10)
             wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
         test_env.close()
