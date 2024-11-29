@@ -22,9 +22,11 @@ import gym
 class APT_PPO():
     def __init__(self,
                  env,
-                 env_id,                                                
+                 env_id,    
+                 save_dir,                                            
                  device = "cpu",
                  save_freq: int = 100,                 # number of updates per model save
+                 test_steps = 500,                     # number of steps per test episode
                  total_timesteps: int = 2000000000,    # total timesteps of the experiments
                  learning_rate: float = 1e-4,          # the learning rate of the optimizer
                  num_envs: int = 128,                  # the number of parallel game environments
@@ -45,12 +47,14 @@ class APT_PPO():
                  ext_coef: float = 2.0,                # coefficient of extrinsic reward
                  int_gamma: float = 0.99,              # intrinsic reward discount rate
                  k: int = 50,                          # number of neighbors
-                 c: float = 1                          # numerical stability constant
+                 c: float = 1,                         # numerical stability constant
                  ): 
         self.env = env
         self.env_id = env_id
+        self.save_dir = save_dir
         self.device = device
         self.save_freq = save_freq
+        self.test_steps = test_steps
         self.total_timesteps = total_timesteps
         self.learning_rate = learning_rate
         self.num_envs = num_envs
@@ -149,7 +153,7 @@ class APT_PPO():
             if update % self.save_freq == 0:
                 print('Saving model...')
                 self.model_saves.append([self.agent.state_dict(), self.optimizer.state_dict()])
-                self.test_agent(save_episode=update, num_test = num_test)
+                self.test_agent(save_episode=update, num_test = num_test, max_steps_per_episode=self.test_steps)
                 num_test += 1
 
                 
@@ -208,7 +212,6 @@ class APT_PPO():
             self.curiosity_rewards /= np.sqrt(reward_rms.var)
 
             wandb.log({
-                    "Update": update,
                     "Average Reward": mean,
                     "Standard Deviation in Reward": std,
                     "Actions": actions,
@@ -382,9 +385,6 @@ class APT_PPO():
             # map direction to radians
             d1_r, d2_r = dir_to_rad(obs1[2]), dir_to_rad(obs2[2])
             dd = abs(d1_r - d2_r)
-            print("pos distance:", dp)
-            print("dir distance:", dd)
-            print("obj distance:", hd)
             return dp + dd + hd
     
     def compute_reward(self, similarity_matrix):
@@ -451,13 +451,16 @@ class APT_PPO():
                 
                 obs, reward, done, _ = test_env.step(action.numpy()[0])
                 episode_reward += reward
+                wandb.define_metric("test_step")
+                wandb.define_metric("test_action", step_metric="test_step")
+                wandb.define_metric("test_observatoin", step_metric="test_step")
                 
                 # Log step metrics
                 wandb.log({
                     "test_action": action,
                     "test_observation": obs,
-                },
-                step = steps + num_test * max_steps_per_episode,)
+                    "test_step":  steps + num_test * max_steps_per_episode,
+                })
                 
                 # Print step information
                 print(f"Step {steps:3d} | "
@@ -468,7 +471,7 @@ class APT_PPO():
                 time.sleep(0.1)
             
             # Save gif as wandb artifact
-            gif_path = f"episode_{save_episode}.gif"
+            gif_path = f"{self.save_dir}/test_replays/episode_{save_episode}.gif"
             write_gif(np.array(frames), gif_path, fps=10)
             wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
         test_env.close()

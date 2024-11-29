@@ -14,7 +14,8 @@ DENSE_REWARD = False
 POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
 NUM_STEPS = 125
-SAVE_FREQUENCY = 100
+SAVE_FREQUENCY = 10
+TEST_STEPS = 500
 
 env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-v0"
 env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
@@ -44,15 +45,12 @@ if __name__ == "__main__":
         kwargs=env_kwargs
     )
     env = init_env(NUM_ENVS, seed = 1)
-        
+    save_dir = "models/APT_PPO_MultiToy_Run2"
     print('begin training')
     # Policy training
-    model = APT_PPO(env, env_id = env_name, num_envs=NUM_ENVS, total_timesteps = TOTAL_TIMESTEPS, num_steps=NUM_STEPS, save_freq = SAVE_FREQUENCY)
+    model = APT_PPO(env, env_id = env_name, num_envs=NUM_ENVS, total_timesteps = TOTAL_TIMESTEPS, num_steps=NUM_STEPS, save_freq = SAVE_FREQUENCY, test_steps = TEST_STEPS)
 
     model.train()
-
-    # Define the directory path
-    save_dir = "models/APT_PPO_MultiToy"
 
     # Check if the directory exists, and if not, create it
     if not os.path.exists(save_dir):
