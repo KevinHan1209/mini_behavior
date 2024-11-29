@@ -18,6 +18,7 @@ from array2gif import write_gif
 import torch.nn as nn
 import wandb
 import gym
+import os
 
 class APT_PPO():
     def __init__(self,
@@ -25,8 +26,8 @@ class APT_PPO():
                  env_id,    
                  save_dir,                                            
                  device = "cpu",
-                 save_freq: int = 100,                 # number of updates per model save
-                 test_steps = 500,                     # number of steps per test episode
+                 save_freq: int = 100,                 # number of updates per model save         
+        	 test_steps = 500,                     # number of steps per test episode
                  total_timesteps: int = 2000000000,    # total timesteps of the experiments
                  learning_rate: float = 1e-4,          # the learning rate of the optimizer
                  num_envs: int = 128,                  # the number of parallel game environments
@@ -472,6 +473,7 @@ class APT_PPO():
             
             # Save gif as wandb artifact
             gif_path = f"{self.save_dir}/test_replays/episode_{save_episode}.gif"
+	    os.makedirs(os.path.dirname(gif_path), exist_ok=True)  # Create the directory if it doesn't exist
             write_gif(np.array(frames), gif_path, fps=10)
             wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
         test_env.close()
