@@ -52,7 +52,7 @@ if __name__ == "__main__":
     model.train()
 
     # Define the directory path
-    save_dir = "models/ATP_PPO_MultiToy"
+    save_dir = "models/APT_PPO_MultiToy"
 
     # Check if the directory exists, and if not, create it
     if not os.path.exists(save_dir):

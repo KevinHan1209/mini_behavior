@@ -210,7 +210,7 @@ class APT_PPO():
             wandb.log({
                     "Update": update,
                     "Average Reward": mean,
-                    "Standard Deviation in Reweard": std,
+                    "Standard Deviation in Reward": std,
                     "Actions": actions,
                     "Observations:": obs
                 })
@@ -382,6 +382,9 @@ class APT_PPO():
             # map direction to radians
             d1_r, d2_r = dir_to_rad(obs1[2]), dir_to_rad(obs2[2])
             dd = abs(d1_r - d2_r)
+            print("pos distance:", dp)
+            print("dir distance:", dd)
+            print("obj distance:", hd)
             return dp + dd + hd
     
     def compute_reward(self, similarity_matrix):
@@ -451,10 +454,10 @@ class APT_PPO():
                 
                 # Log step metrics
                 wandb.log({
-                    "test_step": steps + num_test * max_steps_per_episode,
                     "test_action": action,
                     "test_observation": obs,
-                })
+                },
+                step = steps + num_test * max_steps_per_episode,)
                 
                 # Print step information
                 print(f"Step {steps:3d} | "
