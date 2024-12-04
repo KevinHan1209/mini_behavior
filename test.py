@@ -7,10 +7,11 @@ import time
 from array2gif import write_gif
 from env_wrapper import CustomObservationWrapper
 
-def train_agent(env_id):
+def train_agent(env_id, device):
     print("\n=== Starting Agent Training ===")
     try:
         noveld_ppo = NovelD_PPO(env_id)
+        noveld_ppo.to(device)
         noveld_ppo.train()
         print("\nSaving model to noveld_ppo_model.pth")
         noveld_ppo.save_model("noveld_ppo_model.pth")
@@ -73,7 +74,7 @@ def main():
     
     # Train model
     print("Training New Model")
-    noveld_ppo = train_agent(env_id)
+    noveld_ppo = train_agent(env_id, device)
     
     if noveld_ppo is not None:
         test_agent(env_id, noveld_ppo, device)
