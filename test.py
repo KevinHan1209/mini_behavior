@@ -10,8 +10,7 @@ from env_wrapper import CustomObservationWrapper
 def train_agent(env_id, device):
     print("\n=== Starting Agent Training ===")
     try:
-        noveld_ppo = NovelD_PPO(env_id)
-        noveld_ppo.to(device)
+        noveld_ppo = NovelD_PPO(env_id, device)
         noveld_ppo.train()
         print("\nSaving model to noveld_ppo_model.pth")
         noveld_ppo.save_model("noveld_ppo_model.pth")
@@ -20,7 +19,7 @@ def train_agent(env_id, device):
         print(f"\nError during training: {e}")
         raise
 
-def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episode=500):
+def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode=500):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     test_env = gym.make(env_id)
