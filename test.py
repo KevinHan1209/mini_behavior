@@ -1,10 +1,8 @@
 # test.py
 import gym
-import mini_behavior
 from NovelD_PPO import NovelD_PPO
 import numpy as np
 import torch
-import os
 import time
 from array2gif import write_gif
 from env_wrapper import CustomObservationWrapper
@@ -26,6 +24,8 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episod
     
     test_env = gym.make(env_id)
     test_env = CustomObservationWrapper(test_env)
+    
+    noveld_ppo.agent.network.to(device)
     
     for episode in range(num_episodes):
         print(f"\n=== Episode {episode + 1}/{num_episodes} ===")
