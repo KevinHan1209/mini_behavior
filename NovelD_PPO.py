@@ -24,7 +24,7 @@ class NovelD_PPO:
             self,
             env_id,
             device="cpu",
-            total_timesteps=10000,
+            total_timesteps=1000000,
             learning_rate=3e-4,
             num_envs=8,
             num_steps=125,
@@ -98,7 +98,7 @@ class NovelD_PPO:
         self.int_reward_scale = 1.0
 
     def train(self):
-        # Initialize wandb with more comprehensive config
+
         wandb.init(
             project="noveld-ppo-train",
             config={
@@ -130,10 +130,6 @@ class NovelD_PPO:
             list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()),
             lr=self.learning_rate, eps=1e-5
         )
-
-        # Initialize tracking variables
-        episode_rewards = []
-        episode_lengths = []
         
         next_obs = torch.FloatTensor(self.envs.reset()).to(self.device)
         obs = torch.zeros((self.num_steps, self.num_envs) + self.obs_space.shape, dtype=torch.float32).to(self.device)
@@ -150,11 +146,8 @@ class NovelD_PPO:
         next_done = torch.zeros(self.num_envs).to(self.device)
         num_updates = self.total_timesteps // self.batch_size
 
-        # Episode tracking
-        episode_info = {i: {"reward": 0.0, "length": 0} for i in range(self.num_envs)}
-
         for update in range(1, num_updates + 1):
-            # Anneal learning rate if enabled
+
             if self.anneal_lr:
                 frac = 1.0 - (update - 1.0) / num_updates
                 lrnow = frac * self.learning_rate
@@ -179,24 +172,6 @@ class NovelD_PPO:
                 rewards[step] = torch.FloatTensor(reward).to(self.device)
                 next_obs = torch.FloatTensor(next_obs).to(self.device)
                 next_done = torch.FloatTensor(done).to(self.device)
-
-                # Track episode stats
-                for i, d in enumerate(done):
-                    episode_info[i]["reward"] += reward[i]
-                    episode_info[i]["length"] += 1
-                    
-                    if d:
-                        episode_rewards.append(episode_info[i]["reward"])
-                        episode_lengths.append(episode_info[i]["length"])
-                        
-                        wandb.log({
-                            "episode_reward": episode_info[i]["reward"],
-                            "episode_length": episode_info[i]["length"],
-                            "global_step": global_step,
-                        })
-                        
-                        episode_info[i]["reward"] = 0.0
-                        episode_info[i]["length"] = 0
 
                 # Calculate novelty rewards
                 with torch.no_grad():
@@ -226,20 +201,18 @@ class NovelD_PPO:
 
             # Log training metrics
             if update % 10 == 0:
-                mean_reward = np.mean(episode_rewards[-100:]) if episode_rewards else 0
-                mean_length = np.mean(episode_lengths[-100:]) if episode_lengths else 0
                 
                 wandb.log({
                     "learning_rate": optimizer.param_groups[0]["lr"],
-                    "mean_reward": mean_reward,
-                    "mean_episode_length": mean_length,
+                    "novelty": novelty.mean().item(),
+                    "curiosity_reward": curiosity_rewards.mean().item(),
                     "global_step": global_step,
                     "updates": update
                 })
 
                 print(f"Update {update}/{num_updates}")
-                print(f"Mean Reward (100 ep): {mean_reward:.2f}")
-                print(f"Mean Length (100 ep): {mean_length:.2f}")
+                print(f"Novelty: {novelty.mean().item():.4f}")
+                print(f"Curiosity Reward: {curiosity_rewards.mean().item():.4f}")
                 print("-" * 50)
 
         wandb.finish()
@@ -347,7 +320,7 @@ class NovelD_PPO:
             return novelty.clamp(0, 10)  # Clamp values between 0 and 10
 
     def normalize_obs(self, obs):
-        # Add validation
+        # Ensure obs is a tensor
         if torch.isnan(obs).any():
             raise ValueError("NaN values detected in observations")
         
