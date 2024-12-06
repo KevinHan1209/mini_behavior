@@ -30,6 +30,7 @@ class CustomObservationWrapper(gym.ObservationWrapper):
         
         for obj_type in env.objs.values():
             for obj in obj_type:
+                obj_states += [*obj.cur_pos]
                 for state_value in obj.states:
                     if not isinstance(obj.states[state_value], RelativeObjectState):
                         state = obj.states[state_value].get_value(env)
@@ -43,6 +44,7 @@ class CustomObservationWrapper(gym.ObservationWrapper):
         obj_states = []
         for obj_type in self.env.objs.values():
             for obj in obj_type:
+                obj_states += [0,0]
                 for state_value in obj.states:
                     if not isinstance(obj.states[state_value], RelativeObjectState):
                         obj_states.append(0)
@@ -56,10 +58,12 @@ class CustomObservationWrapper(gym.ObservationWrapper):
         obj_states = []
         for obj_type in self.env.objs.values():
             for obj in obj_type:
+                obj_states += [*obj.cur_pos]
                 for state_value in obj.states:
                     if not isinstance(obj.states[state_value], RelativeObjectState):
                         state = obj.states[state_value].get_value(self.env)
                         obj_states.append(1 if state else 0)
+
 
         obs = list(self.env.agent_pos) + [self.env.agent_dir] + obj_states
         return np.array(obs, dtype=np.float32)
