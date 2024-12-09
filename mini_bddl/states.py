@@ -7,15 +7,11 @@ ALL_STATES = [
     'infovofrobot',
     'inhandofrobot',
     'inreachofrobot',
-    'insameroomasrobot',
     'inside',
     'nextto',
     'noise',
-    'onfloor',
-    'onTop',
     'open',
     'popup',
-    'under',
     # 'touching', TODO: uncomment once implemented
 ]
 
@@ -27,12 +23,8 @@ DEFAULT_STATES = [
     'infovofrobot',
     'inhandofrobot',
     'inreachofrobot',
-    'insameroomasrobot',
     'inside',
     'nextto',
-    'onfloor',
-    'onTop',
-    'under'
 ]
 
 # ATTENTION: Must change init function in BehaviorGrid class in mini_behavior/grid.py to accomodate for new sizes 
@@ -56,15 +48,11 @@ STATE_FUNC_MAPPING = {
     'infovofrobot': InFOVOfRobot,
     'inhandofrobot': InHandOfRobot,
     'inreachofrobot': InReachOfRobot,
-    'insameroomasrobot': InSameRoomAsRobot,
     'inside': Inside,
     'nextto': NextTo,
     'noise': Noise,
-    'onfloor': OnFloor,
-    'onTop': OnTop,
     'open': Opened,
     'popup': Popup,
-    'under': Under,
     'toggled': ToggledOn
     # 'touching', TODO: uncomment once implemented
 }
