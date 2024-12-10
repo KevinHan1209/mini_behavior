@@ -22,8 +22,6 @@ class MultiToyEnv(RoomGrid):
 
         self.mission = 'explore'
 
-        print("TEST ENV: ", test_env)
-
         super().__init__(mode=mode,
                          test_env = test_env,
                          num_objs=num_objs,

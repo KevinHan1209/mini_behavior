@@ -798,15 +798,26 @@ class MiniBehaviorEnv(MiniGridEnv):
 
     def get_exploration_statistics(self):
         '''
-        Returns percentage of total state space explored per object
+        Returns percentage of total state space explored per object.
+        Aggregates state-value pairs across all timesteps.
         Format: {obj.name: % of state space explored}
         '''
+        # Dictionary to store aggregated state-value pairs per object
+        aggregated_states = {}
+        
+        # Iterate through each timestep's dictionary in the exploration logger
+        for timestep_dict in self.exploration_logger:
+            for obj, states in timestep_dict.items():
+                if obj not in aggregated_states:
+                    aggregated_states[obj] = set()  # Use a set to track unique state-value pairs
+                for state, value in states.items():
+                    aggregated_states[obj].add((state, value))  # Add state-value pair to the set
+
+        # Calculate the exploration percentage per object
         percentage_explored = {}
-        for states, obj in zip(self.exploration_logger.values(), (obj for obj_type in self.objs.values() for obj in obj_type)):
-            total_states = get_total_states(obj)
-            unique_pairs = set()
-            for state, value in states.items():
-                unique_pairs.add((state, value))
+        for obj_object, (obj, unique_pairs) in zip(list(obj for obj_type in self.objs.values() for obj in obj_type), aggregated_states.items()):
+            total_states = get_total_states(obj_object)
             explored = len(unique_pairs)
-            percentage_explored[obj.name] =  "{:.2f}".format(explored * 100/ total_states)
+            percentage_explored[obj] = "{:.2f}".format((explored / total_states) * 100)
+
         return percentage_explored
