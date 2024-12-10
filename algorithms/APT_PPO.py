@@ -508,7 +508,7 @@ class APT_PPO():
         ax.legend(title='Objects', bbox_to_anchor=(1.05, 1), loc='upper left')  # Legend outside the plot
         plt.tight_layout()
         self.state_exploration_per_obj = fig
-        self.run.log(fig)
+        self.run.log({"chart": fig})
 
         ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR ALL OBJECTS ##################
         aggregated_percentages = []
@@ -528,7 +528,7 @@ class APT_PPO():
         ax2.grid(True)
         plt.tight_layout()
         self.state_exploration_all_objs = fig2
-        self.run.log(fig2)
+        self.run.log({"chart": fig2})
 
         ################## GRAPH HEAT MAP OF ACTIONS TAKEN PER TEST STAGE ##################
         unique_actions = sorted(set(action for actions in self.test_actions for action in actions))
@@ -550,4 +550,4 @@ class APT_PPO():
 
         plt.tight_layout()
         self.test_action_heat_map = fig3
-        self.run.log(fig3)
+        self.run.log({"chart": fig3})
