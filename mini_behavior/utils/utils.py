@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import functools
 from torch import distributions as pyd
 from torch.distributions.utils import _standard_normal
+from mini_behavior.states import RelativeObjectState
 
 
 class AttrDict(dict):
@@ -139,3 +140,23 @@ def recursive_getattr(obj, attr, *args):
         return getattr(obj, attr, *args)
 
     return functools.reduce(_getattr, [obj, *attr.split(".")])
+
+STATE_ENCODING = {
+    'infovofrobot': 0,
+    'inhandofrobot': 1,
+    'inreachofrobot': 2,
+    'noise': 3,
+    'open': 4,
+    'toggled': 5,
+}
+
+def get_total_states(obj):
+    '''
+    Returns total number of ability states for a given object
+    '''
+    total_states = 0
+    for state_value in obj.states:
+        if not isinstance(obj.states[state_value], RelativeObjectState):
+            total_states += 2 # True and False
+    return total_states
+            

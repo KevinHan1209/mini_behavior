@@ -7,9 +7,6 @@ class CustomObservationWrapper(gym.ObservationWrapper):
     def __init__(self, env):
         super().__init__(env)
         self.observation_space = self.get_obs_space()
-        print(f"\n=== Observation Space ===")
-        print(f"Shape: {self.observation_space.shape}")
-        print(f"Type: {self.observation_space.dtype}")
 
     def observation(self, obs):
         # Convert observations to flat vector format
@@ -63,7 +60,7 @@ class CustomObservationWrapper(gym.ObservationWrapper):
                     if not isinstance(obj.states[state_value], RelativeObjectState):
                         state = obj.states[state_value].get_value(self.env)
                         obj_states.append(1 if state else 0)
-
-
         obs = list(self.env.agent_pos) + [self.env.agent_dir] + obj_states
         return np.array(obs, dtype=np.float32)
+    
+

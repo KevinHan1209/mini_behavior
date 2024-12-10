@@ -49,11 +49,14 @@ if __name__ == "__main__":
     print('begin training')
     # Policy training
     model = APT_PPO(env, env_id = env_name, save_dir = save_dir, num_envs=NUM_ENVS, total_timesteps = TOTAL_TIMESTEPS, num_steps=NUM_STEPS, save_freq = SAVE_FREQUENCY, test_steps = TEST_STEPS)
-
+    print(f"\n=== Observation Space ===")
+    print(f"Shape: {env.observation_space.shape}")
+    print(f"Type: {env.observation_space.dtype}")
     model.train()
 
     # Check if the directory exists, and if not, create it
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-
+        
+    model.evaluate_training()
     model.save(f"{save_dir}/{env_name}", env_kwargs = env_kwargs)

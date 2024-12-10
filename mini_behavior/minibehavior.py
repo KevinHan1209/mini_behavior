@@ -9,7 +9,7 @@ from mini_bddl.actions import ACTION_FUNC_MAPPING
 from .objects import *
 from .grid import BehaviorGrid, GridDimension, is_obj
 from mini_behavior.window import Window
-from .utils.utils import AttrDict
+from .utils.utils import AttrDict, get_total_states
 from mini_behavior.states import RelativeObjectState
 from mini_behavior.actions import Pickup, Drop, Toggle, Open, Close
 
@@ -63,6 +63,7 @@ class MiniBehaviorEnv(MiniGridEnv):
 
     def __init__(
         self,
+        test_env,
         mode,
         width,
         height,
@@ -77,6 +78,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         dense_reward=False
     ):
 
+        self.test_env = test_env
         self.episode = 0
         self.teleop = False  # True only when set manually
         self.last_action = None
@@ -158,6 +160,9 @@ class MiniBehaviorEnv(MiniGridEnv):
             self.action_space = spaces.Discrete(len(self.actions))
 
         self.carrying = set()
+
+        if self.test_env:
+            self.exploration_logger = []
 
     def copy_objs(self):
         from copy import deepcopy
@@ -248,6 +253,9 @@ class MiniBehaviorEnv(MiniGridEnv):
             obs = self.gen_full_obs()
         else:
             obs = self.gen_obs()
+
+        if self.test_env:
+            self.update_exploration_metrics()
 
         return obs
 
@@ -666,8 +674,23 @@ class MiniBehaviorEnv(MiniGridEnv):
         else:
             obs = self.gen_obs()
 
+        if self.test_env:
+            self.update_exploration_metrics(obs)
+
         return obs, reward, done, {}
     
+    def update_exploration_metrics(self):
+        objs_dict = {}
+        for obj_type in self.objs.values():
+            for obj in obj_type:
+                states_dict = {}
+                for state_value in obj.states:
+                    if not isinstance(obj.states[state_value], RelativeObjectState):
+                        state = obj.states[state_value].get_value(self)
+                        states_dict[state_value] = state
+                objs_dict[obj.name] = states_dict
+        self.exploration_logger.append(objs_dict)
+
     def silence(self):
         '''
         Set all noise states to false
@@ -762,3 +785,28 @@ class MiniBehaviorEnv(MiniGridEnv):
     def switch_dim(self, dim):
         self.render_dim = dim
         self.grid.render_dim = dim
+
+    def get_total_exploration_metric(self):
+        '''
+        Returns all information about state exploration
+        Format: {obj.name: {state : value}}
+        '''
+        if self.test_env:
+            return self.exploration_logger
+        else:
+            return None
+
+    def get_exploration_statistics(self):
+        '''
+        Returns percentage of total state space explored per object
+        Format: {obj.name: % of state space explored}
+        '''
+        percentage_explored = {}
+        for states, obj in zip(self.exploration_logger.values(), (obj for obj_type in self.objs.values() for obj in obj_type)):
+            total_states = get_total_states(obj)
+            unique_pairs = set()
+            for state, value in states.items():
+                unique_pairs.add((state, value))
+            explored = len(unique_pairs)
+            percentage_explored[obj.name] =  "{:.2f}".format(explored * 100/ total_states)
+        return percentage_explored

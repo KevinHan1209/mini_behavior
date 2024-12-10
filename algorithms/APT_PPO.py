@@ -4,7 +4,6 @@ import numpy as np
 import torch 
 import torch.optim as optim
 from networks.actor import Agent
-import numpy as np
 from numpy import linalg as LA
 from mini_behavior.roomgrid import *
 from mini_behavior.utils.utils import RewardForwardFilter, RMS, dir_to_rad
@@ -19,6 +18,11 @@ import torch.nn as nn
 import wandb
 import gym
 import os
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+
+
 
 class APT_PPO():
     def __init__(self,
@@ -83,6 +87,8 @@ class APT_PPO():
         self.num_iterations = total_timesteps // self.batch_size
 
         self.rms  = RMS(self.device)
+        self.exploration_percentages = []
+        self.test_actions = []
 
     def train(self):
         print("TRAINING PARAMETERS\n---------------------------------------")
@@ -98,7 +104,7 @@ class APT_PPO():
         print("---------------------------------------")
         assert self.total_timesteps % self.batch_size == 0
 
-        wandb.init(project="APT_PPO_Training", 
+        self.run = wandb.init(project="APT_PPO_Training", 
                     config={"env_id": self.env_id, 
                      "Mode": "training",
                     "Total timesteps": self.total_timesteps,
@@ -139,7 +145,6 @@ class APT_PPO():
         ext_values = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
         int_values = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
         avg_returns = deque(maxlen=20)
-        save_gif = False
 
         # TRY NOT TO MODIFY: start the game
         global_step = 0
@@ -212,7 +217,7 @@ class APT_PPO():
             reward_rms.update_from_moments(mean, std**2, count)
             self.curiosity_rewards /= np.sqrt(reward_rms.var)
 
-            wandb.log({
+            self.run.log({
                     "Average Reward": mean,
                     "Standard Deviation in Reward": std,
                     "Actions": actions,
@@ -330,7 +335,7 @@ class APT_PPO():
         """
         Save the model parameters to the specified path.
         """
-        torch.save({ # add model saving every 100 steps or so
+        torch.save({
             'env_kwargs': env_kwargs,
             'model_saves': self.model_saves,
             'final_model_state_dict': self.agent.state_dict(),
@@ -341,7 +346,13 @@ class APT_PPO():
             'num_steps': self.num_steps,
             'curiosity_rewards': self.total_avg_curiosity_rewards,
             'actions': self.total_actions,
-            'observations': self.total_obs
+            'observations': self.total_obs,
+            'exploration_metrics': self.env.get_total_exploration_metric,
+            'exploration_percentages': self.exploration_percentages,
+            'test_actions': self.test_actions,
+            'test_action_heat_map': self.test_action_heat_map,
+            'state_exploration_graph_per_obj': self.state_exploration_per_obj,
+            'state_exploration_all_objs': self.state_exploration_all_objs
         }, path)
 
     def construct_matrix(self, observations):
@@ -430,8 +441,9 @@ class APT_PPO():
     
     def test_agent(self, save_episode, num_test, num_episodes=1, max_steps_per_episode=500):
         print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
-        
-        test_env = gym.make(self.env_id)
+
+        action_log = []
+        test_env = gym.make(self.env_id, test_env = True, room_size = self.env.get_room_size())
         test_env = CustomObservationWrapper(test_env)
         
         for episode in range(num_episodes):
@@ -452,21 +464,12 @@ class APT_PPO():
                 
                 obs, reward, done, _ = test_env.step(action.numpy()[0])
                 episode_reward += reward
-                wandb.define_metric("test_step")
-                wandb.define_metric("test_action", step_metric="test_step")
-                wandb.define_metric("test_observatoin", step_metric="test_step")
                 
-                # Log step metrics
-                wandb.log({
-                    "test_action": action,
-                    "test_observation": obs,
-                    "test_step":  steps + num_test * max_steps_per_episode,
-                })
+                action_log.append(test_env.actions(action.item()).name)
                 
                 # Print step information
                 print(f"Step {steps:3d} | "
-                    f"Action: {test_env.actions(action.item()).name:10s} | "
-                    f"Reward: {reward:6.2f} | ")
+                    f"Action: {test_env.actions(action.item()).name:10s} | ")
                 
                 steps += 1
                 time.sleep(0.1)
@@ -475,11 +478,72 @@ class APT_PPO():
             gif_path = f"{self.save_dir}/test_replays/episode_{save_episode}.gif"
             os.makedirs(os.path.dirname(gif_path), exist_ok=True)  
             write_gif(np.array(frames), gif_path, fps=10)
-            wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+            self.run.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+
+        exploration_percentages = test_env.get_exploration_statistics()
+        self.exploration_percentages.append(exploration_percentages)
+        self.test_actions.append(action_log)
         test_env.close()
 
+    def evaluate_training(self):
+        total_tests = len(self.exploration_percentages)
+        objects = list(self.exploration_percentages[0].keys())  
+        print(f"\n=== Final State Exploration Percentages ===")
+        final_test = self.exploration_percentages[total_tests - 1]
+        for obj, percentage in zip(objects, final_test.values()):
+            print(str(obj) + ": " + str(percentage) + "%% of total state")
 
+        ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR EACH OBJECT ##################
+        data = {obj: [timestep[obj] for timestep in self.exploration_percentages] for obj in objects}
+        fig, ax = plt.subplots(figsize=(14, 8))
+        for obj in objects:
+            ax.plot(range(1, total_tests + 1), data[obj], marker='o', linestyle='-', label=obj)
+        ax.set_xlabel('Test Stage')
+        ax.set_ylabel('Percentage of State Space Explored')
+        ax.set_title('State Space Exploration Over Test Stages')
+        ax.legend(title='Objects', bbox_to_anchor=(1.05, 1), loc='upper left')  # Legend outside the plot
+        plt.tight_layout()
+        self.state_exploration_per_obj = fig
+        self.run.log(fig)
 
+        ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR ALL OBJECTS ##################
+        aggregated_percentages = []
+        for timestep in self.exploration_percentages:
+            total_percentage = sum(timestep.values())  # Sum of all object percentages
+            num_objects = len(timestep)  # Total number of objects
+            avg_percentage = total_percentage / num_objects  # Average percentage explored
+            aggregated_percentages.append(avg_percentage)
+        # Plot the evolution of state space exploration
+        fig2, ax2 = plt.subplots(figsize=(10, 6))
+        ax2.plot(range(1, total_tests + 1), aggregated_percentages, marker='o', linestyle='-', color='b')
 
+        # Configure the plot
+        ax2.set_xlabel('Test Stage')
+        ax2.set_ylabel('Average Percentage of State Space Explored')
+        ax2.set_title('Evolution of State Space Exploration for All Objects')
+        ax2.grid(True)
+        plt.tight_layout()
+        self.state_exploration_all_objs = fig2
+        self.run.log(fig2)
 
-            
+        ################## GRAPH HEAT MAP OF ACTIONS TAKEN PER TEST STAGE ##################
+        unique_actions = sorted(set(action for actions in self.test_actions for action in actions))
+        data = pd.DataFrame(0, index=range(1, len(self.test_actions) + 1), columns=unique_actions)
+
+        # Populate the DataFrame with counts
+        for i, actions in enumerate(self.test_actions):
+            for action in actions:
+                data.loc[i + 1, action] += 1
+
+        # Plot the heatmap
+        fig3, ax3 = plt.subplots(figsize=(12, 8))
+        sns.heatmap(data, annot=True, cmap="Blues", fmt='d', ax=ax)
+
+        # Customize the plot
+        ax3.set_xlabel('Actions')
+        ax3.set_ylabel('Testing Stages')
+        ax3.set_title('Heatmap of Actions Taken at Each Testing Stage')
+
+        plt.tight_layout()
+        self.test_action_heat_map = fig3
+        self.run.log(fig3)

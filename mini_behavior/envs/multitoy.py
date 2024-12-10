@@ -11,6 +11,7 @@ class MultiToyEnv(RoomGrid):
 
     def __init__(
             self,
+            test_env = False,
             mode='primitive',
             room_size=16,
             num_rows=1,
@@ -22,6 +23,7 @@ class MultiToyEnv(RoomGrid):
         self.mission = 'explore'
 
         super().__init__(mode=mode,
+                         test_env = test_env,
                          num_objs=num_objs,
                          room_size=room_size,
                          num_rows=num_rows,
@@ -88,6 +90,9 @@ class MultiToyEnv(RoomGrid):
 
     def _end_conditions(self):
         return False
+    
+    def get_room_size(self):
+        return self.room_size
 
 '''
 register(

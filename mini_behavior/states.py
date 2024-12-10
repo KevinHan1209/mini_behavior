@@ -202,15 +202,6 @@ class NextTo(RelativeObjectState):
         return False
 
 
-# TODO: fix for 3D
-class OnFloor(AbsoluteObjectState):
-    def _update(self, env=None):
-        if self.obj.check_abs_state(env, 'inhandofrobot'):
-            self.value = False
-        else:
-            self.value = True
-
-
 class OnTop(RelativeObjectState):
     def __init__(self, obj, key):
         super(OnTop, self).__init__(obj, key)
