@@ -77,8 +77,9 @@ class MiniBehaviorEnv(MiniGridEnv):
         tile_size=TILE_PIXELS,
         dense_reward=False
     ):
-
         self.test_env = test_env
+        if self.test_env:
+            self.exploration_logger = []
         self.episode = 0
         self.teleop = False  # True only when set manually
         self.last_action = None
@@ -161,8 +162,7 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         self.carrying = set()
 
-        if self.test_env:
-            self.exploration_logger = []
+
 
     def copy_objs(self):
         from copy import deepcopy
@@ -675,7 +675,7 @@ class MiniBehaviorEnv(MiniGridEnv):
             obs = self.gen_obs()
 
         if self.test_env:
-            self.update_exploration_metrics(obs)
+            self.update_exploration_metrics()
 
         return obs, reward, done, {}
     

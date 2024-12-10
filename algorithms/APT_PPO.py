@@ -21,6 +21,7 @@ import os
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from mini_behavior.register import register
 
 
 
@@ -28,10 +29,12 @@ class APT_PPO():
     def __init__(self,
                  env,
                  env_id,    
-                 save_dir,                                            
+                 save_dir,
+                 test_env_kwargs = None,               # kwargs for the test environment  
+                 test_env_id = None,                   # id for the test environment                                          
                  device = "cpu",
                  save_freq: int = 100,                 # number of updates per model save         
-        	 test_steps = 500,                     # number of steps per test episode
+        	     test_steps = 500,                     # number of steps per test episode
                  total_timesteps: int = 2000000000,    # total timesteps of the experiments
                  learning_rate: float = 1e-4,          # the learning rate of the optimizer
                  num_envs: int = 128,                  # the number of parallel game environments
@@ -56,6 +59,8 @@ class APT_PPO():
                  ): 
         self.env = env
         self.env_id = env_id
+        self.test_env_kwargs = test_env_kwargs
+        self.test_env_id = test_env_id
         self.save_dir = save_dir
         self.device = device
         self.save_freq = save_freq
@@ -159,7 +164,7 @@ class APT_PPO():
             if update % self.save_freq == 0:
                 print('Saving model...')
                 self.model_saves.append([self.agent.state_dict(), self.optimizer.state_dict()])
-                self.test_agent(save_episode=update, num_test = num_test, max_steps_per_episode=self.test_steps)
+                self.test_agent(save_episode=update, max_steps_per_episode=self.test_steps)
                 num_test += 1
 
                 
@@ -439,11 +444,10 @@ class APT_PPO():
         
         return rewards  # Shape: [num_steps, num_envs]
     
-    def test_agent(self, save_episode, num_test, num_episodes=1, max_steps_per_episode=500):
+    def test_agent(self, save_episode, num_episodes=1, max_steps_per_episode=500):
         print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
-
         action_log = []
-        test_env = gym.make(self.env_id, test_env = True, room_size = self.env.get_room_size())
+        test_env = gym.make(self.test_env_id, **self.test_env_kwargs)
         test_env = CustomObservationWrapper(test_env)
         
         for episode in range(num_episodes):
