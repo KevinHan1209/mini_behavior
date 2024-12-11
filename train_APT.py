@@ -8,12 +8,12 @@ from env_wrapper import CustomObservationWrapper
 TASK = 'MultiToy'
 ROOM_SIZE = 16
 MAX_STEPS = 1000
-TOTAL_TIMESTEPS = 1e5 
+TOTAL_TIMESTEPS = 1e6
 DENSE_REWARD = False
 POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
 NUM_STEPS = 125
-SAVE_FREQUENCY = 10
+SAVE_FREQUENCY = 100
 TEST_STEPS = 500
 
 env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-v0"
