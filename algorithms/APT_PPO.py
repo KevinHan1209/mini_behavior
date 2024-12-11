@@ -543,7 +543,7 @@ class APT_PPO():
         ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR ALL OBJECTS ##################
         aggregated_percentages = []
         for timestep in self.exploration_percentages:
-            total_percentage = sum(timestep.values())  # Sum of all object percentages
+            total_percentage = sum(float(value) for value in timestep.values())  # Sum of all object percentages
             num_objects = len(timestep)  # Total number of objects
             avg_percentage = total_percentage / num_objects  # Average percentage explored
             aggregated_percentages.append(avg_percentage)
@@ -580,20 +580,23 @@ class APT_PPO():
         buffer = io.BytesIO()
         fig.savefig(buffer, format='png')
         buffer.seek(0)
-        self.run.log({"chart_1": wandb.Image(buffer, caption="State Space Exploration for Each Object")})
+        image = Image.open(buffer)
+        self.run.log({"chart_1": wandb.Image(image, caption="State Space Exploration for Each Object")})
         buffer.close()
 
         # For the second figure
         buffer2 = io.BytesIO()
         fig2.savefig(buffer2, format='png')
         buffer2.seek(0)
-        self.run.log({"chart_2": wandb.Image(buffer2, caption="Evolution of State Space Exploration for All Objects")})
+        image2 = Image.open(buffer2)
+        self.run.log({"chart_2": wandb.Image(image2, caption="Evolution of State Space Exploration for All Objects")})
         buffer2.close()
 
         # For the third figure (Heatmap)
         buffer3 = io.BytesIO()
         fig3.savefig(buffer3, format='png')
         buffer3.seek(0)
-        self.run.log({"chart_3": wandb.Image(buffer3, caption="Heatmap of Actions Taken")})
+        image3 = Image.open(buffer3)
+        self.run.log({"chart_3": wandb.Image(image3, caption="Heatmap of Actions Taken")})
         buffer3.close()
 

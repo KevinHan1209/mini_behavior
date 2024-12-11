@@ -8,7 +8,7 @@ from env_wrapper import CustomObservationWrapper
 TASK = 'MultiToy'
 ROOM_SIZE = 16
 MAX_STEPS = 1000
-TOTAL_TIMESTEPS = 1e5
+TOTAL_TIMESTEPS = 1e5 / 5
 DENSE_REWARD = False
 POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
