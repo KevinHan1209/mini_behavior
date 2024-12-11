@@ -352,7 +352,7 @@ class APT_PPO():
             'curiosity_rewards': self.total_avg_curiosity_rewards,
             'actions': self.total_actions,
             'observations': self.total_obs,
-            'exploration_metrics': self.env.get_total_exploration_metric,
+            'exploration_metrics': self.env.envs[0].get_total_exploration_metric(),
             'exploration_percentages': self.exploration_percentages,
             'test_actions': self.test_actions,
             'test_action_heat_map': self.test_action_heat_map,
@@ -533,6 +533,9 @@ class APT_PPO():
         fig, ax = plt.subplots(figsize=(14, 8))
         for obj in objects:
             ax.plot(range(1, total_tests + 1), data[obj], marker='o', linestyle='-', label=obj)
+        y_min = min(min(float(timestep[obj]) for timestep in self.exploration_percentages) for obj in objects)
+        y_max = max(max(float(timestep[obj]) for timestep in self.exploration_percentages) for obj in objects)
+        ax.set_ylim(y_min, y_max)
         ax.set_xlabel('Test Stage')
         ax.set_ylabel('Percentage of State Space Explored')
         ax.set_title('State Space Exploration Over Test Stages')
@@ -547,9 +550,11 @@ class APT_PPO():
             num_objects = len(timestep)  # Total number of objects
             avg_percentage = total_percentage / num_objects  # Average percentage explored
             aggregated_percentages.append(avg_percentage)
-        # Plot the evolution of state space exploration
         fig2, ax2 = plt.subplots(figsize=(10, 6))
         ax2.plot(range(1, total_tests + 1), aggregated_percentages, marker='o', linestyle='-', color='b')
+        y2_min = min(aggregated_percentages)
+        y2_max = max(aggregated_percentages)
+        ax2.set_ylim(y2_min, y2_max)
         ax2.set_xlabel('Test Stage')
         ax2.set_ylabel('Average Percentage of State Space Explored')
         ax2.set_title('Evolution of State Space Exploration for All Objects')

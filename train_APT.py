@@ -8,13 +8,13 @@ from env_wrapper import CustomObservationWrapper
 TASK = 'MultiToy'
 ROOM_SIZE = 16
 MAX_STEPS = 1000
-TOTAL_TIMESTEPS = 1e5 / 5
+TOTAL_TIMESTEPS = 1e5 
 DENSE_REWARD = False
 POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
 NUM_STEPS = 125
 SAVE_FREQUENCY = 10
-TEST_STEPS = 50
+TEST_STEPS = 500
 
 env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-v0"
 env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         kwargs = test_env_kwargs
     )
     env = init_env(NUM_ENVS, seed = 1)
-    save_dir = "models/APT_PPO_MultiToy_Run2"
+    save_dir = "models/APT_PPO_MultiToy_Run3"
     print('begin training')
     # Policy training
     model = APT_PPO(env, env_id = env_name, save_dir = save_dir, test_env_id=test_env_name, test_env_kwargs= test_env_kwargs, num_envs=NUM_ENVS, total_timesteps = TOTAL_TIMESTEPS, num_steps=NUM_STEPS, save_freq = SAVE_FREQUENCY, test_steps = TEST_STEPS)
