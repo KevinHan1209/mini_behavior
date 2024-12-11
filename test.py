@@ -19,7 +19,7 @@ def train_agent(env_id, device):
         print(f"\nError during training: {e}")
         raise
 
-def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episode=500):
+def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode=500):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
@@ -42,6 +42,8 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episod
         steps = 0
         novelty_values = []
         frames = []
+        activity = [0] * len(obs)
+        prev_obs = None
         
         while not done and steps < max_steps_per_episode:
             frames.append(np.moveaxis(test_env.render(), 2, 0))
@@ -51,7 +53,7 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episod
                 action, _, _, ext_value, int_value = noveld_ppo.agent.get_action_and_value(obs_tensor)
             
             obs, reward, done, _ = test_env.step(action.cpu().numpy()[0])
-            
+
             total_reward += reward
             steps += 1
             novelty = noveld_ppo.calculate_novelty(torch.FloatTensor(obs).unsqueeze(0).to(device))
@@ -60,6 +62,11 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episod
             novelty_val = novelty.item() if torch.is_tensor(novelty) else novelty
             ext_val = ext_value.item() if torch.is_tensor(ext_value) else ext_value
             int_val = int_value.item() if torch.is_tensor(int_value) else int_value
+
+            if prev_obs is not None:
+                differences = (obs[3:] != prev_obs[3:]).astype(int)
+                activity = [a + d for a, d in zip(activity, differences)]
+            prev_obs = obs
 
             # Log step metrics
             wandb.log({
@@ -90,6 +97,7 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=10, max_steps_per_episod
         write_gif(np.array(frames), gif_path, fps=1)
         print(f"\nEpisode {episode + 1} Summary")
         print(f"Average Novelty: {np.mean(novelty_values):.4f}")
+        print(f"Activity Array: {[int(a) for a in activity]}")
 
     test_env.close()
     wandb.finish()
