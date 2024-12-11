@@ -542,8 +542,6 @@ class APT_PPO():
         plt.tight_layout()
         self.state_exploration_per_obj = fig
 
-        self.run.log({"state_exploration_per_object": wandb.Image(fig)})  
-
         ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR ALL OBJECTS ##################
         aggregated_percentages = []
         for timestep in self.exploration_percentages:
@@ -560,8 +558,6 @@ class APT_PPO():
         ax2.grid(True)
         plt.tight_layout()
         self.state_exploration_all_objs = fig2
-
-        self.run.log({"state_exploration_all_objects": wandb.Image(fig2)})
 
         ################## GRAPH HEAT MAP OF ACTIONS TAKEN PER TEST STAGE ##################
         unique_actions = sorted(set(action for actions in self.test_actions for action in actions))
@@ -580,5 +576,26 @@ class APT_PPO():
         plt.tight_layout()
         self.test_action_heat_map = fig3
 
-        # Log the figure
-        self.run.log({"test_action_heatmap": wandb.Image(fig3)})
+        import io
+
+        # For the first figure
+        buffer = io.BytesIO()
+        fig.savefig(buffer, format='png')
+        buffer.seek(0)
+        self.run.log({"chart_1": wandb.Image(buffer, caption="State Space Exploration for Each Object")})
+        buffer.close()
+
+        # For the second figure
+        buffer2 = io.BytesIO()
+        fig2.savefig(buffer2, format='png')
+        buffer2.seek(0)
+        self.run.log({"chart_2": wandb.Image(buffer2, caption="Evolution of State Space Exploration for All Objects")})
+        buffer2.close()
+
+        # For the third figure (Heatmap)
+        buffer3 = io.BytesIO()
+        fig3.savefig(buffer3, format='png')
+        buffer3.seek(0)
+        self.run.log({"chart_3": wandb.Image(buffer3, caption="Heatmap of Actions Taken")})
+        buffer3.close()
+
