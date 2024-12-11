@@ -530,24 +530,55 @@ class APT_PPO():
         self.state_exploration_all_objs = fig2
         self.run.log({"chart": fig2})
 
+        ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR EACH OBJECT ##################
+        data = {obj: [timestep[obj] for timestep in self.exploration_percentages] for obj in objects}
+        fig, ax = plt.subplots(figsize=(14, 8))
+        for obj in objects:
+            ax.plot(range(1, total_tests + 1), data[obj], marker='o', linestyle='-', label=obj)
+        ax.set_xlabel('Test Stage')
+        ax.set_ylabel('Percentage of State Space Explored')
+        ax.set_title('State Space Exploration Over Test Stages')
+        ax.legend(title='Objects', bbox_to_anchor=(1.05, 1), loc='upper left')  # Legend outside the plot
+        plt.tight_layout()
+        self.state_exploration_per_obj = fig
+
+        self.run.log({"state_exploration_per_object": wandb.Image(fig)})  
+
+        ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR ALL OBJECTS ##################
+        aggregated_percentages = []
+        for timestep in self.exploration_percentages:
+            total_percentage = sum(timestep.values())  # Sum of all object percentages
+            num_objects = len(timestep)  # Total number of objects
+            avg_percentage = total_percentage / num_objects  # Average percentage explored
+            aggregated_percentages.append(avg_percentage)
+        # Plot the evolution of state space exploration
+        fig2, ax2 = plt.subplots(figsize=(10, 6))
+        ax2.plot(range(1, total_tests + 1), aggregated_percentages, marker='o', linestyle='-', color='b')
+        ax2.set_xlabel('Test Stage')
+        ax2.set_ylabel('Average Percentage of State Space Explored')
+        ax2.set_title('Evolution of State Space Exploration for All Objects')
+        ax2.grid(True)
+        plt.tight_layout()
+        self.state_exploration_all_objs = fig2
+
+        self.run.log({"state_exploration_all_objects": wandb.Image(fig2)})
+
         ################## GRAPH HEAT MAP OF ACTIONS TAKEN PER TEST STAGE ##################
         unique_actions = sorted(set(action for actions in self.test_actions for action in actions))
         data = pd.DataFrame(0, index=range(1, len(self.test_actions) + 1), columns=unique_actions)
 
-        # Populate the DataFrame with counts
         for i, actions in enumerate(self.test_actions):
             for action in actions:
                 data.loc[i + 1, action] += 1
 
         # Plot the heatmap
         fig3, ax3 = plt.subplots(figsize=(12, 8))
-        sns.heatmap(data, annot=True, cmap="Blues", fmt='d', ax=ax)
-
-        # Customize the plot
+        sns.heatmap(data, annot=True, cmap="Blues", fmt='d', ax=ax3) 
         ax3.set_xlabel('Actions')
         ax3.set_ylabel('Testing Stages')
         ax3.set_title('Heatmap of Actions Taken at Each Testing Stage')
-
         plt.tight_layout()
         self.test_action_heat_map = fig3
-        self.run.log({"chart": fig3})
+
+        # Log the figure
+        self.run.log({"test_action_heatmap": wandb.Image(fig3)})
