@@ -495,7 +495,7 @@ class APT_PPO():
         print(f"\n=== Final State Exploration Percentages ===")
         final_test = self.exploration_percentages[total_tests - 1]
         for obj, percentage in zip(objects, final_test.values()):
-            print(str(obj) + ": " + str(percentage) + "%% of total state")
+            print(str(obj) + ": " + str(percentage) + "% of total state")
 
         ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR EACH OBJECT ##################
         data = {obj: [timestep[obj] for timestep in self.exploration_percentages] for obj in objects}
@@ -508,12 +508,11 @@ class APT_PPO():
         ax.legend(title='Objects', bbox_to_anchor=(1.05, 1), loc='upper left')  # Legend outside the plot
         plt.tight_layout()
         self.state_exploration_per_obj = fig
-        self.run.log({"chart": fig})
 
         ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR ALL OBJECTS ##################
         aggregated_percentages = []
         for timestep in self.exploration_percentages:
-            total_percentage = sum(timestep.values())  # Sum of all object percentages
+            total_percentage = sum(float(value) for value in timestep.values())  # Sum of all object percentages
             num_objects = len(timestep)  # Total number of objects
             avg_percentage = total_percentage / num_objects  # Average percentage explored
             aggregated_percentages.append(avg_percentage)
@@ -528,7 +527,6 @@ class APT_PPO():
         ax2.grid(True)
         plt.tight_layout()
         self.state_exploration_all_objs = fig2
-        self.run.log({"chart": fig2})
 
         ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR EACH OBJECT ##################
         data = {obj: [timestep[obj] for timestep in self.exploration_percentages] for obj in objects}
