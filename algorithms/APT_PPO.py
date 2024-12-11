@@ -528,40 +528,6 @@ class APT_PPO():
         plt.tight_layout()
         self.state_exploration_all_objs = fig2
 
-        ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR EACH OBJECT ##################
-        data = {obj: [timestep[obj] for timestep in self.exploration_percentages] for obj in objects}
-        fig, ax = plt.subplots(figsize=(14, 8))
-        for obj in objects:
-            ax.plot(range(1, total_tests + 1), data[obj], marker='o', linestyle='-', label=obj)
-        y_min = min(min(float(timestep[obj]) for timestep in self.exploration_percentages) for obj in objects)
-        y_max = max(max(float(timestep[obj]) for timestep in self.exploration_percentages) for obj in objects)
-        ax.set_ylim(y_min, y_max)
-        ax.set_xlabel('Test Stage')
-        ax.set_ylabel('Percentage of State Space Explored')
-        ax.set_title('State Space Exploration Over Test Stages')
-        ax.legend(title='Objects', bbox_to_anchor=(1.05, 1), loc='upper left')  # Legend outside the plot
-        plt.tight_layout()
-        self.state_exploration_per_obj = fig
-
-        ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR ALL OBJECTS ##################
-        aggregated_percentages = []
-        for timestep in self.exploration_percentages:
-            total_percentage = sum(float(value) for value in timestep.values())  # Sum of all object percentages
-            num_objects = len(timestep)  # Total number of objects
-            avg_percentage = total_percentage / num_objects  # Average percentage explored
-            aggregated_percentages.append(avg_percentage)
-        fig2, ax2 = plt.subplots(figsize=(10, 6))
-        ax2.plot(range(1, total_tests + 1), aggregated_percentages, marker='o', linestyle='-', color='b')
-        y2_min = min(aggregated_percentages)
-        y2_max = max(aggregated_percentages)
-        ax2.set_ylim(y2_min, y2_max)
-        ax2.set_xlabel('Test Stage')
-        ax2.set_ylabel('Average Percentage of State Space Explored')
-        ax2.set_title('Evolution of State Space Exploration for All Objects')
-        ax2.grid(True)
-        plt.tight_layout()
-        self.state_exploration_all_objs = fig2
-
         ################## GRAPH HEAT MAP OF ACTIONS TAKEN PER TEST STAGE ##################
         unique_actions = sorted(set(action for actions in self.test_actions for action in actions))
         data = pd.DataFrame(0, index=range(1, len(self.test_actions) + 1), columns=unique_actions)
