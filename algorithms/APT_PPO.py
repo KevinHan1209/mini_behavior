@@ -199,8 +199,8 @@ class APT_PPO():
                 next_obs, next_done = torch.Tensor(next_obs).to(self.device), torch.Tensor(done).to(self.device)
 
 
-            self.total_actions.append(actions)
-            self.total_obs.append(obs)
+            self.total_actions.append(actions.clone())
+            self.total_obs.append(obs.clone())
 
             # Refactor: Construct similarity matrices for each of the parallel environments
             # obs shape: torch.Size([128, 8, 14]) or torch.Size([# of rollout steps, # of parallel envs, dim of 1 observation])
@@ -457,7 +457,6 @@ class APT_PPO():
             steps = 0
             frames = []
             episode_reward = 0
-            episode_novelty = []
             
             while not done and steps < max_steps_per_episode:
                 frames.append(np.moveaxis(test_env.render(), 2, 0))
