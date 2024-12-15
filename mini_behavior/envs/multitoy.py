@@ -6,7 +6,7 @@ from gym import spaces
 
 class MultiToyEnv(RoomGrid):
     """
-    Environment in which the agent picks up a rattle from the floor
+    Environment in which the agent explores a multitude of toys
     """
 
     def __init__(
