@@ -5,10 +5,10 @@ from algorithms.APT_PPO import APT_PPO
 from env_wrapper import CustomObservationWrapper
 
 
-TASK = 'Test'
+TASK = 'MultiToy'
 ROOM_SIZE = 8
 MAX_STEPS = 1000
-TOTAL_TIMESTEPS = 1e6 / 2
+TOTAL_TIMESTEPS = 1e6
 DENSE_REWARD = False
 POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         kwargs = test_env_kwargs
     )
     env = init_env(NUM_ENVS, seed = 1)
-    save_dir = f"models/APT_PPO_{TASK}_Run1"
+    save_dir = f"models/APT_PPO_{TASK}_Run5"
     print('begin training')
     # Policy training
     model = APT_PPO(env, env_id = env_name, save_dir = save_dir, test_env_id=test_env_name, test_env_kwargs= test_env_kwargs, num_envs=NUM_ENVS, total_timesteps = TOTAL_TIMESTEPS, num_steps=NUM_STEPS, save_freq = SAVE_FREQUENCY, test_steps = TEST_STEPS)

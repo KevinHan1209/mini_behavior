@@ -366,7 +366,7 @@ class APT_PPO():
 
         # Initialize the similarity matrix for each parallel environment
         similarity_matrices = []
-        
+
         # Loop through each environment
         for env_idx in range(num_envs):
             # Extract the observations for the current environment
@@ -383,11 +383,12 @@ class APT_PPO():
                     similarity_matrix[i, j] = torch.tensor(distance, dtype=similarity_matrix.dtype, device=similarity_matrix.device)
                     similarity_matrix[j, i] = torch.tensor(distance, dtype=similarity_matrix.dtype, device=similarity_matrix.device) # symmetric property
             
-            # Add the matrix for this environment to the list
+            # Add the similarity matrix for this environment to the list
             similarity_matrices.append(similarity_matrix)
-        
+
         # Stack all similarity matrices along a new dimension for the environments
         return torch.stack(similarity_matrices, dim=-1)  # Shape: [num_steps, num_steps, num_envs]
+
 
     def compute_distance(self, obs1, obs2):
             """
