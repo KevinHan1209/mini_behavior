@@ -94,6 +94,7 @@ class APT_PPO():
         self.rms  = RMS(self.device)
         self.exploration_percentages = []
         self.test_actions = []
+        self.objstate_pattern = self.get_object_state_pattern()
 
     def train(self):
         print("TRAINING PARAMETERS\n---------------------------------------")
@@ -193,7 +194,6 @@ class APT_PPO():
                 logprobs[step] = logprob
 
                 # TRY NOT TO MODIFY: execute the game and log data.
-                #print("ACTION:", action)
                 next_obs, reward, done, info = self.env.step(action.cpu().numpy())
                 rewards[step] = torch.tensor(reward).to(self.device).view(-1)
                 next_obs, next_done = torch.Tensor(next_obs).to(self.device), torch.Tensor(done).to(self.device)
@@ -389,21 +389,60 @@ class APT_PPO():
         # Stack all similarity matrices along a new dimension for the environments
         return torch.stack(similarity_matrices, dim=-1)  # Shape: [num_steps, num_steps, num_envs]
 
+    def get_object_state_pattern(self):
+        '''
+        Returns a list of the number of object states per object for computing distance based on object states only
+        '''
+        test_env = gym.make(self.test_env_id, **self.test_env_kwargs)
+        test_env = CustomObservationWrapper(test_env)
+        pattern = []
+        for obj_type in test_env.objs.values():
+                    for obj in obj_type:
+                        num_states = 0
+                        for state_value in obj.states:
+                            if not isinstance(obj.states[state_value], RelativeObjectState):
+                                num_states += 1
+                        pattern.append(num_states)
+        test_env.close()
+        return pattern
+                        
 
     def compute_distance(self, obs1, obs2):
             """
             Compute distance between two states in the MDP
             """
-            p1, p2 = np.array([obs1[0], obs1[1]]), np.array(obs2[0], obs2[1])
-            dp = LA.norm((p1 - p2), 1)
-            hd = 0 # hamming distance
-            for obj1, obj2 in zip(obs1[3: len(obs1)], obs2[3: len(obs2)]):
-                if obj1 != obj2:
-                    hd += 1
+            #p1, p2 = np.array([obs1[0], obs1[1]]), np.array(obs2[0], obs2[1])
+            #dp = LA.norm((p1 - p2), 1)
+            hd = 0
+
+            #### ONLY IF USING OBJECT STATES ONLY ####
+            start_idx = 3  # Initial start index for obs1 and obs2
+
+            for obj_len in self.objstate_pattern:
+                # Skip the two position elements for each object
+                state_start = start_idx + 2
+                
+                # Loop through the object state entries
+                for obj1, obj2 in zip(obs1[state_start: state_start + obj_len - 2],
+                                    obs2[state_start: state_start + obj_len - 2]):
+                    if obj1 != obj2:
+                        hd += 1
+
+                start_idx += obj_len
+            ##########################################
+
+            ###### NORMAL CALCULATION ######
+            #for obj1, obj2 in zip(obs1[3: len(obs1)], obs2[3: len(obs2)]):
+
+            #    if obj1 != obj2:
+            #        hd += 1
+            #################################
+
             # map direction to radians
-            d1_r, d2_r = dir_to_rad(obs1[2]), dir_to_rad(obs2[2])
-            dd = abs(d1_r - d2_r)
-            return dp + dd + hd
+            #d1_r, d2_r = dir_to_rad(obs1[2]), dir_to_rad(obs2[2])
+            #dd = abs(d1_r - d2_r)
+
+            return hd # Modify when changing reward calculation 
     
     def compute_reward(self, similarity_matrix):
         """
@@ -498,7 +537,7 @@ class APT_PPO():
             print(str(obj) + ": " + str(percentage) + "% of total state")
 
         ################## GRAPH EVOLUTION OF STATE SPACE EXPLORATION FOR EACH OBJECT ##################
-        data = {obj: [timestep[obj] for timestep in self.exploration_percentages] for obj in objects}
+        data = {obj: [float(timestep[obj]) for timestep in self.exploration_percentages] for obj in objects}
         fig, ax = plt.subplots(figsize=(14, 8))
         for obj in objects:
             ax.plot(range(1, total_tests + 1), data[obj], marker='o', linestyle='-', label=obj)
