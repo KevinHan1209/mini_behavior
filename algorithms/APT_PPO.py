@@ -423,12 +423,12 @@ class APT_PPO():
                 state_start = start_idx + 2
                 
                 # Loop through the object state entries
-                for obj1, obj2 in zip(obs1[state_start: state_start + obj_len - 2],
-                                    obs2[state_start: state_start + obj_len - 2]):
+                for obj1, obj2 in zip(obs1[state_start: state_start + obj_len],
+                                    obs2[state_start: state_start + obj_len]):
                     if obj1 != obj2:
                         hd += 1
 
-                start_idx += obj_len
+                start_idx += obj_len + 2
             ##########################################
 
             ###### NORMAL CALCULATION ######
