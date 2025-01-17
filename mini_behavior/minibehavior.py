@@ -789,12 +789,13 @@ class MiniBehaviorEnv(MiniGridEnv):
     def get_total_exploration_metric(self):
         '''
         Returns all information about state exploration
-        Format: {obj.name: {state : value}}
+        Format: [{obj.name: {state : value}}]
         '''
         if self.test_env:
             return self.exploration_logger
         else:
             return None
+        
 
     def get_exploration_statistics(self):
         '''
@@ -804,7 +805,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         '''
         # Dictionary to store aggregated state-value pairs per object
         aggregated_states = {}
-        
+        print(self.exploration_logger)
         # Iterate through each timestep's dictionary in the exploration logger
         for timestep_dict in self.exploration_logger:
             for obj, states in timestep_dict.items():
@@ -821,3 +822,31 @@ class MiniBehaviorEnv(MiniGridEnv):
             percentage_explored[obj] = "{:.2f}".format((explored / total_states) * 100)
 
         return percentage_explored
+    
+
+    def get_exploration_statistics2(self):
+        '''
+        Returns percentage of total state space explored per object based on CHANGES IN STATES ONLY.
+        In other words, doesn't count default states towards total state space
+        Format: {obj.name: % of state space explored}
+        '''
+        # Initialize tracking of explored states (both True and False)
+        default_states = self.exploration_logger[0]
+        visited_states = {obj: {state: set() for state in states} for obj, states in default_states.items()}
+
+        # Iterate through timesteps to track state values
+        for timestep_dict in self.exploration_logger:
+            for obj, states in timestep_dict.items():
+                for state, value in states.items():
+                    # Record the value (True or False) for this state
+                    visited_states[obj][state].add(value)
+
+        # Calculate the percentage explored per object
+        percentage_explored = {}
+        for obj, states in visited_states.items():
+            total_states = len(states)
+            explored_count = sum(1 for state, values in states.items() if len(values) == 2)  # Both True and False visited
+            percentage_explored[obj] = (explored_count / total_states) * 100
+
+        return percentage_explored
+

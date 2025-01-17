@@ -523,7 +523,7 @@ class APT_PPO():
             write_gif(np.array(frames), gif_path, fps=10)
             self.run.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
 
-        exploration_percentages = test_env.get_exploration_statistics()
+        exploration_percentages = test_env.get_exploration_statistics2()
         self.exploration_percentages.append(exploration_percentages)
         self.test_actions.append(action_log)
         test_env.close()

@@ -5,8 +5,8 @@ from algorithms.APT_PPO import APT_PPO
 from env_wrapper import CustomObservationWrapper
 
 
-TASK = 'MultiToy'
-ROOM_SIZE = 8
+TASK = 'TestEnv'
+ROOM_SIZE = 16
 MAX_STEPS = 1000
 TOTAL_TIMESTEPS = 1e6
 DENSE_REWARD = False
