@@ -832,6 +832,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         '''
         # Initialize tracking of explored states (both True and False)
         default_states = self.exploration_logger[0]
+        print(default_states)
         visited_states = {obj: {state: set() for state in states} for obj, states in default_states.items()}
 
         # Iterate through timesteps to track state values
@@ -849,4 +850,26 @@ class MiniBehaviorEnv(MiniGridEnv):
             percentage_explored[obj] = (explored_count / total_states) * 100
 
         return percentage_explored
+    
+    def get_state_exploration_counts(self):
+        '''
+        Returns a dictionary which returns the number of True/False occurrences for each state in each object
+        Format: {object: {state: {True/False: # of occurrences}}}
+        '''
+        from collections import defaultdict
+
+        # Initialize a nested dictionary to store the counts for each state per object
+        state_counts = defaultdict(lambda: defaultdict(lambda: {"True": 0, "False": 0}))
+
+        # Iterate through each timestep in the exploration logger
+        for timestep_dict in self.exploration_logger:
+            for obj_name, states in timestep_dict.items():
+                for state_name, state_value in states.items():
+                    # Increment the count based on the state value
+                    state_counts[obj_name][state_name][str(state_value)] += 1
+
+        # Convert defaultdict to a standard dictionary for better readability (optional)
+        state_counts = {obj: dict(states) for obj, states in state_counts.items()}
+
+        return state_counts
 

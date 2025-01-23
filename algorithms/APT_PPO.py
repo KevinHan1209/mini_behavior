@@ -94,6 +94,7 @@ class APT_PPO():
         self.rms  = RMS(self.device)
         self.exploration_percentages = []
         self.test_actions = []
+        self.exploration_state_occurrences = []
         self.objstate_pattern = self.get_object_state_pattern()
 
     def train(self):
@@ -352,12 +353,12 @@ class APT_PPO():
             'curiosity_rewards': self.total_avg_curiosity_rewards,
             'actions': self.total_actions,
             'observations': self.total_obs,
-            'exploration_metrics': self.env.envs[0].get_total_exploration_metric(),
             'exploration_percentages': self.exploration_percentages,
             'test_actions': self.test_actions,
             'test_action_heat_map': self.test_action_heat_map,
             'state_exploration_graph_per_obj': self.state_exploration_per_obj,
-            'state_exploration_all_objs': self.state_exploration_all_objs
+            'state_exploration_all_objs': self.state_exploration_all_objs,
+            'test_exploration_state_occurrences': self.exploration_state_occurrencesw
         }, path)
 
     def construct_matrix(self, observations):
@@ -524,6 +525,8 @@ class APT_PPO():
             self.run.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
 
         exploration_percentages = test_env.get_exploration_statistics2()
+        exploration_state_occurrences = test_env.get_state_exploration_counts()
+        self.exploration_state_occurrences.append(exploration_state_occurrences)
         self.exploration_percentages.append(exploration_percentages)
         self.test_actions.append(action_log)
         test_env.close()
