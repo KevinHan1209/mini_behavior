@@ -832,7 +832,6 @@ class MiniBehaviorEnv(MiniGridEnv):
         '''
         # Initialize tracking of explored states (both True and False)
         default_states = self.exploration_logger[0]
-        print(default_states)
         visited_states = {obj: {state: set() for state in states} for obj, states in default_states.items()}
 
         # Iterate through timesteps to track state values
