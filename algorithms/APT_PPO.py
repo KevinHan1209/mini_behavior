@@ -358,7 +358,7 @@ class APT_PPO():
             'test_action_heat_map': self.test_action_heat_map,
             'state_exploration_graph_per_obj': self.state_exploration_per_obj,
             'state_exploration_all_objs': self.state_exploration_all_objs,
-            'test_exploration_state_occurrences': self.exploration_state_occurrencesw
+            'test_exploration_state_occurrences': self.exploration_state_occurrences
         }, path)
 
     def construct_matrix(self, observations):
