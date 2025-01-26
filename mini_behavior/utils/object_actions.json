@@ -55,7 +55,8 @@
     ],
     "music_toy": [
         "pickup",
-        "drop"
+        "drop",
+        "toggle"
     ],
     "piggie_bank": [
         "toggle",
