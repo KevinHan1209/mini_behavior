@@ -593,7 +593,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 action_class(self).do(obj)
                                 self.action_done = True
                                 # Take care of noise state if action is toggle but not on a noisy object
-                                if action_name == "toggle" and obj.get_name() not in ["music_toy", "piggie_bank"]:
+                                if action_name == "toggle" and not any(substring in obj.get_name() for substring in ["music_toy", "piggie_bank"]):
                                     self.silence()
                                 break
                         if self.action_done:
