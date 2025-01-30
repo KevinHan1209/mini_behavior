@@ -5,16 +5,16 @@ from algorithms.APT_PPO import APT_PPO
 from env_wrapper import CustomObservationWrapper
 
 
-TASK = 'TestEnv'
-ROOM_SIZE = 16
+TASK = 'MultiToy'
+ROOM_SIZE = 8
 MAX_STEPS = 1000
 TOTAL_TIMESTEPS = 1e6
 DENSE_REWARD = False
 POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
 NUM_STEPS = 125
-SAVE_FREQUENCY = 100
-TEST_STEPS = 500
+SAVE_FREQUENCY = 10
+TEST_STEPS = 50
 
 env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-v0"
 env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}

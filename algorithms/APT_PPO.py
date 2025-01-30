@@ -403,7 +403,7 @@ class APT_PPO():
                         for state_value in obj.states:
                             if not isinstance(obj.states[state_value], RelativeObjectState):
                                 num_states += 1
-                        pattern.append(num_states)
+                        pattern.append(num_states - 3) # subtract three for infovofrobot, inhandofrobot, and inreachofrobot
         test_env.close()
         return pattern
                         
@@ -421,7 +421,7 @@ class APT_PPO():
 
             for obj_len in self.objstate_pattern:
                 # Skip the two position elements for each object
-                state_start = start_idx + 2
+                state_start = start_idx + 5
                 
                 # Loop through the object state entries
                 for obj1, obj2 in zip(obs1[state_start: state_start + obj_len],
@@ -429,7 +429,7 @@ class APT_PPO():
                     if obj1 != obj2:
                         hd += 1
 
-                start_idx += obj_len + 2
+                start_idx += obj_len + 5
             ##########################################
 
             ###### NORMAL CALCULATION ######
