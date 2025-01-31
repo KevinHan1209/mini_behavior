@@ -51,14 +51,16 @@ class MiniBehaviorEnv(MiniGridEnv):
         drop_1 = 13
         drop_2 = 14
     '''
-    class Actions(IntEnum):
+    class ObjectActions(IntEnum):
+        toggle = 0
+        shake_bang = 1
+        pickup_0 = 2
+        drop_0 = 3
+
+    class LocoActions(IntEnum):
         left = 0
         right = 1
         forward = 2
-        toggle = 3
-        shake_bang = 4
-        pickup_0 = 5
-        drop_0 = 6
 
 
     def __init__(
@@ -104,7 +106,8 @@ class MiniBehaviorEnv(MiniGridEnv):
         # Right now this can only be changed through the wrapper
         self.use_full_obs = False
 
-        action_list = ["left", "right", "forward"]
+        locomotion_actions = ["left", "right", "forward"]
+        manipulation_actions = []  # Actions for both arms
 
         for obj_type in num_objs.keys():
             self.objs[obj_type] = []
@@ -119,11 +122,21 @@ class MiniBehaviorEnv(MiniGridEnv):
                 self.objs[obj_type].append(obj_instance)
                 self.obj_instances[obj_name] = obj_instance
 
-            # create action space for each obj type
+            # Get manipulation actions for this object type
             applicable_actions = obj_instance.actions
             for action_name in applicable_actions:
-                action_list.append(obj_type + "/" + action_name)
+                manipulation_actions.append(obj_type + "/" + action_name)
 
+        # Store separate action lists
+        self.locomotion_actions = MiniBehaviorEnv.LocoActions
+        self.manipulation_actions = MiniBehaviorEnv.ObjectActions
+
+        # Use MultiDiscrete action space (3D)
+        self.action_space = spaces.MultiDiscrete([
+            len(manipulation_actions),  # First dimension: left arm actions
+            len(manipulation_actions),  # Second dimension: right arm actions
+            len(locomotion_actions)     # Third dimension: locomotion actions
+        ])
 
 
         super().__init__(grid_size=grid_size,
@@ -149,16 +162,6 @@ class MiniBehaviorEnv(MiniGridEnv):
         })
 
         self.mode = mode
-        assert self.mode in ["cartesian", "primitive"]
-        if self.mode == "cartesian":
-            # action list is used to access string by index
-            self.action_list = action_list
-            action_dict = {value: index for index, value in enumerate(action_list)}
-            self.actions = AttrDict(action_dict)
-            self.action_space = spaces.Discrete(len(self.actions))
-        else:
-            self.actions = MiniBehaviorEnv.Actions
-            self.action_space = spaces.Discrete(len(self.actions))
 
         self.carrying = set()
 
@@ -514,157 +517,57 @@ class MiniBehaviorEnv(MiniGridEnv):
         return True
 
     def step(self, action):
-        # keep track of last action
+        # Keep track of last action
         self.last_action = action
-
         self.step_count += 1
         self.action_done = True
+
+        # Parse action components
+        manip_action_left, manip_action_right, locomotion_action = action
 
         # Get the position and contents in front of the agent
         fwd_pos = self.front_pos
         fwd_cell = self.grid.get(*fwd_pos)
 
-        # Rotate left
-        if action == self.actions.left:
-            self.agent_dir -= 1
-            if self.agent_dir < 0:
-                self.agent_dir += 4
-
-        # Rotate right
-        elif action == self.actions.right:
-            self.agent_dir = (self.agent_dir + 1) % 4
-
-        # Move forward
-        elif action == self.actions.forward:
-            can_overlap = True
-            for dim in fwd_cell:
-                for obj in dim:
-                    if is_obj(obj) and not obj.can_overlap:
-                        can_overlap = False
-                        break
-            if can_overlap:
+        ## **Handle Locomotion Actions**
+        if locomotion_action == self.locomotion_actions.left:
+            self.agent_dir = (self.agent_dir - 1) % 4  # Rotate left
+        elif locomotion_action == self.locomotion_actions.right:
+            self.agent_dir = (self.agent_dir + 1) % 4  # Rotate right
+        elif locomotion_action == self.locomotion_actions.forward:
+            can_move = all(not is_obj(obj) or obj.can_overlap for dim in fwd_cell for obj in dim)
+            if can_move:
                 self.agent_pos = fwd_pos
             else:
-                self.action_done = False
+                self.action_done = False  # Agent is blocked
 
-        # Handle manipulation action based on action space type (mode)
-        else:
-            if self.mode == "primitive":
-                action = self.actions(action)
-                action_name = action.name
-                # Handle noise state
-                if "toggle" not in action_name or "shake/bang" not in action_name:
-                    self.silence()
-                if "pickup" in action_name or "drop" in action_name:
-                    action_dim = action_name.split('_')  # list: [action, dim]
-                    if action_name == "drop_in":
-                        action_class = ACTION_FUNC_MAPPING["drop_in"]
-                    else:
-                        action_class = ACTION_FUNC_MAPPING[action_dim[0]]
-                else:
-                    action_class = ACTION_FUNC_MAPPING[action_name]
-                self.action_done = False
+        ## **Handle Manipulation Actions for Both Arms**
+        for arm_action, arm in zip([manip_action_left, manip_action_right], ["left", "right"]):
+            if arm_action != -1:  # -1 means no action taken
+                action_name = self.action_list[arm_action]  # Convert index to action name
+                action_class = ACTION_FUNC_MAPPING.get(action_name, None)
+                if action_class:
+                    self.action_done = False
 
-                # Pickup involves certain dimension
-                if "pickup" in action_name:
-                    for obj in fwd_cell[int(action_dim[1])]:
-                        if is_obj(obj) and action_class(self).can(obj):
-                            action_class(self).do(obj)
-                            self.action_done = True
-                            break
-                # Drop act on carried object
-                elif "drop" in action_name:
-                    for obj in self.carrying:
-                        if action_class(self).can(obj):
-                            drop_dim = obj.available_dims
-                            if action_dim[1] == "in":
-                                # For drop_in, we don't care about dimension
-                                action_class(self).do(obj, np.random.choice(drop_dim))
-                                self.action_done = True
-                            elif int(action_dim[1]) in drop_dim:
-                                action_class(self).do(obj, int(action_dim[1]))
-                                self.action_done = True
-                            break
-                # Everything else act on the forward cell
-                else:
-                    for dim in fwd_cell:
-                        for obj in dim:
+                    # Determine if action involves picking up or dropping
+                    if "pickup" in action_name or "drop" in action_name:
+                        action_dim = action_name.split('_')  # [action, dimension]
+                        target_objects = fwd_cell[int(action_dim[1])] if "pickup" in action_name else self.carrying
+                        for obj in target_objects:
                             if is_obj(obj) and action_class(self).can(obj):
                                 action_class(self).do(obj)
                                 self.action_done = True
-                                # Take care of noise state if action is toggle but not on a noisy object
-                                if action_name == "toggle" and not any(substring in obj.get_name() for substring in ["music_toy", "piggie_bank"]):
-                                    self.silence()
                                 break
-                        if self.action_done:
-                            break
-            else:
-                assert self.mode == "cartesian"
-                # Cartesian teleoperation action space needs special care
-                if self.teleop:
-                    self.last_action = None
-                    if action == 'choose':
-                        choices = self.all_reachable()
-                        if not choices:
-                            print("No reachable objects")
-                        else:
-                            # get all reachable objects
-                            text = ''.join('{}) {} \n'.format(i, choices[i].name) for i in range(len(choices)))
-                            obj = input("Choose one of the following reachable objects: \n{}".format(text))
-                            obj = choices[int(obj)]
-                            assert obj is not None, "No object chosen"
-
-                            actions = []
-                            for action in MiniBehaviorEnv.Actions:
-                                action_name = action.name
-                                # process the pickup action
-                                if "pickup" in action_name:
-                                    if action_name == "pickup_0":
-                                        action_name = "pickup"
-                                    else:
-                                        continue
-                                action_class = ACTION_FUNC_MAPPING.get(action_name, None)
-                                if action_class and action_class(self).can(obj):
-                                    actions.append(action_name)
-
-                            if len(actions) == 0:
-                                print("No actions available")
-                            else:
-                                text = ''.join('{}) {} \n'.format(i, actions[i]) for i in range(len(actions)))
-
-                                action = input("Choose one of the following actions: \n{}".format(text))
-                                action = actions[int(action)]  # action name
-
-                                if action == 'drop' or action == 'drop_in':
-                                    dims = ACTION_FUNC_MAPPING[action](self).drop_dims(fwd_pos)
-                                    spots = ['bottom', 'middle', 'top']
-                                    text = ''.join(f'{dim}) {spots[dim]} \n' for dim in dims)
-                                    dim = input(f'Choose which dimension to drop the object: \n{text}')
-                                    ACTION_FUNC_MAPPING[action](self).do(obj, int(dim))
-                                else:
-                                    ACTION_FUNC_MAPPING[action](self).do(obj)  # perform action
-                                # TODO: this may not be right
-                                self.last_action = action
-
-                    # Done action (not used by default)
                     else:
-                        assert False, "unknown action {}".format(action)
-                else:
-                    obj_action = self.action_list[action].split('/')  # list: [obj, action]
-                    objs = self.objs[obj_action[0]]
-                    action_class = ACTION_FUNC_MAPPING[obj_action[1]]
-    
-                    self.action_done = False
-                    for obj in objs:
-                        if action_class(self).can(obj):
-                            # Drop to a random dimension
-                            if "drop" in obj_action[1]:
-                                drop_dim = obj.available_dims
-                                action_class(self).do(obj, np.random.choice(drop_dim))
-                            else:
-                                action_class(self).do(obj)
-                            self.action_done = True
-                            break
+                        # Generic manipulation actions
+                        for dim in fwd_cell:
+                            for obj in dim:
+                                if is_obj(obj) and action_class(self).can(obj):
+                                    action_class(self).do(obj)
+                                    self.action_done = True
+                                    break
+                            if self.action_done:
+                                break
 
         self.update_states()
         reward = self._reward()
