@@ -84,7 +84,7 @@ def train_agent(env_id, device):
         raise
 
 
-def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode=100):
+def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode=100):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
@@ -169,10 +169,9 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode
                 action_name = test_env.actions(action.item()).name
             except Exception as e:
                 action_name = str(action.item())
-            print(f"\nStep {steps}")
-            print(f"Action Taken: {action_name}")
-            print(f"Novelty Score: {novelty_val:.4f}")
-            time.sleep(0.1)
+            print(f"\nStep {steps}/{max_steps_per_episode}")
+            print(f"Action Taken: {action_name} | Reward: {reward:.2f}")
+            print(f"Novelty Score: {novelty_val:.4f} | External Value: {ext_val:.4f} | Internal Value: {int_val:.4f}")
         
         # Log episode-level metrics including the activity (cumulative flag changes).
         wandb.log({
@@ -196,13 +195,13 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode
             activity_table.add_data(idx, mapping["object_type"], mapping["object_index"], mapping["state_name"], count)
         wandb.log({f"episode_{episode + 1}_activity": activity_table})
         
-        print(f"\nEpisode {episode + 1} Summary")
-        print(f"Average Novelty: {np.mean(novelty_values):.4f}")
-        # Optionally keep the printout for debugging.
-        print("Activity per binary flag:")
+        print(f"\n=== Episode {episode + 1} Summary ===")
+        print(f"Total Reward: {total_reward:.2f} | Steps: {steps} | Mean Novelty: {np.mean(novelty_values):.4f}")
+        print("\nActivity per binary flag (changes detected):")
         for idx, count in enumerate(activity):
             mapping = flag_mapping[idx]
-            print(f"Flag {idx} ({mapping['object_type']} #{mapping['object_index']} - {mapping['state_name']}): {count}")
+            print(f"- Flag {idx} ({mapping['object_type']} #{mapping['object_index']} - {mapping['state_name']}): {count}")
+
     
     test_env.close()
     wandb.finish()

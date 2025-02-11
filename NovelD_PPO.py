@@ -24,7 +24,7 @@ class NovelD_PPO:
             self,
             env_id,
             device="cpu",
-            total_timesteps=10000,
+            total_timesteps=2000000,
             learning_rate=3e-4,
             num_envs=8,
             num_steps=125,
@@ -126,10 +126,9 @@ class NovelD_PPO:
         wandb.watch(self.rnd_model, log="all", log_freq=100)
         
         print("\n=== Training Configuration ===")
-        print(f"Total Steps: {self.total_timesteps:,}")
-        print(f"Batch Size: {self.batch_size}")
-        print(f"Learning Rate: {self.learning_rate}")
-        print(f"Device: {self.device}\n")
+        print(f"Env: {self.env_id} | Device: {self.device}")
+        print(f"Total Steps: {self.total_timesteps:,} | Batch Size: {self.batch_size} | Minibatch Size: {self.minibatch_size}")
+        print(f"Learning Rate: {self.learning_rate}\n")
         
         optimizer = optim.Adam(
             list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()),
@@ -222,12 +221,10 @@ class NovelD_PPO:
                     **opt_metrics
                 }, step=global_step)
 
-                print(f"Update {update}/{num_updates}")
-                print(f"Novelty: {novelty.mean().item():.4f}")
-                print(f"Curiosity Reward: {curiosity_rewards.mean().item():.4f}")
-                print(f"Policy Loss: {opt_metrics['pg_loss']:.4f}, Value Loss: {opt_metrics['v_loss']:.4f}")
-                print(f"Entropy: {opt_metrics['entropy']:.4f}, Total Loss: {opt_metrics['total_loss']:.4f}")
-                print(f"Avg KL: {opt_metrics['approx_kl']:.4f}, Avg ClipFrac: {opt_metrics['clipfrac']:.4f}")
+                print(f"\n[Update {update}/{num_updates}] Step: {global_step:,}")
+                print(f"Novelty: {novelty.mean().item():.4f} | Curiosity Reward: {curiosity_rewards.mean().item():.4f}")
+                print(f"Policy Loss: {opt_metrics['pg_loss']:.4f} | Value Loss: {opt_metrics['v_loss']:.4f} | Entropy: {opt_metrics['entropy']:.4f}")
+                print(f"KL: {opt_metrics['approx_kl']:.4f} | ClipFrac: {opt_metrics['clipfrac']:.4f}")
                 print("-" * 50)
 
         wandb.finish()
