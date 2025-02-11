@@ -82,7 +82,7 @@ class MultiToyEnv(RoomGrid):
     def get_room_size(self):
         return self.room_size
 
-'''
+
 register(
     id='MiniGrid-MultiToy-16x16-N2-v0',
     entry_point='mini_behavior.envs:MultiToyEnv'
@@ -105,4 +105,3 @@ register(
     entry_point='mini_behavior.envs:MultiToyEnv',
     kwargs={'mode': 'cartesian'}
 )
-'''

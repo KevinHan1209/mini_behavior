@@ -49,6 +49,7 @@ class NovelD_PPO:
             [make_env(env_id, seed, i) for i in range(num_envs)]
         )
         
+        self.env_id = env_id
         self.device = torch.device(device)
         self.total_timesteps = total_timesteps
         self.learning_rate = learning_rate
@@ -102,7 +103,7 @@ class NovelD_PPO:
         wandb.init(
             project="noveld-ppo-train",
             config={
-                "env_id": self.envs,
+                "env_id": self.env_id,
                 "total_timesteps": self.total_timesteps,
                 "learning_rate": self.learning_rate,
                 "num_envs": self.num_envs,
@@ -133,7 +134,7 @@ class NovelD_PPO:
         
         next_obs = torch.FloatTensor(self.envs.reset()).to(self.device)
         obs = torch.zeros((self.num_steps, self.num_envs) + self.obs_space.shape, dtype=torch.float32).to(self.device)
-        actions = torch.zeros((self.num_steps, self.num_envs) + self.envs.single_action_space.shape, dtype=torch.float32).to(self.device)
+        actions = torch.zeros((self.num_steps, self.num_envs), dtype=torch.long).to(self.device)
         logprobs = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         curiosity_rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
@@ -320,23 +321,16 @@ class NovelD_PPO:
             return novelty.clamp(0, 10)  # Clamp values between 0 and 10
 
     def normalize_obs(self, obs):
-        # Ensure obs is a tensor
+        original_dim = len(obs.shape)
         if torch.isnan(obs).any():
             raise ValueError("NaN values detected in observations")
-        
-        # Ensure obs is detached if it requires grad
         if obs.requires_grad:
             obs = obs.detach()
-        
-        # Handle both single and batched observations
-        if len(obs.shape) == 1:
+        if original_dim == 1:
             obs = obs.unsqueeze(0)
-        
         normalized = ((obs - torch.FloatTensor(self.obs_rms.mean).to(self.device)) / 
-                torch.sqrt(torch.FloatTensor(self.obs_rms.var).to(self.device) + 1e-8)).clip(-5, 5)
-        
-        # Return in original shape
-        return normalized.squeeze(0) if len(obs.shape) == 1 else normalized
+                    torch.sqrt(torch.FloatTensor(self.obs_rms.var).to(self.device) + 1e-8)).clip(-5, 5)
+        return normalized.squeeze(0) if original_dim == 1 else normalized
 
     def save_model(self, filename):
         model_state = {
