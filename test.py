@@ -84,7 +84,7 @@ def train_agent(env_id, device):
         raise
 
 
-def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode=500):
+def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode=100):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
@@ -98,18 +98,17 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode
     test_env = CustomObservationWrapper(test_env)
     
     # Get the underlying (unwrapped) environment for accessing object info.
-    if hasattr(test_env, 'env'):
-        env_unwrapped = test_env.env
-    else:
-        env_unwrapped = test_env
+    env_unwrapped = getattr(test_env, 'env', test_env)
 
     # Compute the total number of binary flags and generate the mapping.
     num_binary_flags = count_binary_flags(env_unwrapped)
     flag_mapping = generate_flag_mapping(env_unwrapped)
 
-    print("Flag Mapping:")
+    # Log flag mapping to wandb as a table.
+    mapping_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name"])
     for idx, mapping in enumerate(flag_mapping):
-        print(f"Flag {idx}: {mapping}")
+        mapping_table.add_data(idx, mapping["object_type"], mapping["object_index"], mapping["state_name"])
+    wandb.log({"flag_mapping": mapping_table})
 
     noveld_ppo.agent.network.to(device)
     
@@ -190,8 +189,16 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode
             write_gif(np.array(frames), gif_path, fps=1)
             wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
         
+        # Instead of printing the activity details, log them as a table in wandb.
+        activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
+        for idx, count in enumerate(activity):
+            mapping = flag_mapping[idx]
+            activity_table.add_data(idx, mapping["object_type"], mapping["object_index"], mapping["state_name"], count)
+        wandb.log({f"episode_{episode + 1}_activity": activity_table})
+        
         print(f"\nEpisode {episode + 1} Summary")
         print(f"Average Novelty: {np.mean(novelty_values):.4f}")
+        # Optionally keep the printout for debugging.
         print("Activity per binary flag:")
         for idx, count in enumerate(activity):
             mapping = flag_mapping[idx]
@@ -202,17 +209,13 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode
 
 
 def main():
-    print("Initializing Environment")
     env_id = 'MiniGrid-MultiToy-8x8-N2-v0'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
     
     # Train model.
-    print("Training Model")
     noveld_ppo = train_agent(env_id, device)
     
     # Test model.
-    print("Testing Model")
     test_agent(env_id, noveld_ppo, device)
 
 
