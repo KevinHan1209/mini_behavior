@@ -24,7 +24,7 @@ class NovelD_PPO:
             self,
             env_id,
             device="cpu",
-            total_timesteps=10000,
+            total_timesteps=2000000,
             learning_rate=3e-4,
             num_envs=8,
             num_steps=125,
@@ -92,7 +92,7 @@ class NovelD_PPO:
         if not hasattr(self.envs.single_observation_space, 'shape'):
             raise ValueError("Environment must have an observation space with a shape attribute")
         
-        # Add better reward scaling parameters
+        # Additional reward scaling parameters
         self.reward_scale = 1.0
         self.novelty_scale = 1.0
         self.ext_reward_scale = 1.0
@@ -120,12 +120,15 @@ class NovelD_PPO:
                 "device": str(self.device)
             }
         )
+
+        # Watch models for gradients and parameter histograms.
+        wandb.watch(self.agent, log="all", log_freq=100)
+        wandb.watch(self.rnd_model, log="all", log_freq=100)
         
         print("\n=== Training Configuration ===")
-        print(f"Total Steps: {self.total_timesteps:,}")
-        print(f"Batch Size: {self.batch_size}")
-        print(f"Learning Rate: {self.learning_rate}")
-        print(f"Device: {self.device}\n")
+        print(f"Env: {self.env_id} | Device: {self.device}")
+        print(f"Total Steps: {self.total_timesteps:,} | Batch Size: {self.batch_size} | Minibatch Size: {self.minibatch_size}")
+        print(f"Learning Rate: {self.learning_rate}\n")
         
         optimizer = optim.Adam(
             list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()),
@@ -154,13 +157,12 @@ class NovelD_PPO:
                 lrnow = frac * self.learning_rate
                 optimizer.param_groups[0]["lr"] = lrnow
 
-            # Collect episode data
+            # Collect rollout data for one update
             for step in range(self.num_steps):
-                global_step += 1 * self.num_envs
+                global_step += self.num_envs
                 obs[step] = next_obs
                 dones[step] = next_done
 
-                # Get action and value
                 with torch.no_grad():
                     action, logprob, _, value_ext, value_int = self.agent.get_action_and_value(obs[step])
                 actions[step] = action
@@ -168,18 +170,16 @@ class NovelD_PPO:
                 ext_values[step] = value_ext.flatten()
                 int_values[step] = value_int.flatten()
 
-                # Execute action
                 next_obs, reward, done, info = self.envs.step(action.cpu().numpy())
                 rewards[step] = torch.FloatTensor(reward).to(self.device)
                 next_obs = torch.FloatTensor(next_obs).to(self.device)
                 next_done = torch.FloatTensor(done).to(self.device)
 
-                # Calculate novelty rewards
                 with torch.no_grad():
                     novelty = self.calculate_novelty(next_obs)
                     curiosity_rewards[step] = self.normalize_rewards(novelty)
 
-            # Perform PPO update
+            # Compute advantages for extrinsic and intrinsic rewards.
             with torch.no_grad():
                 next_value_ext, next_value_int = self.agent.get_value(next_obs)
                 ext_advantages, int_advantages = self.compute_advantages(
@@ -187,7 +187,7 @@ class NovelD_PPO:
                     ext_values, int_values, dones, next_done
                 )
 
-            # Flatten the batch
+            # Flatten the rollout data.
             b_obs = obs.reshape((-1,) + (self.obs_dim,))
             b_logprobs = logprobs.reshape(-1)
             b_actions = actions.reshape(-1)
@@ -195,36 +195,45 @@ class NovelD_PPO:
             b_int_advantages = int_advantages.reshape(-1)
             b_ext_returns = (b_ext_advantages + ext_values.reshape(-1))
             b_int_returns = (b_int_advantages + int_values.reshape(-1))
+            # Combine advantages using the intrinsic coefficient.
             b_advantages = b_int_advantages * self.int_coef
 
-            # Optimize policy and value networks
-            self.optimize(b_obs, b_logprobs, b_actions, b_advantages, b_ext_returns, b_int_returns, optimizer, global_step)
+            # (Optional) Log the histogram of actions taken in this batch.
+            wandb.log({
+                "action_distribution": wandb.Histogram(b_actions.cpu().numpy())
+            }, step=global_step)
 
-            # Log training metrics
+            # Optimize policy and value networks while collecting metrics.
+            opt_metrics = self.optimize(
+                b_obs, b_logprobs, b_actions, b_advantages,
+                b_ext_returns, b_int_returns, optimizer, global_step
+            )
+
+            # Log update-level training metrics.
             if update % 10 == 0:
-                
                 wandb.log({
                     "learning_rate": optimizer.param_groups[0]["lr"],
                     "novelty": novelty.mean().item(),
                     "curiosity_reward": curiosity_rewards.mean().item(),
+                    "extrinsic_reward": rewards.mean().item(),
                     "global_step": global_step,
-                    "updates": update
-                })
+                    "updates": update,
+                    **opt_metrics
+                }, step=global_step)
 
-                print(f"Update {update}/{num_updates}")
-                print(f"Novelty: {novelty.mean().item():.4f}")
-                print(f"Curiosity Reward: {curiosity_rewards.mean().item():.4f}")
+                print(f"\n[Update {update}/{num_updates}] Step: {global_step:,}")
+                print(f"Novelty: {novelty.mean().item():.4f} | Curiosity Reward: {curiosity_rewards.mean().item():.4f}")
+                print(f"Policy Loss: {opt_metrics['pg_loss']:.4f} | Value Loss: {opt_metrics['v_loss']:.4f} | Entropy: {opt_metrics['entropy']:.4f}")
+                print(f"KL: {opt_metrics['approx_kl']:.4f} | ClipFrac: {opt_metrics['clipfrac']:.4f}")
                 print("-" * 50)
 
         wandb.finish()
         self.envs.close()
 
     def compute_advantages(self, next_value_ext, next_value_int, rewards, curiosity_rewards, ext_values, int_values, dones, next_done):
-        # Ensure all inputs are properly shaped
         next_value_ext = next_value_ext.flatten()
         next_value_int = next_value_int.flatten()
         
-        # Calculate GAE advantages for both extrinsic and intrinsic rewards
         ext_advantages = torch.zeros_like(rewards, device=self.device)
         int_advantages = torch.zeros_like(curiosity_rewards, device=self.device)
         ext_lastgaelam = torch.zeros(self.num_envs, device=self.device)
@@ -242,23 +251,28 @@ class NovelD_PPO:
                 ext_nextvalues = ext_values[t + 1]
                 int_nextvalues = int_values[t + 1]
 
-            # Calculate deltas
             ext_delta = (rewards[t] * self.ext_reward_scale) + \
                         self.gamma * ext_nextvalues * ext_nextnonterminal - ext_values[t]
             int_delta = (curiosity_rewards[t] * self.int_reward_scale) + \
                         self.int_gamma * int_nextvalues * int_nextnonterminal - int_values[t]
 
-            # Update advantages
             ext_advantages[t] = ext_lastgaelam = ext_delta + self.gamma * self.gae_lambda * ext_nextnonterminal * ext_lastgaelam
             int_advantages[t] = int_lastgaelam = int_delta + self.int_gamma * self.gae_lambda * int_nextnonterminal * int_lastgaelam
 
         return ext_advantages, int_advantages
 
     def optimize(self, b_obs, b_logprobs, b_actions, b_advantages, b_ext_returns, b_int_returns, optimizer, global_step):
-        # Optimize policy and value networks
+        # Normalize observations for the RND loss.
         rnd_next_obs = self.normalize_obs(b_obs)
-
-        clipfracs = []
+        metrics = {
+            "pg_loss": [],
+            "v_loss": [],
+            "entropy": [],
+            "rnd_forward_loss": [],
+            "total_loss": [],
+            "approx_kl": [],
+            "clipfrac": []
+        }
 
         for epoch in range(self.update_epochs):
             inds = np.arange(self.batch_size)
@@ -267,38 +281,43 @@ class NovelD_PPO:
                 end = start + self.minibatch_size
                 mb_inds = inds[start:end]
 
-                # RND Loss
+                # RND loss.
                 predict_next_state_feature, target_next_state_feature = self.rnd_model(rnd_next_obs[mb_inds])
                 forward_loss = F.mse_loss(predict_next_state_feature, target_next_state_feature.detach(), reduction="none").mean(-1)
                 mask = (torch.rand(len(forward_loss), device=self.device) < self.update_proportion).float()
                 forward_loss = (forward_loss * mask).sum() / torch.max(mask.sum(), torch.tensor([1], device=self.device, dtype=torch.float32))
+                metrics["rnd_forward_loss"].append(forward_loss.item())
 
-                # Get new values and logprob
+                # New log probabilities, entropy and value predictions.
                 _, newlogprob, entropy, new_ext_values, new_int_values = self.agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
-
-                # Policy loss
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
                 with torch.no_grad():
                     approx_kl = ((ratio - 1) - logratio).mean()
-                    clipfracs += [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
+                    metrics["approx_kl"].append(approx_kl.item())
+                    clip_frac = ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
+                    metrics["clipfrac"].append(clip_frac)
 
                 mb_advantages = b_advantages[mb_inds]
                 pg_loss1 = -mb_advantages * ratio
                 pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                metrics["pg_loss"].append(pg_loss.item())
 
-                # Value loss
+                # Value loss.
                 new_ext_values = new_ext_values.view(-1)
                 new_int_values = new_int_values.view(-1)
                 ext_v_loss = 0.5 * ((new_ext_values - b_ext_returns[mb_inds]) ** 2).mean()
                 int_v_loss = 0.5 * ((new_int_values - b_int_returns[mb_inds]) ** 2).mean()
                 v_loss = int_v_loss
+                metrics["v_loss"].append(v_loss.item())
 
-                # Combined loss
+                # Combined loss.
                 entropy_loss = entropy.mean()
                 loss = pg_loss - self.ent_coef * entropy_loss + v_loss * self.vf_coef + forward_loss
+                metrics["entropy"].append(entropy_loss.item())
+                metrics["total_loss"].append(loss.item())
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -310,15 +329,17 @@ class NovelD_PPO:
                     if approx_kl > self.target_kl:
                         break
 
+        # Average the collected metrics.
+        avg_metrics = {k: np.mean(v) for k, v in metrics.items()}
+        return avg_metrics
+
     def calculate_novelty(self, obs):
         with torch.no_grad():
             normalized_obs = self.normalize_obs(obs)
             target_feature = self.rnd_model.target(normalized_obs)
             predict_feature = self.rnd_model.predictor(normalized_obs)
-            
-            # Add small epsilon to prevent division by zero
             novelty = ((target_feature - predict_feature) ** 2).sum(1) / 2 + 1e-8
-            return novelty.clamp(0, 10)  # Clamp values between 0 and 10
+            return novelty.clamp(0, 10)
 
     def normalize_obs(self, obs):
         original_dim = len(obs.shape)
@@ -354,19 +375,14 @@ class NovelD_PPO:
         return reward / torch.sqrt(torch.FloatTensor([self.reward_rms.var]).to(self.device) + 1e-8)
 
     def normalize_rewards(self, rewards):
-        """Normalize rewards using running statistics with better numerical stability"""
         if torch.isnan(rewards).any():
             print("Warning: NaN rewards detected")
             rewards = torch.nan_to_num(rewards, 0.0)
-            
         rewards_np = rewards.detach().cpu().numpy()
         self.reward_rms.update(rewards_np.reshape(-1))
-        
         normalized_rewards = rewards / torch.sqrt(
             torch.FloatTensor([self.reward_rms.var]).to(self.device) + 1e-8
         )
-        
-        # Add clipping for stability
         return normalized_rewards.clamp(-10, 10)
 
 class RunningMeanStd:
@@ -379,34 +395,28 @@ class RunningMeanStd:
     def update(self, x):
         if not isinstance(x, np.ndarray):
             x = np.asarray(x)
-        
         if x.size == 0 or np.any(np.isnan(x)):
             return
-            
         batch_mean = np.mean(x, axis=0)
         batch_var = np.var(x, axis=0)
         batch_count = x.shape[0]
-        
         self.update_from_moments(batch_mean, batch_var, batch_count)
 
     def update_from_moments(self, batch_mean, batch_var, batch_count):
         delta = batch_mean - self.mean
         tot_count = self.count + batch_count
-
         new_mean = self.mean + delta * batch_count / tot_count
         m_a = self.var * self.count
         m_b = batch_var * batch_count
         M2 = m_a + m_b + np.square(delta) * self.count * batch_count / tot_count
         new_var = M2 / tot_count
         new_count = tot_count
-
         self.mean = new_mean
         self.var = new_var
         self.count = new_count
 
 class Agent(nn.Module):
     """Neural network for policy and value functions"""
-    # Agent class implementing the policy and value functions
     def __init__(self, obs_dim, action_dim):
         super().__init__()
         self.network = nn.Sequential(
@@ -420,7 +430,6 @@ class Agent(nn.Module):
         self.actor = nn.Linear(448, action_dim)
         self.critic_ext = nn.Linear(448, 1)
         self.critic_int = nn.Linear(448, 1)
-        
         self.float()
 
     def get_value(self, x):
@@ -437,7 +446,6 @@ class Agent(nn.Module):
 
 class RNDModel(nn.Module):
     """Random Network Distillation model for novelty detection"""
-    # Random Network Distillation model
     def __init__(self, input_size, hidden_size=256):
         super().__init__()
         self.target = nn.Sequential(
@@ -454,7 +462,6 @@ class RNDModel(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size)
         )
-        
         self.float()
 
     def forward(self, x):
