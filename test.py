@@ -177,7 +177,7 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=2, max_steps_per_episode
         wandb.log({
             "episode_total_reward": total_reward,
             "episode_length": steps,
-            "episode_mean_novelty": np.mean(novelty_values.cpu().numpy() if hasattr(novelty_values, 'cpu') else novelty_values),
+            "episode_mean_novelty": np.mean(novelty_values),
             "activity": activity,
             "episode": episode
         })
