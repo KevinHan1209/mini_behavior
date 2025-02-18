@@ -24,7 +24,7 @@ class NovelD_PPO:
             self,
             env_id,
             device="cpu",
-            total_timesteps=20000,
+            total_timesteps=500000,
             learning_rate=3e-4,
             num_envs=8,
             num_steps=125,
@@ -198,7 +198,7 @@ class NovelD_PPO:
             # Combine advantages using the intrinsic coefficient.
             b_advantages = b_int_advantages * self.int_coef
 
-            # (Optional) Log the histogram of actions taken in this batch.
+            # Log the histogram of actions taken in this batch.
             wandb.log({
                 "action_distribution": wandb.Histogram(b_actions.cpu().numpy())
             }, step=global_step)
@@ -352,24 +352,6 @@ class NovelD_PPO:
         normalized = ((obs - torch.FloatTensor(self.obs_rms.mean).to(self.device)) / 
                     torch.sqrt(torch.FloatTensor(self.obs_rms.var).to(self.device) + 1e-8)).clip(-5, 5)
         return normalized.squeeze(0) if original_dim == 1 else normalized
-
-    def save_model(self, filename):
-        model_state = {
-                'agent': self.agent.state_dict(),
-                'rnd_model': self.rnd_model.state_dict(),
-                'obs_rms_mean': self.obs_rms.mean,
-                'obs_rms_var': self.obs_rms.var,
-                'reward_rms_mean': self.reward_rms.mean,
-                'reward_rms_var': self.reward_rms.var,
-                'hyperparameters': {
-                    'learning_rate': self.learning_rate,
-                    'gamma': self.gamma,
-                    'int_coef': self.int_coef,
-                    'ext_coef': self.ext_coef
-                }
-            }
-        torch.save(model_state, filename)
-        print(f"Model saved to {filename}")
 
     def normalize_reward(self, reward):
         return reward / torch.sqrt(torch.FloatTensor([self.reward_rms.var]).to(self.device) + 1e-8)
