@@ -7,7 +7,7 @@ import time
 import wandb
 from array2gif import write_gif
 from env_wrapper import CustomObservationWrapper
-from mini_behavior.utils.states_base import RelativeObjectState  # for type checking
+from mini_behavior.utils.states_base import RelativeObjectState
 
 
 def count_binary_flags(env):
@@ -77,14 +77,13 @@ def train_agent(env_id, device):
     try:
         noveld_ppo = NovelD_PPO(env_id, device)
         noveld_ppo.train()
-        noveld_ppo.save_model("noveld_ppo_model.pth")
         return noveld_ppo
     except Exception as e:
         print(f"\nError during training: {e}")
         raise
 
 
-def test_agent(env_id, noveld_ppo, device, num_episodes=2, max_steps_per_episode=100):
+def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode=100):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
