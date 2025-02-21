@@ -163,7 +163,7 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         self.mode = mode
 
-        self.carrying = set()
+        self.carrying = {key: set() for key in ['left', 'right']}
 
 
 
@@ -222,7 +222,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.agent_pos = (-1, -1)
         self.agent_dir = -1
 
-        self.carrying = set()
+        self.carrying = {key: set() for key in ['left', 'right']}
 
         for obj in self.obj_instances.values():
             obj.reset()
@@ -525,49 +525,105 @@ class MiniBehaviorEnv(MiniGridEnv):
         # Parse action components
         manip_action_left, manip_action_right, locomotion_action = action
 
-        # Get the position and contents in front of the agent
-        fwd_pos = self.front_pos
-        fwd_cell = self.grid.get(*fwd_pos)
+        # Get the position and contents around the agent
+        fwd_pos, right_pos, left_pos, upper_right_pos, upper_left_pos = self.front_pos, self.right_pos, self.left_pos, self.upper_right_pos, self.upper_left_pos
+        fwd_cell, right_cell, left_cell, upper_right_cell, upper_left_cell = self.grid.get(*fwd_pos), self.grid.get(*right_pos), self.grid.get(*left_pos), self.grid.get(*upper_right_pos), self.grid.get(*upper_left_pos)
+        
+        # Establish action sequence
+        left_seq = [fwd_cell, upper_left_cell, left_cell]
+        right_seq = [fwd_cell, upper_right_cell, right_cell]
 
-        ## **Handle Locomotion Actions**
-        if locomotion_action == self.locomotion_actions.left:
-            self.agent_dir = (self.agent_dir - 1) % 4  # Rotate left
-        elif locomotion_action == self.locomotion_actions.right:
-            self.agent_dir = (self.agent_dir + 1) % 4  # Rotate right
-        elif locomotion_action == self.locomotion_actions.forward:
-            can_move = all(not is_obj(obj) or obj.can_overlap for dim in fwd_cell for obj in dim)
-            if can_move:
-                self.agent_pos = fwd_pos
-            else:
-                self.action_done = False  # Agent is blocked
+        # Separate logic to check if object was dropped in front. For actions with drop and forward in the same action
+        was_dropped = False
 
         ## **Handle Manipulation Actions for Both Arms**
         for arm_action, arm in zip([manip_action_left, manip_action_right], ["left", "right"]):
+            seq = left_seq if arm == 'left' else right_seq
+            print("CURRENTLY CARRYING: ",self.carrying )
             if arm_action != -1:  # -1 means no action taken
-                action_name = self.action_list[arm_action]  # Convert index to action name
-                action_class = ACTION_FUNC_MAPPING.get(action_name, None)
-                if action_class:
-                    self.action_done = False
+                curr_action = self.manipulation_actions(arm_action)
+                action_name = curr_action.name  # Convert index to action name
+                if "toggle" not in action_name or "shake/bang" not in action_name:
+                    self.silence()
+                self.action_done = False
 
-                    # Determine if action involves picking up or dropping
-                    if "pickup" in action_name or "drop" in action_name:
-                        action_dim = action_name.split('_')  # [action, dimension]
-                        target_objects = fwd_cell[int(action_dim[1])] if "pickup" in action_name else self.carrying
-                        for obj in target_objects:
-                            if is_obj(obj) and action_class(self).can(obj):
-                                action_class(self).do(obj)
+                if "pickup" in action_name or "drop" in action_name:
+                    action_dim = action_name.split('_')  # list: [action, dim]
+                    if action_name == "drop_in":
+                        action_class = ACTION_FUNC_MAPPING["drop_in"]
+                    else:
+                        action_class = ACTION_FUNC_MAPPING[action_dim[0]]
+                else:
+                    action_class = ACTION_FUNC_MAPPING[action_name]
+                self.action_done = False
+
+                # Pickup involves certain dimension
+                if "pickup" in action_name:
+                    for cell in seq:
+                        #print("Checking Cell:", cell)
+                        for obj in cell[int(action_dim[1])]:
+                            if is_obj(obj) and action_class(self).can(obj, arm):
+                                action_class(self).do(obj, arm)
                                 self.action_done = True
                                 break
-                    else:
-                        # Generic manipulation actions
-                        for dim in fwd_cell:
-                            for obj in dim:
-                                if is_obj(obj) and action_class(self).can(obj):
-                                    action_class(self).do(obj)
+                        if self.action_done:
+                            break
+                # Drop act on carried object
+                elif "drop" in action_name:
+                    pos_seq = [fwd_pos, upper_left_pos, left_pos] if arm == 'left' else [fwd_pos, upper_right_pos, right_pos]
+                    for obj in self.carrying[arm]:
+                        for pos in pos_seq:
+                            if action_class(self).can(obj, arm, pos):
+                                drop_dim = obj.available_dims
+                                print('\nDrop Dim:', drop_dim)
+                                if action_dim[1] == "in":
+                                    # For drop_in, we don't care about dimension
+                                    action_class(self).do(obj, np.random.choice(drop_dim), arm)
                                     self.action_done = True
+                                elif int(action_dim[1]) in drop_dim:
+                                    print("\nThis is checked for pos", pos, "\n\n")
+                                    action_class(self).do(obj, int(action_dim[1]), arm, pos)
+                                    self.action_done = True
+                                    was_dropped = True
+                                    break
+                        if self.action_done:
+                            break
+                # Everything else act on the forward cell
+                else:
+                    for cell in seq:
+                        for dim in cell:
+                            for obj in dim:
+                                if is_obj(obj) and action_class(self).can(obj, arm):
+                                    action_class(self).do(obj, arm)
+                                    self.action_done = True
+                                    # Take care of noise state if action is toggle but not on a noisy object
+                                    if action_name == "toggle" and not any(substring in obj.get_name() for substring in ["music_toy", "piggie_bank"]):
+                                        self.silence()
                                     break
                             if self.action_done:
                                 break
+                        if self.action_done:
+                            self.update_states()
+                            break
+        ## **Handle Locomotion Actions**
+        if locomotion_action == self.locomotion_actions.left:
+            self.agent_dir -= 1
+            if self.agent_dir < 0:
+                self.agent_dir += 4
+        elif locomotion_action == self.locomotion_actions.right:
+            self.agent_dir = (self.agent_dir + 1) % 4  # Rotate right
+        elif locomotion_action == self.locomotion_actions.forward:
+            can_overlap = True
+            for dim in fwd_cell:
+                for obj in dim:
+                    if is_obj(obj) and not obj.can_overlap:
+                        can_overlap = False
+                        break
+            if can_overlap and not was_dropped:
+                self.agent_pos = fwd_pos
+            else:
+                self.action_done = False
+
 
         self.update_states()
         reward = self._reward()

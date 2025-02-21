@@ -18,13 +18,18 @@ class InFOVOfRobot(AbsoluteObjectState):
         return env.in_view(*self.obj.cur_pos)
 
 
-class InHandOfRobot(AbsoluteObjectState):
+class InRightHandOfRobot(AbsoluteObjectState):
     # return true if agent is carrying the object
     def get_value(self, env=None):
-        return np.all(self.obj.cur_pos == np.array([-1, -1]))
+        return not len(env.carrying['right']) == 0
+    
+class InLeftHandOfRobot(AbsoluteObjectState):
+    # return true if agent is carrying the object
+    def get_value(self, env=None):
+        return not len(env.carrying['left']) == 0
 
 
-class InReachOfRobot(AbsoluteObjectState):
+class InLeftReachOfRobot(AbsoluteObjectState):
     # return true if obj is reachable by agent
     def get_value(self, env):
         # obj not reachable if inside closed obj2
@@ -32,7 +37,7 @@ class InReachOfRobot(AbsoluteObjectState):
         if inside is not None and 'openable' in inside.states.keys() and not inside.check_abs_state(env, 'openable'):
             return False
 
-        carrying = self.obj.check_abs_state(env, 'inhandofrobot')
+        carrying = self.obj.check_abs_state(env, 'inlefthandofrobot')
 
         if self.obj.is_furniture():
             in_front = False
@@ -41,9 +46,28 @@ class InReachOfRobot(AbsoluteObjectState):
                     in_front = True
                     break
         else:
-            in_front = np.all(self.obj.cur_pos == env.front_pos)
+            in_position = any(np.all(self.obj.cur_pos == pos) for pos in [env.front_pos, env.upper_left_pos, env.left_pos])
+        return carrying or in_position
+    
+class InRightReachOfRobot(AbsoluteObjectState):
+    # return true if obj is reachable by agent
+    def get_value(self, env):
+        # obj not reachable if inside closed obj2
+        inside = self.obj.inside_of
+        if inside is not None and 'openable' in inside.states.keys() and not inside.check_abs_state(env, 'openable'):
+            return False
 
-        return carrying or in_front
+        carrying = self.obj.check_abs_state(env, 'inrighthandofrobot')
+
+        if self.obj.is_furniture():
+            in_front = False
+            for pos in self.obj.all_pos:
+                if np.all(pos == env.front_pos):
+                    in_front = True
+                    break
+        else:
+            in_position = any(np.all(self.obj.cur_pos == pos) for pos in [env.front_pos, env.upper_right_pos, env.right_pos])
+        return carrying or in_position
 
 
 class InSameRoomAsRobot(AbsoluteObjectState):

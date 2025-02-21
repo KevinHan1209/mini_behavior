@@ -19,7 +19,7 @@ class BaseAction:
         self.env = env
         self.key = None
 
-    def can(self, obj):
+    def can(self, obj, arm):
         """
         check if possible to do action
         """
@@ -29,16 +29,16 @@ class BaseAction:
             return False
 
         # check if the object is in reach of the agent
-        if not obj.check_abs_state(self.env, 'inreachofrobot'):
+        if not obj.check_abs_state(self.env, 'in' + arm + 'reachofrobot'):
             return False
 
         return True
 
-    def do(self, obj):
+    def do(self, obj, arm):
         """
         do action
         """
-        assert self.can(obj), 'Cannot perform action'
+        assert self.can(obj, arm), 'Cannot perform action'
 
 class Assemble(BaseAction):
     def __init__(self, env):
@@ -154,35 +154,34 @@ class Drop(BaseAction):
 
         return dims
 
-    def can(self, obj):
+    def can(self, obj, arm, pos):
         """
         can drop obj if:
         - agent is carrying obj
         - there is no obj in base of forward cell
         """
-        if not super().can(obj):
+        if not super().can(obj, arm):
             return False
 
-        if not obj.check_abs_state(self.env, 'inhandofrobot'):
+        if not obj.check_abs_state(self.env, 'in' + arm + 'handofrobot'):
             return False
 
-        fwd_pos = self.env.front_pos
-        dims = self.drop_dims(fwd_pos)
+        #fwd_pos = self.env.front_pos
+        dims = self.drop_dims(pos)
         obj.available_dims = dims
-
         return dims != []
 
-    def do(self, obj, dim):
-        super().do(obj)
+    def do(self, obj, dim, arm, pos):
+        assert self.can(obj, arm, pos)
 
-        self.env.carrying.discard(obj)
+        self.env.carrying[arm].discard(obj)
 
-        fwd_pos = self.env.front_pos
+        #fwd_pos = self.env.front_pos
 
         # change object properties
-        obj.cur_pos = fwd_pos
+        obj.cur_pos = pos
         # change agent / grid
-        self.env.grid.set(*fwd_pos, obj, dim)
+        self.env.grid.set(*pos, obj, dim)
 
 
 class DropIn(BaseAction):
@@ -257,24 +256,25 @@ class Pickup(BaseAction):
         super(Pickup, self).__init__(env)
         self.key = 'pickup'
 
-    def can(self, obj):
-        if not super().can(obj):
+    def can(self, obj, arm):
+        if not super().can(obj, arm):
             return False
 
         # For primitive action type, can only carry one object at a time
-        if len(self.env.carrying) != 0 and self.env.mode == "primitive":
-            assert len(self.env.carrying) == 1
+        if len(self.env.carrying[arm]) != 0 and self.env.mode == "primitive":
+            assert len(self.env.carrying[arm]) == 1
             return False
 
         # cannot pickup if carrying
-        if obj.check_abs_state(self.env, 'inhandofrobot'):
+        # ** Why not just check if object is in self.carrying[arm]? **
+        if obj.check_abs_state(self.env, 'in' + arm + 'handofrobot'):
             return False
 
         return True
 
-    def do(self, obj):
-        super().do(obj)
-        self.env.carrying.add(obj)
+    def do(self, obj, arm):
+        super().do(obj, arm)
+        self.env.carrying[arm].add(obj)
 
         objs = self.env.grid.get_all_objs(*obj.cur_pos)
         dim = objs.index(obj)
@@ -297,7 +297,7 @@ class Pickup(BaseAction):
             obj.states['inside'].set_value(furniture, False)
 
         # check dependencies
-        assert obj.check_abs_state(self.env, 'inhandofrobot')
+        assert obj.check_abs_state(self.env, 'in' + arm + 'handofrobot')
         assert not obj.check_abs_state(self.env, 'onfloor')
 
 
@@ -305,9 +305,13 @@ class Shake_Bang(BaseAction):
     def __init__(self, env):
         super(Shake_Bang, self).__init__(env)
         self.key =  'shake_bang'
+
+    def can(self, obj, arm):
+        if (not super().can(obj, arm)) or (not obj.check_abs_state(self.env, 'in' + arm + 'handofrobot')):
+            return False
         
-    def do(self, obj):
-        super().do(obj)
+    def do(self, obj, arm):
+        super().do(obj, arm)
         obj.states['noise'].set_value(True)
         
 
@@ -316,11 +320,11 @@ class Toggle(BaseAction):
         super(Toggle, self).__init__(env)
         self.key = 'toggle'
 
-    def do(self, obj):
+    def do(self, obj, arm):
         """
         toggle from on to off, or off to on
         """
-        super().do(obj)
+        super().do(obj, arm)
         cur = obj.check_abs_state(self.env, 'toggled')
         obj.states['toggled'].set_value(not cur)
         if any(substring in obj.get_name() for substring in ["music_toy", "piggie_bank"]):
