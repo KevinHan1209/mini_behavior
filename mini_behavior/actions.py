@@ -238,7 +238,7 @@ class DropIn(BaseAction):
         # drop in and update
         furniture = self.env.grid.get_furniture(*fwd_pos, dim)
         obj.states['inside'].set_value(furniture, True)
-
+        
 
 class Open(BaseAction):
     def __init__(self, env):
@@ -314,6 +314,23 @@ class Shake_Bang(BaseAction):
         super().do(obj, arm)
         obj.states['noise'].set_value(True)
         
+
+class Throw(BaseAction):
+    def __init__(self, env):
+        super(Throw, self).__init__(env)
+        self.key = 'throw'
+
+    def can(self, obj, arm, pos):
+        if not super().can(obj, arm):
+            return False
+
+        # object must be in hand to throw
+        if not obj.check_abs_state(self.env, 'in' + arm + 'handofrobot'):
+            return False
+
+        dims = self.drop_dims(pos)
+        obj.available_dims = dims
+        return dims != []
 
 class Toggle(BaseAction):
     def __init__(self, env):

@@ -127,6 +127,9 @@ def key_handler_cartesian(event):
     if event.key == 'up':
         step(env.actions.forward)
         return
+    if event.key == 'k':
+        step(env.actions.kick)
+        return
     # Spacebar
     if event.key == ' ':
         render_furniture()
@@ -192,7 +195,7 @@ def key_handler_primitive(event):
             print("Invalid object manipulation action, please try again.")
 
     elif len(action_list) == 2:
-        print("Select locomotive action (left/right/up)")
+        print("Select locomotive action (left/right/up/kick)")
         valid_action = False  # Reset flag for locomotive actions
         
         # Locomotion actions
@@ -205,9 +208,12 @@ def key_handler_primitive(event):
         elif event.key == 'up':
             action_list.append(env.locomotion_actions.forward)
             valid_action = True
+        elif event.key == 'k':
+            action_list.append(env.locomotion_actions.kick)
+            valid_action = True
 
         if not valid_action:
-            print("Invalid locomotive action, please select from left, right, or up.")
+            print("Invalid locomotive action, please select from left, right, up, or kick.")
             
     elif len(action_list) == 3:
         print("Final action: ", action_list)

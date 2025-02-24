@@ -10,7 +10,8 @@
     ],
     "beach_ball": [
         "pickup",
-        "drop"
+        "drop",
+        "kick"
     ],
     "broom": [
         "pickup",

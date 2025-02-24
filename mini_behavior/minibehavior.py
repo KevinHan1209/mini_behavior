@@ -61,6 +61,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         left = 0
         right = 1
         forward = 2
+        kick = 3
 
 
     def __init__(
@@ -77,7 +78,8 @@ class MiniBehaviorEnv(MiniGridEnv):
         agent_view_size=7,
         highlight=True,
         tile_size=TILE_PIXELS,
-        dense_reward=False
+        dense_reward=False,
+        kick_length = 1
     ):
         self.test_env = test_env
         if self.test_env:
@@ -92,6 +94,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.highlight = highlight
         self.tile_size = tile_size
         self.dense_reward = dense_reward
+        self.kick_length = kick_length
 
         # Initialize the RNG
         self.seed(seed=seed)
@@ -106,7 +109,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         # Right now this can only be changed through the wrapper
         self.use_full_obs = False
 
-        locomotion_actions = ["left", "right", "forward"]
+        locomotion_actions = ["left", "right", "forward", "kick"]
         manipulation_actions = []  # Actions for both arms
 
         for obj_type in num_objs.keys():
@@ -581,7 +584,6 @@ class MiniBehaviorEnv(MiniGridEnv):
                                     action_class(self).do(obj, np.random.choice(drop_dim), arm)
                                     self.action_done = True
                                 elif int(action_dim[1]) in drop_dim:
-                                    print("\nThis is checked for pos", pos, "\n\n")
                                     action_class(self).do(obj, int(action_dim[1]), arm, pos)
                                     self.action_done = True
                                     was_dropped = True
@@ -623,6 +625,23 @@ class MiniBehaviorEnv(MiniGridEnv):
                 self.agent_pos = fwd_pos
             else:
                 self.action_done = False
+        elif locomotion_action == self.locomotion_actions.kick:
+            dim = int(0)
+            for obj in fwd_cell[dim]:
+                if is_obj(obj) and obj.possible_action('kick'):
+                    new_pos = fwd_pos + self.dir_vec * self.kick_length
+                    print("Fwd pos:", fwd_pos)
+                    print("New pos:", new_pos)
+                    dims = self.drop_dims(new_pos)
+                    print("dims:", dims)
+                    if dims != [] and dim in dims:
+                        # modified code from pickup
+                        self.grid.remove(*obj.cur_pos, obj)
+                        self.grid.set_all_objs(*obj.cur_pos, [None, None, None])
+                        obj.update_pos(new_pos)
+                        # modified code from drop
+                        self.grid.set(*new_pos, obj, dim)
+                        break
 
 
         self.update_states()
@@ -637,6 +656,24 @@ class MiniBehaviorEnv(MiniGridEnv):
             self.update_exploration_metrics()
 
         return obs, reward, done, {}
+    
+    def drop_dims(self, pos):
+        dims = []
+
+        all_items = self.grid.get_all_items(*pos)
+        last_furniture, last_obj = 'floor', 'floor'
+        for i in range(3):
+            furniture = all_items[2*i]
+            obj = all_items[2*i + 1]
+
+            if furniture is None and obj is None:
+                if last_furniture is not None or last_obj is not None:
+                    dims.append(i)
+
+            last_furniture = furniture
+            last_obj = obj
+
+        return dims
     
     def update_exploration_metrics(self):
         objs_dict = {}
