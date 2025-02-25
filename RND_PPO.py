@@ -8,11 +8,20 @@ import gym
 import wandb
 from env_wrapper import CustomObservationWrapper
 
+#def make_env(env_id, seed, idx):
+#    def thunk():
+#        env = gym.make(env_id)
+#        env = CustomObservationWrapper(env)
+#        env.seed(seed + idx)
+#        return env
+#    return thunk
+
 def make_env(env_id, seed, idx):
     def thunk():
         env = gym.make(env_id)
         env = CustomObservationWrapper(env)
-        env.seed(seed + idx)
+        if hasattr(env, 'seed'):
+            env.seed(seed + idx)
         return env
     return thunk
 
@@ -100,7 +109,7 @@ class RND_PPO:
         #self.ext_reward_scale = 1.0
         #self.int_reward_scale = 1.0
 
-    def train(self):
+    def train(self, save_freq=None, save_path=None):
 
         wandb.init(
             project="rnd-ppo-train",
@@ -152,6 +161,8 @@ class RND_PPO:
         next_done = torch.zeros(self.num_envs).to(self.device)
         num_updates = self.total_timesteps // self.batch_size
 
+        last_save_step = 0
+
         for update in range(1, num_updates + 1):
 
             if self.anneal_lr:
@@ -172,12 +183,15 @@ class RND_PPO:
                 #ext_values[step] = value_ext.flatten()
                 values[step] = value.flatten()
 
-                next_obs, reward, done, info = self.envs.step(action.cpu().numpy())
+                action_list = action.detach().cpu().tolist()
+                next_obs, reward, done, info = self.envs.step(action_list)
 
                 with torch.no_grad():
                     next_obs_tensor = torch.FloatTensor(next_obs).to(self.device)
                     rnd_reward = self.calculate_novelty(next_obs_tensor)
-                    combined_reward = reward + self.rnd_reward_scale * rnd_reward.cpu().numpy()
+                    reward_tensor = torch.tensor(reward, device=self.device)
+                    rnd_reward_scaled = self.rnd_reward_scale * rnd_reward
+                    combined_reward = reward_tensor + rnd_reward_scaled
                     #novelty = self.calculate_novelty(next_obs)
                     #curiosity_rewards[step] = self.normalize_rewards(novelty)
 
@@ -185,12 +199,22 @@ class RND_PPO:
                 next_obs = torch.FloatTensor(next_obs).to(self.device)
                 next_done = torch.FloatTensor(done).to(self.device)
 
+            if save_freq is not None and save_path is not None and (global_step - last_save_step) >= save_freq:
+                save_file = f"{save_path}/model_step_{global_step}.pt"
+                self.save(save_file)
+                print(f"\n[Checkpoint] Model saved to {save_file} at step {global_step}")
+            
+                last_save_step = global_step
+            
+                wandb.log({"checkpoint_saved": True}, step=global_step)
+
             # Compute advantages for extrinsic and intrinsic rewards.
             with torch.no_grad():
                 next_value = self.agent.get_value(next_obs)
                 advantages = self.compute_gae(
                     next_value, rewards, dones, values, next_done
                 )
+            
 
             # Flatten the rollout data.
             b_obs = obs.reshape((-1,) + (self.obs_dim,))
@@ -237,7 +261,11 @@ class RND_PPO:
     def compute_gae(self, next_value, rewards, dones, values, next_done):
         #Generalized Advantage Estimation (GAE)
         advantages = torch.zeros_like(rewards, device=self.device)
-        lastgaelam = 0
+
+        if next_value.dim() > 1:  # If shape is [8, 1]
+            next_value = next_value.squeeze(-1)
+
+        lastgaelam = torch.zeros(self.num_envs, device=self.device)
 
         for t in reversed(range(self.num_steps)):
             if t == self.num_steps - 1:
@@ -248,7 +276,9 @@ class RND_PPO:
                 nextvalues = values[t + 1]
 
             delta = rewards[t] + self.gamma * nextvalues * nextnonterminal - values[t]
-            advantages[t] = lastgaelam = delta + self.gamma * self.gae_lambda * nextnonterminal * lastgaelam
+
+            lastgaelam = delta + self.gamma * self.gae_lambda * nextnonterminal * lastgaelam
+            advantages[t] = lastgaelam
 
         return advantages
 
@@ -300,7 +330,7 @@ class RND_PPO:
                 metrics["total_loss"].append(loss.item())
 
                 clip_fraction = ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
-                metrics["clip_fraction"].append(clip_fraction)
+                metrics["clipfrac"].append(clip_fraction)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -331,6 +361,17 @@ class RND_PPO:
         normalized = ((obs - torch.FloatTensor(self.obs_rms.mean).to(self.device)) / 
                     torch.sqrt(torch.FloatTensor(self.obs_rms.var).to(self.device) + 1e-8)).clip(-5, 5)
         return normalized.squeeze(0) if original_dim == 1 else normalized
+    
+    def save(self, path):
+        torch.save({
+            'agent': self.agent.state_dict(),
+            'rnd_model': self.rnd_model.state_dict()
+        }, path)
+
+    def load(self, path):
+        checkpoint = torch.load(path)
+        self.agent.load_state_dict(checkpoint['agent'])
+        self.rnd_model.load_state_dict(checkpoint['rnd_model'])
 
 class RunningMeanStd:
     """Tracks running mean and standard deviation of input data"""
