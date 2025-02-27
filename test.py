@@ -176,7 +176,7 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
         wandb.log({
             "episode_total_reward": total_reward,
             "episode_length": steps,
-            "episode_mean_novelty": np.mean(novelty_values),
+            # "episode_mean_novelty": np.mean(novelty_values),
             "activity": activity,
             "episode": episode
         })
@@ -195,7 +195,7 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
         wandb.log({f"episode_{episode + 1}_activity": activity_table})
         
         print(f"\n=== Episode {episode + 1} Summary ===")
-        print(f"Total Reward: {total_reward:.2f} | Steps: {steps} | Mean Novelty: {np.mean(novelty_values):.4f}")
+        print(f"Total Reward: {total_reward:.2f} | Steps: {steps}")
         print("\nActivity per binary flag (changes detected):")
         for idx, count in enumerate(activity):
             mapping = flag_mapping[idx]
