@@ -111,6 +111,13 @@ class Flipped(AbilityState):
         Done through flip action
         '''
         return self.value
+    
+class Kicked(AbilityState):
+    def __init__(self, obj, key):
+        super(Kicked, self).__init__(obj, key)
+
+    def get_value(self, env):
+        return self.value
 
 class Noise(AbilityState):
     def __init__(self, obj, key):
@@ -141,6 +148,13 @@ class Opened(AbilityState):
         Value changes only when Open action is done on obj
         """
         super(Opened, self).__init__(obj, key)
+
+    def get_value(self, env):
+        return self.value
+
+class Thrown(AbilityState):
+    def __init__(self, obj, key):
+        super(Thrown, self).__init__(obj, key)
 
     def get_value(self, env):
         return self.value

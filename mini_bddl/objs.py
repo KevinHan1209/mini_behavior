@@ -1,7 +1,7 @@
 OBJECTS = [
     # Keys from the dictionary
     "alligator_busy_box", "ball", "beach_ball", "broom", "broom_set", "bucket_toy", "cart_toy", "coin", "cube", "cube_cabinet", 
-    "farm_toy", "gear", "gear_pole", "music_toy", "piggie_bank", "rattle", "red_spiky_ball", 
+    "farm_toy", "gear", "gear_pole", "mini_broom", "music_toy", "piggie_bank", "rattle", "red_spiky_ball", 
     "ring_toy", "shape_sorter", "stroller", "tree_busy_box", "winnie", "winnie_cabinet",
 ]
 
@@ -23,17 +23,18 @@ OBJECT_TO_IDX = {
     'farm_toy': 12,
     'gear': 13,
     'gear_pole': 14,
-    'music_toy': 15,
-    'piggie_bank': 16,
-    'rattle': 17,
-    'red_spiky_ball': 18,
-    'ring_toy': 19,
-    'shape_sorter': 20,
-    'stroller': 21,
-    'tree_busy_box': 22,
-    'wall': 23,
-    "winnie": 24,
-    'winnie_cabinet': 25
+    'mini_broom': 15,
+    'music_toy': 16,
+    'piggie_bank': 17,
+    'rattle': 18,
+    'red_spiky_ball': 19,
+    'ring_toy': 20,
+    'shape_sorter': 21,
+    'stroller': 22,
+    'tree_busy_box': 23,
+    'wall': 24,
+    "winnie": 25,
+    'winnie_cabinet': 26
 }
 
 
@@ -55,6 +56,7 @@ OBJECT_TO_STR = {
     "farm_toy": "F",
     "gear": "G",
     "gear_pole": "G",
+    "mini_broom": "M",
     "music_toy": "M",
     "piggie_bank": "P",
     "rattle": "R",

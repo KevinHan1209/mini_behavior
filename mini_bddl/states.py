@@ -10,10 +10,13 @@ ALL_STATES = [
     'inleftreachofrobot',
     'inrightreachofrobot',
     'inside',
+    'kicked',
     'nextto',
     'noise',
     'open',
     'popup',
+    'thrown',
+    "toggled"
     # 'touching', TODO: uncomment once implemented
 ]
 
@@ -35,11 +38,13 @@ DEFAULT_STATES = [
 # in ABILITIES and FURNATURE_STATES
 ABILITIES = [
     #'attached',
+    'kicked',
     'noise',
     'open',
     'popup',
     #'flipped',
-    "toggled"
+    "thrown",
+    "toggled",
 ]
 
 FURNATURE_STATES = []
@@ -55,10 +60,12 @@ STATE_FUNC_MAPPING = {
     'inleftreachofrobot': InLeftReachOfRobot,
     'inrightreachofrobot': InRightReachOfRobot,
     'inside': Inside,
+    'kicked': Kicked,
     'nextto': NextTo,
     'noise': Noise,
     'open': Opened,
     'popup': Popup,
+    'thrown': Thrown,
     'toggled': ToggledOn
     # 'touching', TODO: uncomment once implemented
 }

@@ -190,6 +190,9 @@ def key_handler_primitive(event):
         elif event.key == 'i':
             action_list.append(env.manipulation_actions.drop_in)
             valid_action = True
+        elif event.key == 'p':
+            action_list.append(env.manipulation_actions.throw_0)
+            valid_action = True
         
         if not valid_action:
             print("Invalid object manipulation action, please try again.")

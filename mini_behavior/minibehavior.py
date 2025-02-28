@@ -56,6 +56,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         shake_bang = 1
         pickup_0 = 2
         drop_0 = 3
+        throw_0 = 4
 
     class LocoActions(IntEnum):
         left = 0
@@ -357,7 +358,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         if obj:
             self.put_obj(obj, *pos)
 
-        return pos
+        return np.array(pos)
 
     def place_obj(self,
                   obj,
@@ -485,7 +486,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         Put an object at a specific position in the grid
         """
         self.grid.set(i, j, obj, dim)
-        obj.init_pos = (i, j)
+        obj.init_pos = np.array((i, j))
         obj.update_pos((i, j))
 
         if obj.is_furniture():
@@ -550,7 +551,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                     self.silence()
                 self.action_done = False
 
-                if "pickup" in action_name or "drop" in action_name:
+                if "pickup" in action_name or "drop" in action_name or "throw" in action_name:
                     action_dim = action_name.split('_')  # list: [action, dim]
                     if action_name == "drop_in":
                         action_class = ACTION_FUNC_MAPPING["drop_in"]
@@ -589,6 +590,13 @@ class MiniBehaviorEnv(MiniGridEnv):
                                     was_dropped = True
                                     break
                         if self.action_done:
+                            break
+                # Throw act on carried object
+                elif "throw" in action_name:
+                    for obj in self.carrying[arm]:
+                        if action_class(self).can(obj, arm, fwd_pos):
+                            action_class(self).do(obj, int(0), arm, fwd_pos)
+                            self.action_done = True
                             break
                 # Everything else act on the forward cell
                 else:
@@ -630,17 +638,14 @@ class MiniBehaviorEnv(MiniGridEnv):
             for obj in fwd_cell[dim]:
                 if is_obj(obj) and obj.possible_action('kick'):
                     new_pos = fwd_pos + self.dir_vec * self.kick_length
-                    print("Fwd pos:", fwd_pos)
-                    print("New pos:", new_pos)
                     dims = self.drop_dims(new_pos)
-                    print("dims:", dims)
-                    if dims != [] and dim in dims:
-                        # modified code from pickup
+                    if dim in dims:
+                        # modified code from pickup and drop
                         self.grid.remove(*obj.cur_pos, obj)
                         self.grid.set_all_objs(*obj.cur_pos, [None, None, None])
                         obj.update_pos(new_pos)
-                        # modified code from drop
                         self.grid.set(*new_pos, obj, dim)
+                        obj.states['kicked'].set_value(True)
                         break
 
 

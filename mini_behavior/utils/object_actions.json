@@ -6,20 +6,24 @@
     ],
     "ball": [
         "pickup",
-        "drop"
+        "drop",
+        "throw"
     ],
     "beach_ball": [
         "pickup",
         "drop",
-        "kick"
+        "kick",
+        "throw"
     ],
     "broom": [
         "pickup",
-        "drop"
+        "drop",
+        "throw"
     ],
     "broom_set": [
         "pickup",
-        "drop"
+        "drop",
+        "throw"
     ],
     "bucket_toy": [
         "pickup",
@@ -48,11 +52,15 @@
     ],
     "gear": [
         "pickup",
-        "drop"
+        "drop",
+        "throw"
     ],
     "gear_pole": [
         "pickup",
         "drop"
+    ],
+    "mini_broom": [
+        "throw"
     ],
     "music_toy": [
         "pickup",
@@ -67,11 +75,13 @@
     "rattle": [
         "pickup",
         "drop",
-        "shake_bang"
+        "shake_bang",
+        "throw"
     ],
     "red_spiky_ball": [
         "pickup",
-        "drop"
+        "drop",
+        "throw"
     ],
     "ring_toy": [
         "pickup",
@@ -96,6 +106,11 @@
     "winnie_cabinet": [
         "pickup",
         "drop"
+    ],
+    "yellow_donut_ring": [
+        "pickup",
+        "drop",
+        "throw"
     ]
 }
 

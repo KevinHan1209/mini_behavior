@@ -319,7 +319,25 @@ class Throw(BaseAction):
     def __init__(self, env):
         super(Throw, self).__init__(env)
         self.key = 'throw'
+        
+    def drop_dims(self, pos):
+        dims = []
 
+        all_items = self.env.grid.get_all_items(*pos)
+        last_furniture, last_obj = 'floor', 'floor'
+        for i in range(3):
+            furniture = all_items[2*i]
+            obj = all_items[2*i + 1]
+
+            if furniture is None and obj is None:
+                if last_furniture is not None or last_obj is not None:
+                    dims.append(i)
+
+            last_furniture = furniture
+            last_obj = obj
+
+        return dims
+    
     def can(self, obj, arm, pos):
         if not super().can(obj, arm):
             return False
@@ -328,9 +346,23 @@ class Throw(BaseAction):
         if not obj.check_abs_state(self.env, 'in' + arm + 'handofrobot'):
             return False
 
-        dims = self.drop_dims(pos)
-        obj.available_dims = dims
-        return dims != []
+        dims1 = self.drop_dims(pos)
+        throw_pos = pos + self.env.dir_vec # check if position in front of front position is also open
+        dims2 = self.drop_dims(throw_pos)
+        return int(0) in dims1 and int(0) in dims2 # Resort to dim = 0 since dims are not really used anymore
+    
+    def do(self, obj, dim, arm, pos):
+        assert self.can(obj, arm, pos)
+
+        self.env.carrying[arm].discard(obj)
+
+        #fwd_pos = self.env.front_pos
+        throw_pos = pos + self.env.dir_vec
+        # change object properties
+        obj.cur_pos = throw_pos
+        # change agent / grid
+        self.env.grid.set(*throw_pos, obj, dim)
+        obj.states['thrown'].set_value(True)
 
 class Toggle(BaseAction):
     def __init__(self, env):

@@ -3,16 +3,17 @@
        "toggled"
     ],
     "ball": [
-        "kicked"
+        "thrown"
     ],
     "beach_ball": [
-
+        "kicked",
+        "thrown"
     ],
     "broom": [
-
+        "thrown"
     ],
     "broom_set": [
-
+        "thrown"
     ],
     "bucket_toy": [
 
@@ -34,10 +35,12 @@
         "toggled"
     ],
     "gear": [
-
+        "thrown"
     ],
     "gear_pole": [
-
+    ],
+    "mini_broom": [
+        "thrown"
     ],
     "music_toy": [
         "noise",
@@ -49,10 +52,11 @@
         "toggled"
     ],
     "rattle": [
-        "noise"
+        "noise",
+        "thrown"
     ],
     "red_spiky_ball": [
-
+        "thrown"
     ],
     "ring_toy": [
 
@@ -73,5 +77,9 @@
     "winnie_cabinet": [
         "open",
         "toggled"
+    ],
+    "yellow_donut_ring":
+    [
+        "thrown"
     ]
 }
