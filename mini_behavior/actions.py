@@ -55,7 +55,7 @@ class Assemble(BaseAction):
         if super().can(obj) and obj.states['attached'].get_value() == False:
             if obj.get_name() == "gear_toy" and find_tool(self.env, ["gear"]):
                 return True
-            if obj.get_name() == "broom_set" and find_tool(self.env, ["broom"]):
+            if obj.get_name() == "broom_set" and find_tool(self.env, ["mini_broom"]):
                 return True
         return False
 
@@ -66,7 +66,7 @@ class Assemble(BaseAction):
         if obj.get_name() == "gear_toy":
             toys = self.env.objs.get("gear", []) 
         elif obj.get_name() == "broom_set":
-            toys = self.env.objs.get("broom, []")
+            toys = self.env.objs.get("mini_broom, []")
         for toy in toys:
             if toy.check_abs_state(self.env, 'inhandofrobot'):
                 # once found, put tool "inside" of obj
@@ -189,56 +189,54 @@ class DropIn(BaseAction):
         super(DropIn, self).__init__(env)
         self.key = 'drop_in'
 
-    def drop_dims(self, pos):
-        dims = []
-
-        all_items = self.env.grid.get_all_items(*pos)
-        last_furniture, last_obj = 'floor', 'floor'
-        for i in range(3):
-            furniture = all_items[2*i]
-            obj = all_items[2*i + 1]
-
-            if obj is None and furniture is not None and furniture.can_contain and i in furniture.can_contain:
-                if 'openable' not in furniture.states or furniture.check_abs_state(self.env, 'openable'):
-                    if last_obj is not None:
-                        dims.append(i)
-
-            last_furniture = furniture
-            last_obj = obj
-        return dims
-
-    def can(self, obj):
+    def can(self, drop_obj, container_obj, arm):
         """
-        can drop obj under if:
+        can drop obj in if:
         - agent is carrying obj
-        - middle of forward cell is open
-        - obj does not contain another obj
+        - object to be dropped in is not at capacity
         """
-        if not super().can(obj):
+        if not super().can(drop_obj):
             return False
 
-        if not obj.check_abs_state(self.env, 'inhandofrobot'):
+        if drop_obj.check_abs_state(self.env, 'in' + arm + 'handofrobot'):
             return False
-
-        fwd_pos = self.env.front_pos
-        dims = self.drop_dims(fwd_pos)
-        obj.available_dims = dims
-
-        return dims != []
-
-    def do(self, obj, dim):
-        # drop
-        super().do(obj)
-        self.env.carrying.discard(obj)
-
-        fwd_pos = self.env.front_pos
-        obj.cur_pos = fwd_pos
-        self.env.grid.set(*fwd_pos, obj, dim)
-
-        # drop in and update
-        furniture = self.env.grid.get_furniture(*fwd_pos, dim)
-        obj.states['inside'].set_value(furniture, True)
         
+        if container_obj.states['contains'].get_num_objs() > container_obj.max_contain:
+            return False
+
+        return True
+
+    def do(self, drop_obj, container_obj, arm):
+        # drop
+        super().do(drop_obj)
+        self.env.carrying[arm].discard(drop_obj)
+        container_obj.states['contains'].add_obj(drop_obj)
+            
+
+class TakeOut(BaseAction):
+    def __init__(self, env):
+        super(TakeOut, self).__init__(env)
+        self.key = 'take_out'
+
+    def can(self, obj, arm):
+        """
+        can takeout obj if:
+        - container obj actually contains obj
+        - agent not holding anything else
+        """
+        if obj.states['contains'].get_value == 0:
+            return False
+
+        if len(self.env.carrying[arm]) != 0:
+            return False
+        
+        return True
+    
+    def do(self, obj, arm):
+        super().do(obj)
+        self.env.carrying[arm].add(obj['contains'].remove_obj())
+
+
 
 class Open(BaseAction):
     def __init__(self, env):
@@ -301,10 +299,10 @@ class Pickup(BaseAction):
         assert not obj.check_abs_state(self.env, 'onfloor')
 
 
-class Shake_Bang(BaseAction):
+class NoiseToggle(BaseAction):
     def __init__(self, env):
-        super(Shake_Bang, self).__init__(env)
-        self.key =  'shake_bang'
+        super(NoiseToggle, self).__init__(env)
+        self.key =  'noise_toggle'
 
     def can(self, obj, arm):
         if (not super().can(obj, arm)) or (not obj.check_abs_state(self.env, 'in' + arm + 'handofrobot')):
@@ -342,22 +340,24 @@ class Throw(BaseAction):
         if not super().can(obj, arm):
             return False
 
+        
         # object must be in hand to throw
         if not obj.check_abs_state(self.env, 'in' + arm + 'handofrobot'):
             return False
-
-        dims1 = self.drop_dims(pos)
+        
         throw_pos = pos + self.env.dir_vec # check if position in front of front position is also open
-        dims2 = self.drop_dims(throw_pos)
-        return int(0) in dims1 and int(0) in dims2 # Resort to dim = 0 since dims are not really used anymore
+        check_pos = pos if 0 in throw_pos or throw_pos[0] == self.env.width - 1 or throw_pos[1] == self.env.height - 1 else throw_pos # boundary condition
+        dims = self.drop_dims(check_pos)
+        return int(0) in dims # Resort to dim = 0 since dims are not really used anymore
     
     def do(self, obj, dim, arm, pos):
         assert self.can(obj, arm, pos)
 
         self.env.carrying[arm].discard(obj)
 
-        #fwd_pos = self.env.front_pos
-        throw_pos = pos + self.env.dir_vec
+        two_fwd_pos = pos + self.env.dir_vec
+        throw_pos = pos if 0 in two_fwd_pos or two_fwd_pos[0] == self.env.width - 1 or two_fwd_pos[1] == self.env.height - 1 else two_fwd_pos # boundary condition
+        print(throw_pos)
         # change object properties
         obj.cur_pos = throw_pos
         # change agent / grid
@@ -376,8 +376,6 @@ class Toggle(BaseAction):
         super().do(obj, arm)
         cur = obj.check_abs_state(self.env, 'toggled')
         obj.states['toggled'].set_value(not cur)
-        if any(substring in obj.get_name() for substring in ["music_toy", "piggie_bank"]):
-            obj.states['noise'].set_value(True)
         if any(substring in obj.get_name() for substring in ["winnie_cabinet", "piggie_bank"]):
             open_cur = obj.check_abs_state(self.env, 'open')
             obj.states['open'].set_value(not open_cur)
