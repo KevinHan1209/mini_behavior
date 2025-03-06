@@ -57,6 +57,8 @@ class MiniBehaviorEnv(MiniGridEnv):
         pickup_0 = 2
         drop_0 = 3
         throw_0 = 4
+        push = 5
+        pull = 6
 
     class LocoActions(IntEnum):
         left = 0
@@ -120,6 +122,8 @@ class MiniBehaviorEnv(MiniGridEnv):
 
                 if obj_type in OBJECT_CLASS.keys():
                     obj_instance = OBJECT_CLASS[obj_type](name=obj_name)
+                elif obj_type == 'cart_toy':
+                    obj_instance = WorldObj(obj_type, None, obj_name, max_contain = 5)
                 else:
                     obj_instance = WorldObj(obj_type, None, obj_name)
 
@@ -540,8 +544,23 @@ class MiniBehaviorEnv(MiniGridEnv):
         # Separate logic to check if object was dropped in front. For actions with drop and forward in the same action
         was_dropped = False
 
+        # Logic to check if the agent has pushed or pulled a cart. If so, then the locomotion action is nullified because the agent is bound to move forward or backwards
+        null_loco = False
+
+        # Logic to check for contradictory moves in pushing/pulling cart
+        null_right = False # cannot push/pull cart twice in one step
+        null_actions = False # if one arm pushes and other arm pulls, then action is canceled
+        if manip_action_left in ["push", "pull"] and manip_action_left == manip_action_right:
+            null_right = True
+            if manip_action_left != manip_action_right and manip_action_right in ["push", "pull"]:
+                null_actions = True
+            
+        
+
         ## **Handle Manipulation Actions for Both Arms**
         for arm_action, arm in zip([manip_action_left, manip_action_right], ["left", "right"]):
+            if null_actions:
+                break
             seq = left_seq if arm == 'left' else right_seq
             print("CURRENTLY CARRYING: ",self.carrying )
             if arm_action != -1:  # -1 means no action taken
@@ -598,7 +617,18 @@ class MiniBehaviorEnv(MiniGridEnv):
                             action_class(self).do(obj, int(0), arm, fwd_pos)
                             self.action_done = True
                             break
-                # Everything else act on the forward cell
+                # Everything else
+                elif action_name == "push" or action_name == "pull":
+                    for dim in fwd_cell:
+                        for obj in dim:
+                            if is_obj(obj) and action_class(self).can(obj, arm):
+                                action_class(self).do(obj, arm)
+                                self.action_done = True
+                                null_loco = True
+                                print("This is executed")
+                                break
+                        if self.action_done:
+                            break
                 else:
                     for cell in seq:
                         for dim in cell:
@@ -616,38 +646,38 @@ class MiniBehaviorEnv(MiniGridEnv):
                             self.update_states()
                             break
         ## **Handle Locomotion Actions**
-        if locomotion_action == self.locomotion_actions.left:
-            self.agent_dir -= 1
-            if self.agent_dir < 0:
-                self.agent_dir += 4
-        elif locomotion_action == self.locomotion_actions.right:
-            self.agent_dir = (self.agent_dir + 1) % 4  # Rotate right
-        elif locomotion_action == self.locomotion_actions.forward:
-            can_overlap = True
-            for dim in fwd_cell:
-                for obj in dim:
-                    if is_obj(obj) and not obj.can_overlap:
-                        can_overlap = False
-                        break
-            if can_overlap and not was_dropped:
-                self.agent_pos = fwd_pos
-            else:
-                self.action_done = False
-        elif locomotion_action == self.locomotion_actions.kick:
-            dim = int(0)
-            for obj in fwd_cell[dim]:
-                if is_obj(obj) and obj.possible_action('kick'):
-                    new_pos = fwd_pos + self.dir_vec * self.kick_length
-                    dims = self.drop_dims(new_pos)
-                    if dim in dims:
-                        # modified code from pickup and drop
-                        self.grid.remove(*obj.cur_pos, obj)
-                        self.grid.set_all_objs(*obj.cur_pos, [None, None, None])
-                        obj.update_pos(new_pos)
-                        self.grid.set(*new_pos, obj, dim)
-                        obj.states['kicked'].set_value(True)
-                        break
-
+        if not null_loco:
+            if locomotion_action == self.locomotion_actions.left:
+                self.agent_dir -= 1
+                if self.agent_dir < 0:
+                    self.agent_dir += 4
+            elif locomotion_action == self.locomotion_actions.right:
+                self.agent_dir = (self.agent_dir + 1) % 4  # Rotate right
+            elif locomotion_action == self.locomotion_actions.forward:
+                can_overlap = True
+                for dim in fwd_cell:
+                    for obj in dim:
+                        if is_obj(obj) and not obj.can_overlap:
+                            can_overlap = False
+                            break
+                if can_overlap and not was_dropped:
+                    self.agent_pos = fwd_pos
+                else:
+                    self.action_done = False
+            elif locomotion_action == self.locomotion_actions.kick:
+                dim = int(0)
+                for obj in fwd_cell[dim]:
+                    if is_obj(obj) and obj.possible_action('kick'):
+                        new_pos = fwd_pos + self.dir_vec * self.kick_length
+                        dims = self.drop_dims(new_pos)
+                        if dim in dims:
+                            # modified code from pickup and drop
+                            self.grid.remove(*obj.cur_pos, obj)
+                            self.grid.set_all_objs(*obj.cur_pos, [None, None, None])
+                            obj.update_pos(new_pos)
+                            self.grid.set(*new_pos, obj, dim)
+                            obj.states['kicked'].set_value(True)
+                            break
 
         self.update_states()
         reward = self._reward()

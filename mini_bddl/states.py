@@ -38,6 +38,7 @@ DEFAULT_STATES = [
 # in ABILITIES and FURNATURE_STATES
 ABILITIES = [
     #'attached',
+    'contains',
     'kicked',
     'noise',
     'open',
@@ -53,6 +54,7 @@ FURNATURE_STATES = []
 STATE_FUNC_MAPPING = {
     'attached': Attached,
     'atsamelocation': AtSameLocation,
+    'contains': Contains,
     'flipped': Flipped,
     'infovofrobot': InFOVOfRobot,
     'inrighthandofrobot': InRightHandOfRobot,

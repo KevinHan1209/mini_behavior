@@ -18,7 +18,7 @@ class MultiToyEnv(RoomGrid):
             num_cols=1,
             max_steps=1e5,
     ):
-        num_objs = {'alligator_busy_box': 1, 'beach_ball': 1, 'music_toy': 1, 'farm_toy': 1, 'piggie_bank': 1, 'rattle': 1,  'winnie_cabinet': 1}
+        num_objs = {'alligator_busy_box': 1, 'beach_ball': 1, 'cart_toy': 1, 'music_toy': 1, 'farm_toy': 1, 'piggie_bank': 1, 'rattle': 1,  'winnie_cabinet': 1}
 
         self.mission = 'explore'
 
@@ -37,6 +37,7 @@ class MultiToyEnv(RoomGrid):
     def _gen_objs(self):
         alligator_busy_box = self.objs['alligator_busy_box'][0]
         beach_ball = self.objs['beach_ball'][0]
+        cart_toy = self.objs['cart_toy'][0]
         music_toy = self.objs['music_toy'][0]
         farm_toy = self.objs['farm_toy'][0]
         rattle = self.objs['rattle'][0]
@@ -45,6 +46,7 @@ class MultiToyEnv(RoomGrid):
 
         self.place_obj(alligator_busy_box)
         self.place_obj(beach_ball)
+        self.place_obj(cart_toy)
         self.place_obj(music_toy)
         self.place_obj(farm_toy)
         self.place_obj(rattle)
@@ -58,6 +60,7 @@ class MultiToyEnv(RoomGrid):
 
         alligator_busy_box = self.objs['alligator_busy_box'][0]
         beach_ball = self.objs['beach_ball'][0]
+        cart_toy = self.objs['cart_toy'][0]
         music_toy = self.objs['music_toy'][0]
         farm_toy = self.objs['farm_toy'][0]
         rattle = self.objs['rattle'][0]
@@ -66,6 +69,7 @@ class MultiToyEnv(RoomGrid):
 
         assert alligator_busy_box.check_abs_state(self, 'onfloor')
         assert beach_ball.check_abs_state(self, 'onfloor')
+        assert cart_toy.check_abs_state(self, 'onfloor')
         assert music_toy.check_abs_state(self, 'onfloor')
         assert farm_toy.check_abs_state(self, 'onfloor')
         assert rattle.check_abs_state(self, 'onfloor')

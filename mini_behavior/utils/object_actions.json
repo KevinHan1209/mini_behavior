@@ -30,8 +30,10 @@
         "drop"
     ],
     "cart_toy": [
-        "pickup",
-        "drop"
+        "dropin",
+        "takeout",
+        "push",
+        "pull"
     ],
     "coin": [
         "pickup",
@@ -65,17 +67,18 @@
     "music_toy": [
         "pickup",
         "drop",
-        "toggle"
+        "noise_toggle"
     ],
     "piggie_bank": [
-        "toggle",
+        "noise_toggle",
         "pickup",
-        "drop"
+        "drop",
+        "toggle"
     ],
     "rattle": [
         "pickup",
         "drop",
-        "shake_bang",
+        "noise_toggle",
         "throw"
     ],
     "red_spiky_ball": [

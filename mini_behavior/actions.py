@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def find_tool(env, possible_tool_types):
     # returns whether agent is carrying a obj of possible_tool_types, and the obj_instance
     for tool_type in possible_tool_types:
@@ -298,6 +297,89 @@ class Pickup(BaseAction):
         assert obj.check_abs_state(self.env, 'in' + arm + 'handofrobot')
         assert not obj.check_abs_state(self.env, 'onfloor')
 
+class Pull(BaseAction):
+    def __init__(self, env):
+        super(Pull, self).__init__(env)
+        self.key = 'pull'
+
+    def drop_dims(self, pos):
+        dims = []
+
+        all_items = self.env.grid.get_all_items(*pos)
+        last_furniture, last_obj = 'floor', 'floor'
+        for i in range(3):
+            furniture = all_items[2*i]
+            obj = all_items[2*i + 1]
+
+            if furniture is None and obj is None:
+                if last_furniture is not None or last_obj is not None:
+                    dims.append(i)
+
+            last_furniture = furniture
+            last_obj = obj
+
+        return dims
+
+    def can(self, obj, arm):
+        # Agent cannot be carrying another item in the same arm when pulling the cart
+        if len(self.env.carrying[arm]) != 0:
+            assert len(self.env.carryiong[arm]) == 1
+            return False
+        
+        agent_pos = list(self.env.agent_pos).copy()
+        back_pos = agent_pos - self.env.dir_vec
+        dims = self.drop_dims(back_pos)
+        return int(0) in dims
+        
+    def do(self, obj, arm):
+        agent_old_pos = list(self.env.agent_pos).copy()
+        self.env.grid.remove(*obj.cur_pos, obj)
+        self.env.grid.set_all_objs(*obj.cur_pos, [None, None, None])
+        self.env.agent_pos = agent_old_pos - self.env.dir_vec
+        obj.cur_pos = agent_old_pos
+        self.env.grid.set(*agent_old_pos, obj, int(0))
+
+class Push(BaseAction):
+    def __init__(self, env):
+        super(Push, self).__init__(env)
+        self.key = 'push'
+
+    def drop_dims(self, pos):
+        dims = []
+
+        all_items = self.env.grid.get_all_items(*pos)
+        last_furniture, last_obj = 'floor', 'floor'
+        for i in range(3):
+            furniture = all_items[2*i]
+            obj = all_items[2*i + 1]
+
+            if furniture is None and obj is None:
+                if last_furniture is not None or last_obj is not None:
+                    dims.append(i)
+
+            last_furniture = furniture
+            last_obj = obj
+
+        return dims
+
+    def can(self, obj, arm):
+        # Agent cannot be carrying another item in the same arm when pushing the cart
+        if len(self.env.carrying[arm]) != 0:
+            assert len(self.env.carryiong[arm]) == 1
+            return False
+        obj_pos = list(obj.cur_pos).copy()
+        front_pos = obj_pos + self.env.dir_vec # position in front of cart/stroller
+        dims = self.drop_dims(front_pos) # check if that position is filled with an object
+        return int(0) in dims
+
+    def do(self, obj, arm):
+        obj_pos = list(obj.cur_pos).copy()
+        self.env.grid.remove(*obj.cur_pos, obj)
+        self.env.grid.set_all_objs(*obj.cur_pos, [None, None, None])
+        front_pos = obj_pos + self.env.dir_vec
+        obj.cur_pos = front_pos
+        self.env.agent_pos = obj_pos
+        self.env.grid.set(*front_pos, obj, int(0))
 
 class NoiseToggle(BaseAction):
     def __init__(self, env):

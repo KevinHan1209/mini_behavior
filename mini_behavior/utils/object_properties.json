@@ -19,7 +19,7 @@
 
     ],
     "cart_toy": [
-
+        
     ],
     "coin": [
 
@@ -38,13 +38,13 @@
         "thrown"
     ],
     "gear_pole": [
+        "thrown"
     ],
     "mini_broom": [
         "thrown"
     ],
     "music_toy": [
-        "noise",
-        "toggled"
+        "noise"
     ],
     "piggie_bank": [
         "noise",
@@ -59,7 +59,7 @@
         "thrown"
     ],
     "ring_toy": [
-
+        "thrown"
     ],
     "shape_sorter": [
 
@@ -72,7 +72,7 @@
 
     ],
     "winnie": [
-
+        "thrown"
     ],
     "winnie_cabinet": [
         "open",

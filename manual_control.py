@@ -159,7 +159,6 @@ def key_handler_cartesian(event):
 action_list = []
 def key_handler_primitive(event):
     global action_list
-    print('Current action list: ', action_list)
     # Escape action to exit
     if event.key == 'escape':
         window.close()
@@ -177,7 +176,6 @@ def key_handler_primitive(event):
         if event.key == '0':
             action_list.append(env.manipulation_actions.pickup_0)
             valid_action = True
-            print('carrying:', env.carrying)
         elif event.key == '1':
             action_list.append(env.manipulation_actions.drop_0)
             valid_action = True
@@ -192,6 +190,12 @@ def key_handler_primitive(event):
             valid_action = True
         elif event.key == 'p':
             action_list.append(env.manipulation_actions.throw_0)
+            valid_action = True
+        elif event.key == 'w':
+            action_list.append(env.manipulation_actions.push)
+            valid_action = True
+        elif event.key == 'e':
+            action_list.append(env.manipulation_actions.pull)
             valid_action = True
         
         if not valid_action:

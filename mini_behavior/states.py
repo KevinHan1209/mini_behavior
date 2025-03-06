@@ -87,18 +87,39 @@ class InSameRoomAsRobot(AbsoluteObjectState):
 class Attached(AbilityState):
     def __init__(self, obj, key):
         super(Attached, self).__init__(obj, key)
+        self.attached_objects = []
 
-    def _update(self, env):
-        '''
-        Attached combines two or more objects into one. 
-        Used for actions which require more sophistication than just dropping an object into another.
+    def add_obj(self, obj):
+        self.contained_objects.append(obj)
+    
+    def remove_obj(self):
+        return self.contained_objects.pop(0)
 
-        Applies for broom with broom_set, gear with gear_toy, and winnie with winnie_cabinet.
+    def get_num_objs(self, env):
+        return len(self.attached_objects)
+    
+    def get_value(self):
+        return self.attached_objects != []
 
-        True if Assemble action is performed
-        False if Disassemble action is performed
-        '''
-        return self.value
+class Contains(AbilityState):
+    '''
+    For objects which can contain other objects
+    '''
+    def __init__(self, obj, key):
+        super(Contains, self).__init__(obj, key)
+        self.contained_objects = []
+
+    def add_obj(self, obj):
+        self.contained_objects.append(obj)
+    
+    def remove_obj(self):
+        return self.contained_objects.pop(0)
+    
+    def get_num_objs(self):
+        return len(self.contained_objects)
+    
+    def get_value(self):
+        return self.contained_objects != []
 
 class Flipped(AbilityState):
     def __init__(self, obj, key):
@@ -126,7 +147,6 @@ class Noise(AbilityState):
     def get_value(self, env):
         """
         True depending on the action performed and object
-        TODO: If True, False if no other action is performed which could induce noise. Probably do this in environment step?
         """
         return self.value
     

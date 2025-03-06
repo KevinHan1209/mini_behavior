@@ -19,6 +19,7 @@ class WorldObj:
                  can_contain=False,
                  can_overlap=False,
                  can_seebehind=True,
+                 max_contain = 0
                  ):
 
         if action_keys is None:
@@ -75,6 +76,9 @@ class WorldObj:
         self.can_seebehind = can_seebehind
         self.contains = None
         self.inside_of = None
+
+        self.max_contain = max_contain
+    
 
     def get_name(self):
         return self.name
@@ -238,3 +242,6 @@ class FurnitureObj(WorldObj):
         for dx in range(self.width):
             for dy in range(self.height):
                 self.all_pos.append((pos[0] + dx, pos[1] + dy))
+
+
+
