@@ -1,6 +1,6 @@
 from mini_behavior.actions import *
 
-ALL_ACTIONS = ['pickup', 'drop', 'toggle', 'noise_toggle', 'throw', 'push', 'pull']
+ALL_ACTIONS = ['pickup', 'drop', 'toggle', 'noise_toggle', 'throw', 'push', 'pull', 'takeout', 'dropin']
 DEFAULT_ACTIONS = []
 
 ACTION_FUNC_MAPPING = {
@@ -10,7 +10,9 @@ ACTION_FUNC_MAPPING = {
     'noise_toggle': NoiseToggle,
     'throw': Throw,
     'push': Push,
-    'pull': Pull
+    'pull': Pull,
+    'takeout': TakeOut,
+    'dropin': DropIn
 }
 
 CONTROLS = ['left', 'right', 'forward', 'kick']  # 'down'

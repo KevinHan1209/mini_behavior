@@ -44,12 +44,14 @@
         "thrown"
     ],
     "music_toy": [
-        "noise"
+        "noise",
+        "thrown"
     ],
     "piggie_bank": [
         "noise",
         "open",
-        "toggled"
+        "toggled",
+        "thrown"
     ],
     "rattle": [
         "noise",

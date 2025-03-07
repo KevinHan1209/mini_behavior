@@ -2,32 +2,38 @@
     "alligator_busy_box": [
         "toggle",
         "pickup",
-        "drop"
+        "drop",
+        "dropin"
     ],
     "ball": [
         "pickup",
         "drop",
+        "dropin",
         "throw"
     ],
     "beach_ball": [
         "pickup",
         "drop",
+        "dropin",
         "kick",
         "throw"
     ],
     "broom": [
         "pickup",
         "drop",
+        "dropin",
         "throw"
     ],
     "broom_set": [
         "pickup",
         "drop",
+        "dropin",
         "throw"
     ],
     "bucket_toy": [
         "pickup",
-        "drop"
+        "drop",
+        "dropin"
     ],
     "cart_toy": [
         "dropin",
@@ -73,7 +79,8 @@
         "noise_toggle",
         "pickup",
         "drop",
-        "toggle"
+        "toggle",
+        "throw"
     ],
     "rattle": [
         "pickup",

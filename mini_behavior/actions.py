@@ -321,6 +321,8 @@ class Pull(BaseAction):
         return dims
 
     def can(self, obj, arm):
+        if not super().can(obj, arm):
+            return False
         # Agent cannot be carrying another item in the same arm when pulling the cart
         if len(self.env.carrying[arm]) != 0:
             assert len(self.env.carryiong[arm]) == 1
@@ -363,6 +365,8 @@ class Push(BaseAction):
         return dims
 
     def can(self, obj, arm):
+        if not super().can(obj, arm):
+            return False
         # Agent cannot be carrying another item in the same arm when pushing the cart
         if len(self.env.carrying[arm]) != 0:
             assert len(self.env.carryiong[arm]) == 1
@@ -387,8 +391,7 @@ class NoiseToggle(BaseAction):
         self.key =  'noise_toggle'
 
     def can(self, obj, arm):
-        if (not super().can(obj, arm)) or (not obj.check_abs_state(self.env, 'in' + arm + 'handofrobot')):
-            return False
+        return super().can(obj, arm)
         
     def do(self, obj, arm):
         super().do(obj, arm)
@@ -422,7 +425,6 @@ class Throw(BaseAction):
         if not super().can(obj, arm):
             return False
 
-        
         # object must be in hand to throw
         if not obj.check_abs_state(self.env, 'in' + arm + 'handofrobot'):
             return False

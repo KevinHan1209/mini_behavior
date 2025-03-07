@@ -536,40 +536,36 @@ class MiniBehaviorEnv(MiniGridEnv):
         # Get the position and contents around the agent
         fwd_pos, right_pos, left_pos, upper_right_pos, upper_left_pos = self.front_pos, self.right_pos, self.left_pos, self.upper_right_pos, self.upper_left_pos
         fwd_cell, right_cell, left_cell, upper_right_cell, upper_left_cell = self.grid.get(*fwd_pos), self.grid.get(*right_pos), self.grid.get(*left_pos), self.grid.get(*upper_right_pos), self.grid.get(*upper_left_pos)
-        
+
         # Establish action sequence
-        left_seq = [fwd_cell, upper_left_cell, left_cell]
-        right_seq = [fwd_cell, upper_right_cell, right_cell]
+        left_seq, right_seq = [fwd_cell, upper_left_cell, left_cell], [fwd_cell, upper_right_cell, right_cell]
 
-        # Separate logic to check if object was dropped in front. For actions with drop and forward in the same action
-        was_dropped = False
-
-        # Logic to check if the agent has pushed or pulled a cart. If so, then the locomotion action is nullified because the agent is bound to move forward or backwards
-        null_loco = False
-
-        # Logic to check for contradictory moves in pushing/pulling cart
+        # Edge cases
+        was_dropped = False # Cannot move forward if object dropped in front first
+        null_loco = False # nullify locomotive action if push/pull is successfully performed
         null_right = False # cannot push/pull cart twice in one step
         null_actions = False # if one arm pushes and other arm pulls, then action is canceled
         if manip_action_left in ["push", "pull"] and manip_action_left == manip_action_right:
             null_right = True
             if manip_action_left != manip_action_right and manip_action_right in ["push", "pull"]:
                 null_actions = True
-            
         
-
-        ## **Handle Manipulation Actions for Both Arms**
+        print("\nCURRENTLY CARRYING: ",self.carrying, end='\n\n')
+        # Go through manipulation actions for each arm
         for arm_action, arm in zip([manip_action_left, manip_action_right], ["left", "right"]):
-            if null_actions:
+            if null_actions or (arm == "right" and null_right):
                 break
             seq = left_seq if arm == 'left' else right_seq
-            print("CURRENTLY CARRYING: ",self.carrying )
             if arm_action != -1:  # -1 means no action taken
                 curr_action = self.manipulation_actions(arm_action)
                 action_name = curr_action.name  # Convert index to action name
-                if "toggle" not in action_name or "shake/bang" not in action_name:
+
+                # Silence noise state if no noise_inducing actions are taken
+                if "noise_toggle" not in action_name or "shake/bang" not in action_name:
                     self.silence()
                 self.action_done = False
 
+                # Define dimension if picking up, dropping, or throwing (dim = 0 always for infant exploration)
                 if "pickup" in action_name or "drop" in action_name or "throw" in action_name:
                     action_dim = action_name.split('_')  # list: [action, dim]
                     if action_name == "drop_in":
@@ -583,7 +579,6 @@ class MiniBehaviorEnv(MiniGridEnv):
                 # Pickup involves certain dimension
                 if "pickup" in action_name:
                     for cell in seq:
-                        #print("Checking Cell:", cell)
                         for obj in cell[int(action_dim[1])]:
                             if is_obj(obj) and action_class(self).can(obj, arm):
                                 action_class(self).do(obj, arm)
@@ -598,7 +593,6 @@ class MiniBehaviorEnv(MiniGridEnv):
                         for pos in pos_seq:
                             if action_class(self).can(obj, arm, pos):
                                 drop_dim = obj.available_dims
-                                print('\nDrop Dim:', drop_dim)
                                 if action_dim[1] == "in":
                                     # For drop_in, we don't care about dimension
                                     action_class(self).do(obj, np.random.choice(drop_dim), arm)
@@ -617,7 +611,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                             action_class(self).do(obj, int(0), arm, fwd_pos)
                             self.action_done = True
                             break
-                # Everything else
+                # Push/pull cart item (front cell only)
                 elif action_name == "push" or action_name == "pull":
                     for dim in fwd_cell:
                         for obj in dim:
@@ -625,10 +619,18 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 action_class(self).do(obj, arm)
                                 self.action_done = True
                                 null_loco = True
-                                print("This is executed")
                                 break
                         if self.action_done:
                             break
+                # The agent should not be able to perform any other action if it is holding an object, so the action will perform on the object in agent's hand
+                elif self.carrying[arm]:
+                        print("This is true")
+                        if action_class(self).can(list(self.carrying[arm])[0], arm):
+                            action_class(self).do(list(self.carrying[arm])[0], arm)
+                            self.action_done = True
+                            if action_name == "noise_toggle" and not any(substring in obj.get_name() for substring in ["music_toy", "piggie_bank"]):
+                                self.silence()
+                # If the agent is not holding an object, then it will perform the action on surrounding objects
                 else:
                     for cell in seq:
                         for dim in cell:
@@ -637,7 +639,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                                     action_class(self).do(obj, arm)
                                     self.action_done = True
                                     # Take care of noise state if action is toggle but not on a noisy object
-                                    if action_name == "toggle" and not any(substring in obj.get_name() for substring in ["music_toy", "piggie_bank"]):
+                                    if action_name == "noise_toggle" and not any(substring in obj.get_name() for substring in ["music_toy", "piggie_bank"]):
                                         self.silence()
                                     break
                             if self.action_done:
@@ -645,7 +647,8 @@ class MiniBehaviorEnv(MiniGridEnv):
                         if self.action_done:
                             self.update_states()
                             break
-        ## **Handle Locomotion Actions**
+
+        # Go through locomotion action
         if not null_loco:
             if locomotion_action == self.locomotion_actions.left:
                 self.agent_dir -= 1
@@ -689,7 +692,7 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         if self.test_env:
             self.update_exploration_metrics()
-
+        print("PIGGIE BANK:", self.objs['piggie_bank'][0].check_abs_state(self, 'toggled'))
         return obs, reward, done, {}
     
     def drop_dims(self, pos):
