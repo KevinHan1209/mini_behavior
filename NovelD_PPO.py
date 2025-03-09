@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import gym
 import wandb
 from env_wrapper import CustomObservationWrapper
+import os
 
 def make_env(env_id, seed, idx):
     def thunk():
@@ -24,7 +25,7 @@ class NovelD_PPO:
             self,
             env_id,
             device="cpu",
-            total_timesteps=500000,
+            total_timesteps=2000000,
             learning_rate=3e-4,
             num_envs=8,
             num_steps=125,
@@ -227,6 +228,16 @@ class NovelD_PPO:
                 print(f"KL: {opt_metrics['approx_kl']:.4f} | ClipFrac: {opt_metrics['clipfrac']:.4f}")
                 print("-" * 50)
 
+            if global_step % 500000 < self.num_envs:
+                checkpoint_dir = "checkpoints"
+                os.makedirs(checkpoint_dir, exist_ok=True)
+                checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
+                torch.save({
+                    'agent_state_dict': self.agent.state_dict(),
+                    'rnd_predictor_state_dict': self.rnd_model.predictor.state_dict(),
+                }, checkpoint_path)
+                print(f"Saved checkpoint at {global_step} timesteps to {checkpoint_path}")
+
         wandb.finish()
         self.envs.close()
 
@@ -366,6 +377,12 @@ class NovelD_PPO:
             torch.FloatTensor([self.reward_rms.var]).to(self.device) + 1e-8
         )
         return normalized_rewards.clamp(-10, 10)
+
+    def load_checkpoint(self, checkpoint_path):
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        self.agent.load_state_dict(checkpoint['agent_state_dict'])
+        self.rnd_model.predictor.load_state_dict(checkpoint['rnd_predictor_state_dict'])
+        print(f"Loaded checkpoint from {checkpoint_path}")
 
 class RunningMeanStd:
     """Tracks running mean and standard deviation of input data"""
