@@ -186,30 +186,32 @@ class Drop(BaseAction):
 class DropIn(BaseAction):
     def __init__(self, env):
         super(DropIn, self).__init__(env)
-        self.key = 'drop_in'
+        self.key = 'dropin'
 
-    def can(self, drop_obj, container_obj, arm):
+    def can(self, obj, arm):
         """
-        can drop obj in if:
-        - agent is carrying obj
+        obj references the container object
+        can dropin if:
+        - agent is carrying another obj
         - object to be dropped in is not at capacity
         """
-        if not super().can(drop_obj):
+        if not super().can(obj, arm):
             return False
 
-        if drop_obj.check_abs_state(self.env, 'in' + arm + 'handofrobot'):
+        if not self.env.carrying[arm]:
             return False
         
-        if container_obj.states['contains'].get_num_objs() > container_obj.max_contain:
+        if obj.states['contains'].get_num_objs() > obj.max_contain:
             return False
 
         return True
 
-    def do(self, drop_obj, container_obj, arm):
-        # drop
-        super().do(drop_obj)
-        self.env.carrying[arm].discard(drop_obj)
-        container_obj.states['contains'].add_obj(drop_obj)
+    def do(self, obj, arm):
+        # dropin
+        super().do(obj, arm)
+        obj.states['contains'].add_obj(list(self.env.carrying[arm])[0])
+        self.env.carrying[arm].clear()
+        
             
 
 class TakeOut(BaseAction):
@@ -223,7 +225,7 @@ class TakeOut(BaseAction):
         - container obj actually contains obj
         - agent not holding anything else
         """
-        if obj.states['contains'].get_value == 0:
+        if not obj.states['contains'].get_value(self.env):
             return False
 
         if len(self.env.carrying[arm]) != 0:
@@ -232,8 +234,8 @@ class TakeOut(BaseAction):
         return True
     
     def do(self, obj, arm):
-        super().do(obj)
-        self.env.carrying[arm].add(obj['contains'].remove_obj())
+        super().do(obj, arm)
+        self.env.carrying[arm].add(obj.states['contains'].remove_obj())
 
 
 
@@ -263,7 +265,6 @@ class Pickup(BaseAction):
             return False
 
         # cannot pickup if carrying
-        # ** Why not just check if object is in self.carrying[arm]? **
         if obj.check_abs_state(self.env, 'in' + arm + 'handofrobot'):
             return False
 
@@ -369,7 +370,7 @@ class Push(BaseAction):
             return False
         # Agent cannot be carrying another item in the same arm when pushing the cart
         if len(self.env.carrying[arm]) != 0:
-            assert len(self.env.carryiong[arm]) == 1
+            assert len(self.env.carrying[arm]) == 1
             return False
         obj_pos = list(obj.cur_pos).copy()
         front_pos = obj_pos + self.env.dir_vec # position in front of cart/stroller

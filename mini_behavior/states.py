@@ -118,8 +118,11 @@ class Contains(AbilityState):
     def get_num_objs(self):
         return len(self.contained_objects)
     
-    def get_value(self):
-        return self.contained_objects != []
+    def get_value(self, env):
+        return len(self.contained_objects) != 0
+    
+    def get_contained_objs(self):
+        return self.contained_objects
 
 class Flipped(AbilityState):
     def __init__(self, obj, key):

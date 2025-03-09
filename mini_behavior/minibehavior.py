@@ -59,6 +59,8 @@ class MiniBehaviorEnv(MiniGridEnv):
         throw_0 = 4
         push = 5
         pull = 6
+        takeout = 7
+        dropin = 8
 
     class LocoActions(IntEnum):
         left = 0
@@ -566,20 +568,16 @@ class MiniBehaviorEnv(MiniGridEnv):
                 self.action_done = False
 
                 # Define dimension if picking up, dropping, or throwing (dim = 0 always for infant exploration)
-                if "pickup" in action_name or "drop" in action_name or "throw" in action_name:
-                    action_dim = action_name.split('_')  # list: [action, dim]
-                    if action_name == "drop_in":
-                        action_class = ACTION_FUNC_MAPPING["drop_in"]
-                    else:
-                        action_class = ACTION_FUNC_MAPPING[action_dim[0]]
-                else:
-                    action_class = ACTION_FUNC_MAPPING[action_name]
+                if action_name in ['pickup_0', 'drop_0', 'throw_0']:
+                    action_name = action_name.split('_')[0]  # list: [action, dim]
+
+                action_class = ACTION_FUNC_MAPPING[action_name]
                 self.action_done = False
 
-                # Pickup involves certain dimension
-                if "pickup" in action_name:
+                # Pickup object
+                if action_name == "pickup":
                     for cell in seq:
-                        for obj in cell[int(action_dim[1])]:
+                        for obj in cell[int(0)]:
                             if is_obj(obj) and action_class(self).can(obj, arm):
                                 action_class(self).do(obj, arm)
                                 self.action_done = True
@@ -587,32 +585,41 @@ class MiniBehaviorEnv(MiniGridEnv):
                         if self.action_done:
                             break
                 # Drop act on carried object
-                elif "drop" in action_name:
+                elif action_name == "drop":
                     pos_seq = [fwd_pos, upper_left_pos, left_pos] if arm == 'left' else [fwd_pos, upper_right_pos, right_pos]
                     for obj in self.carrying[arm]:
                         for pos in pos_seq:
                             if action_class(self).can(obj, arm, pos):
                                 drop_dim = obj.available_dims
-                                if action_dim[1] == "in":
-                                    # For drop_in, we don't care about dimension
-                                    action_class(self).do(obj, np.random.choice(drop_dim), arm)
-                                    self.action_done = True
-                                elif int(action_dim[1]) in drop_dim:
-                                    action_class(self).do(obj, int(action_dim[1]), arm, pos)
+                                if int(0) in drop_dim:
+                                    action_class(self).do(obj, int(0), arm, pos)
                                     self.action_done = True
                                     was_dropped = True
                                     break
                         if self.action_done:
                             break
                 # Throw act on carried object
-                elif "throw" in action_name:
+                elif action_name == "throw":
                     for obj in self.carrying[arm]:
                         if action_class(self).can(obj, arm, fwd_pos):
                             action_class(self).do(obj, int(0), arm, fwd_pos)
                             self.action_done = True
                             break
+                elif action_name in ["takeout", "dropin"]:
+                    for cell in seq:
+                        for dim in cell:
+                            for obj in dim:
+                                if is_obj(obj) and action_class(self).can(obj, arm):
+                                    action_class(self).do(obj, arm)
+                                    self.action_done = True
+                                    break
+                            if self.action_done:
+                                break
+                        if self.action_done:
+                            self.update_states()
+                            break
                 # Push/pull cart item (front cell only)
-                elif action_name == "push" or action_name == "pull":
+                elif action_name in ["push", "pull"]:
                     for dim in fwd_cell:
                         for obj in dim:
                             if is_obj(obj) and action_class(self).can(obj, arm):
@@ -624,7 +631,6 @@ class MiniBehaviorEnv(MiniGridEnv):
                             break
                 # The agent should not be able to perform any other action if it is holding an object, so the action will perform on the object in agent's hand
                 elif self.carrying[arm]:
-                        print("This is true")
                         if action_class(self).can(list(self.carrying[arm])[0], arm):
                             action_class(self).do(list(self.carrying[arm])[0], arm)
                             self.action_done = True
@@ -692,7 +698,7 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         if self.test_env:
             self.update_exploration_metrics()
-        print("PIGGIE BANK:", self.objs['piggie_bank'][0].check_abs_state(self, 'toggled'))
+        #print("PIGGIE BANK:", self.objs['piggie_bank'][0].check_abs_state(self, 'toggled'))
         return obs, reward, done, {}
     
     def drop_dims(self, pos):

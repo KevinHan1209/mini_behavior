@@ -19,7 +19,7 @@
 
     ],
     "cart_toy": [
-        
+        "contains"
     ],
     "coin": [
 
@@ -38,7 +38,8 @@
         "thrown"
     ],
     "gear_pole": [
-        "thrown"
+        "thrown",
+        "contains"
     ],
     "mini_broom": [
         "thrown"
@@ -78,7 +79,8 @@
     ],
     "winnie_cabinet": [
         "open",
-        "toggled"
+        "toggled",
+        "contains"
     ],
     "yellow_donut_ring":
     [
