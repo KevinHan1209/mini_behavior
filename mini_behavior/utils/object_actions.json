@@ -1,8 +1,6 @@
 {
     "alligator_busy_box": [
-        "toggle",
-        "pickup",
-        "drop"
+        "toggle"
     ],
     "ball": [
         "pickup",
@@ -23,12 +21,16 @@
     "broom_set": [
         "pickup",
         "drop",
-        "throw"
+        "throw",
+        "assemble",
+        "disasssemble"
     ],
     "bucket_toy": [
         "pickup",
         "drop",
-        "dropin"
+        "dropin",
+        "noise_toggle",
+        "throw"
     ],
     "cart_toy": [
         "dropin",
@@ -38,36 +40,38 @@
     ],
     "coin": [
         "pickup",
-        "drop"
+        "drop",
+        "dropin"
     ],
     "cube": [
         "pickup",
-        "drop"
+        "drop",
+        "inside"
     ],
     "cube_cabinet": [
-        "pickup",
-        "drop"
+        "takeout",
+        "putin"
     ],
     "farm_toy": [
-        "toggle",
-        "pickup",
-        "drop"
+        "toggle"
     ],
     "gear": [
         "pickup",
         "drop",
-        "throw"
+        "throw",
+        "assemble"
     ],
-    "gear_pole": [
-        "pickup",
-        "drop"
-    ],
-    "mini_broom": [
-        "throw"
-    ],
-    "music_toy": [
+    "gear_toy": [
         "pickup",
         "drop",
+        "assemble",
+        "disassemble"
+    ],
+    "mini_broom": [
+        "throw",
+        "assemble"
+    ],
+    "music_toy": [
         "noise_toggle"
     ],
     "piggie_bank": [
@@ -75,13 +79,16 @@
         "pickup",
         "drop",
         "toggle",
-        "throw"
+        "throw",
+        "dropin",
+        "takeout"
     ],
     "rattle": [
         "pickup",
         "drop",
         "noise_toggle",
-        "throw"
+        "throw",
+        "dropin"
     ],
     "red_spiky_ball": [
         "pickup",
@@ -90,27 +97,29 @@
     ],
     "ring_toy": [
         "pickup",
-        "drop"
+        "drop",
+        "throw"
     ],
     "shape_sorter": [
         "pickup",
         "drop"
     ],
     "stroller": [
-        "pickup",
-        "drop"
+        "push",
+        "pull",
+        "putin",
+        "takeout"
     ],
     "tree_busy_box": [
-        "pickup",
-        "drop"
+        "toggle"
     ],
     "winnie": [
         "pickup",
-        "drop"
+        "drop",
+        "throw"
     ],
     "winnie_cabinet": [
-        "pickup",
-        "drop"
+        "toggle"
     ],
     "yellow_donut_ring": [
         "pickup",

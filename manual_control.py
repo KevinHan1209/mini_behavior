@@ -127,7 +127,7 @@ def key_handler_cartesian(event):
     if event.key == 'up':
         step(env.actions.forward)
         return
-    if event.key == 'k':
+    if event.key == 'o':
         step(env.actions.kick)
         return
     # Spacebar
@@ -182,12 +182,6 @@ def key_handler_primitive(event):
         elif event.key == 't':
             action_list.append(env.manipulation_actions.toggle)
             valid_action = True
-        elif event.key == 's':
-            action_list.append(env.manipulation_actions.shake_bang)
-            valid_action = True
-        elif event.key == 'i':
-            action_list.append(env.manipulation_actions.drop_in)
-            valid_action = True
         elif event.key == 'p':
             action_list.append(env.manipulation_actions.throw_0)
             valid_action = True
@@ -202,6 +196,12 @@ def key_handler_primitive(event):
             valid_action = True
         elif event.key == 'x':
             action_list.append(env.manipulation_actions.dropin)
+            valid_action = True
+        elif event.key == '3':
+            action_list.append(env.manipulation_actions.assemble)
+            valid_action = True
+        elif event.key == '4':
+            action_list.append(env.manipulation_actions.disassemble)
             valid_action = True
         if not valid_action:
             print("Invalid object manipulation action, please try again.")
@@ -220,7 +220,7 @@ def key_handler_primitive(event):
         elif event.key == 'up':
             action_list.append(env.locomotion_actions.forward)
             valid_action = True
-        elif event.key == 'k':
+        elif event.key == '2':
             action_list.append(env.locomotion_actions.kick)
             valid_action = True
 

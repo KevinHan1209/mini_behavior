@@ -1,28 +1,36 @@
 {
     "alligator_busy_box": [
-       "toggled"
+       "toggled",
+       "inside"
     ],
     "ball": [
-        "thrown"
+        "thrown",
+        "inside"
     ],
     "beach_ball": [
         "kicked",
-        "thrown"
+        "thrown",
+        "inside"
     ],
     "broom": [
         "thrown"
     ],
     "broom_set": [
-        "thrown"
+        "thrown",
+        "inside"
     ],
     "bucket_toy": [
-
+        "contains",
+        "inside",
+        "noise",
+        "thrown"
     ],
     "cart_toy": [
         "contains"
     ],
     "coin": [
-
+        "inside",
+        "thrown"
     ],
     "cube": [
 
@@ -35,34 +43,44 @@
         "toggled"
     ],
     "gear": [
-        "thrown"
-    ],
-    "gear_pole": [
         "thrown",
-        "contains"
+        "inside",
+        "attached"
+    ],
+    "gear_toy": [
+        "thrown",
+        "contains",
+        "attached"
     ],
     "mini_broom": [
-        "thrown"
+        "thrown",
+        "inside",
+        "attached"
     ],
     "music_toy": [
         "noise",
-        "thrown"
+        "thrown",
+        "inside"
     ],
     "piggie_bank": [
         "noise",
         "open",
         "toggled",
-        "thrown"
+        "thrown",
+        "contains"
     ],
     "rattle": [
         "noise",
-        "thrown"
+        "thrown",
+        "inside"
     ],
     "red_spiky_ball": [
-        "thrown"
+        "thrown",
+        "inside"
     ],
     "ring_toy": [
-        "thrown"
+        "thrown",
+        "inside"
     ],
     "shape_sorter": [
 
@@ -75,15 +93,16 @@
 
     ],
     "winnie": [
-        "thrown"
+        "thrown",
+        "inside"
     ],
     "winnie_cabinet": [
         "open",
-        "toggled",
         "contains"
     ],
     "yellow_donut_ring":
     [
-        "thrown"
+        "thrown",
+        "inside"
     ]
 }

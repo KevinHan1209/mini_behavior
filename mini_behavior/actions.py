@@ -1,11 +1,11 @@
 import numpy as np
 
-def find_tool(env, possible_tool_types):
+def find_tool(env, possible_tool_types, arm):
     # returns whether agent is carrying a obj of possible_tool_types, and the obj_instance
     for tool_type in possible_tool_types:
         tools = env.objs.get(tool_type, []) # objs of type tool in the env
         for tool in tools:
-            if tool.check_abs_state(env, 'inhandofrobot'):
+            if tool.check_abs_state(env, 'in' + arm + 'handofrobot'):
                 return True
     return False
 
@@ -45,38 +45,54 @@ class Assemble(BaseAction):
         self.key = 'assemble'
         self.tools = ["broom", "gear"]
 
-    def can(self, obj):
+    def can(self, obj, arm):
         """
         can only do this if 
-        -baby is holding the correct object, 
-        -the existing state is Attached = False, 
+        -agent is holding the correct objects
+        -the existing state is Attached = False
+        -contain objecct is not at capacity
         """
-        if super().can(obj) and obj.states['attached'].get_value() == False:
-            if obj.get_name() == "gear_toy" and find_tool(self.env, ["gear"]):
-                return True
-            if obj.get_name() == "broom_set" and find_tool(self.env, ["mini_broom"]):
-                return True
-        return False
+        opp_arm = "left" if arm == "right" else "right"
+        if self.env.carrying[arm] == set() or self.env.carrying[opp_arm] == set():
+            return False
+        # Check that both arms are holding the right objects
+        if super().can(obj, arm):
+            print("obj get name:", obj.get_name())
+            if "gear_toy" in obj.get_name(): 
+                if not find_tool(self.env, ["gear"], opp_arm):
+                    return False
+            elif "gear" in obj.get_name():
+                if not find_tool(self.env, ["gear_toy"], opp_arm):
+                    return False
+            elif "broom_set" in obj.get_name():
+                if not find_tool(self.env, ["mini_broom"], opp_arm):
+                    return False
+            elif "mini_broom" in obj.get_name():
+                if not find_tool(self.env, ["broom_set"], opp_arm):
+                    return False
 
-    def do(self, obj):
-        super().do(obj)
+        # check if container object is at capacity
+        main_arm = arm if ("gear_toy" in obj.get_name() or "broom_set" in obj.get_name()) else opp_arm
+        container_obj = list(self.env.carrying[main_arm])[0]
+        if container_obj.states['contains'].get_num_objs() > container_obj.max_contain:
+            return False
+
+        return True
+
+    def do(self, obj, arm):
+        """
+        Find arm with the "attachee" (gear pole or broom set) and attach to that arm
+        """
+        super().do(obj, arm)
         obj.states['attached'].set_value(True)
-        # find correct tool that is in hand of the agent
-        if obj.get_name() == "gear_toy":
-            toys = self.env.objs.get("gear", []) 
-        elif obj.get_name() == "broom_set":
-            toys = self.env.objs.get("mini_broom, []")
-        for toy in toys:
-            if toy.check_abs_state(self.env, 'inhandofrobot'):
-                # once found, put tool "inside" of obj
-                toy.states['inside'].set_value(obj, True)
-                self.env.carrying.discard(obj)
-                fwd_pos = self.env.front_pos
-                obj.cur_pos = fwd_pos
-
-        fwd_pos = self.env.front_pos
-        obj.cur_pos = fwd_pos
-        self.env.grid.set(*fwd_pos, obj)
+        opp_arm = "left" if arm == "right" else "right"
+        main_arm = arm if ("gear_toy" in obj.get_name() or "broom_set" in obj.get_name()) else opp_arm
+        other_arm = "left" if main_arm == "right" else "right"
+        list(self.env.carrying[other_arm])[0].states['attached'].set_value(True)
+        list(self.env.carrying[main_arm])[0].states["attached"].set_value(True)
+        list(self.env.carrying[main_arm])[0].states["contains"].add_obj(list(self.env.carrying[other_arm])[0])
+        self.env.carrying[other_arm].discard(obj)
+        
 
 class Disassemble(BaseAction):
     """
@@ -86,37 +102,23 @@ class Disassemble(BaseAction):
         super(Disassemble, self).__init__(env)
         self.key = 'disassemble'
     
-    def can(self, obj):
+    def can(self, obj, arm):
         """
         can only do this if Attached is True
         """
-
-        # For primitive action type, can only carry one object at a time
-        if len(self.env.carrying) != 0 and self.env.mode == "primitive":
-            assert len(self.env.carrying) == 1
+        if not super().can(obj, arm) or not obj.states['attached'].get_value(self.env):
             return False
-
-        # cannot pickup if carrying
-        if obj.check_abs_state(self.env, 'inhandofrobot'):
-            return False
+        assert "gear_toy" in obj.get_name() or "broom_set" in obj.get_name()
+        opp_arm = "left" if arm == "right" else "right"
         
-        return super().can(obj) and obj.states['attached'].get_value()
+        return not self.env.carrying[opp_arm]
 
-    def do(self, obj):
-        super().do(obj)
-        objs = self.env.grid.get_all_objs(*obj.cur_pos)
-        for toy in objs:
-            # Find the toy inside
-            if toy.get_name() != obj.get_name():
-                self.env.carrying.add(toy) # carry toy
-                self.env.grid.remove(*obj.cur_pos, toy) # remove the toy from inside other object
-                toy.states['inside'].set_value(obj, False)
-                found = True
-
-        obj.states['attached'].set_value(False)
-
-        # check dependencies
-        assert found
+    def do(self, obj, arm):
+        super().do(obj, arm)
+        other_arm = "left" if arm == "right" else "right"
+        detached_object = obj.states["contains"].remove_obj()
+        detached_object.states["attached"].set_value(False)
+        self.env.carrying[other_arm].add(detached_object)
 
 
 class Close(BaseAction):
@@ -203,12 +205,18 @@ class DropIn(BaseAction):
         
         if obj.states['contains'].get_num_objs() > obj.max_contain:
             return False
+        
+        # Edge cases
+        if "piggie_bank" in obj.get_name():
+            # Cannot drop in if object is not a coin or piggie bank is not open
+            return "coin" in list(self.env.carrying[arm])[0].get_name() and obj.states['open'].get_value(self.env)
 
         return True
 
     def do(self, obj, arm):
         # dropin
         super().do(obj, arm)
+        list(self.env.carrying[arm])[0].states["inside"].set_value(True)
         obj.states['contains'].add_obj(list(self.env.carrying[arm])[0])
         self.env.carrying[arm].clear()
         
@@ -231,11 +239,18 @@ class TakeOut(BaseAction):
         if len(self.env.carrying[arm]) != 0:
             return False
         
+        # Edge cases
+        if "piggie_bank" in obj.get_name():
+            # Cannot take out piggie bank is not open
+            return obj.states['open'].get_value(self.env)
+        
         return True
     
     def do(self, obj, arm):
         super().do(obj, arm)
-        self.env.carrying[arm].add(obj.states['contains'].remove_obj())
+        takeout_object = obj.states['contains'].remove_obj()
+        takeout_object.states["inside"].set_value(False)
+        self.env.carrying[arm].add(takeout_object)
 
 
 
@@ -288,11 +303,6 @@ class Pickup(BaseAction):
         # update cur_pos of obj
         obj.update_pos(np.array([-1, -1]))
 
-        # We need to remove "inside"
-        fwd_pos = self.env.front_pos
-        furniture = self.env.grid.get_furniture(*fwd_pos, dim)
-        if furniture is not None:
-            obj.states['inside'].set_value(furniture, False)
 
         # check dependencies
         assert obj.check_abs_state(self.env, 'in' + arm + 'handofrobot')
@@ -326,7 +336,7 @@ class Pull(BaseAction):
             return False
         # Agent cannot be carrying another item in the same arm when pulling the cart
         if len(self.env.carrying[arm]) != 0:
-            assert len(self.env.carryiong[arm]) == 1
+            assert len(self.env.carrying[arm]) == 1
             return False
         
         agent_pos = list(self.env.agent_pos).copy()

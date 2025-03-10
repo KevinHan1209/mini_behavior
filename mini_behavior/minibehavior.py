@@ -53,14 +53,16 @@ class MiniBehaviorEnv(MiniGridEnv):
     '''
     class ObjectActions(IntEnum):
         toggle = 0
-        shake_bang = 1
-        pickup_0 = 2
-        drop_0 = 3
-        throw_0 = 4
-        push = 5
-        pull = 6
+        pickup_0 = 1
+        drop_0 = 2
+        throw_0 = 3
+        push = 4
+        pull = 5
+        noise_toggle = 6
         takeout = 7
         dropin = 8
+        assemble = 9
+        disassemble = 10
 
     class LocoActions(IntEnum):
         left = 0
@@ -124,8 +126,6 @@ class MiniBehaviorEnv(MiniGridEnv):
 
                 if obj_type in OBJECT_CLASS.keys():
                     obj_instance = OBJECT_CLASS[obj_type](name=obj_name)
-                elif obj_type == 'cart_toy':
-                    obj_instance = WorldObj(obj_type, None, obj_name, max_contain = 5)
                 else:
                     obj_instance = WorldObj(obj_type, None, obj_name)
 
@@ -551,8 +551,8 @@ class MiniBehaviorEnv(MiniGridEnv):
             null_right = True
             if manip_action_left != manip_action_right and manip_action_right in ["push", "pull"]:
                 null_actions = True
-        
-        print("\nCURRENTLY CARRYING: ",self.carrying, end='\n\n')
+        # Set noise states to false at first
+        self.silence()
         # Go through manipulation actions for each arm
         for arm_action, arm in zip([manip_action_left, manip_action_right], ["left", "right"]):
             if null_actions or (arm == "right" and null_right):
@@ -561,10 +561,6 @@ class MiniBehaviorEnv(MiniGridEnv):
             if arm_action != -1:  # -1 means no action taken
                 curr_action = self.manipulation_actions(arm_action)
                 action_name = curr_action.name  # Convert index to action name
-
-                # Silence noise state if no noise_inducing actions are taken
-                if "noise_toggle" not in action_name or "shake/bang" not in action_name:
-                    self.silence()
                 self.action_done = False
 
                 # Define dimension if picking up, dropping, or throwing (dim = 0 always for infant exploration)
@@ -616,7 +612,6 @@ class MiniBehaviorEnv(MiniGridEnv):
                             if self.action_done:
                                 break
                         if self.action_done:
-                            self.update_states()
                             break
                 # Push/pull cart item (front cell only)
                 elif action_name in ["push", "pull"]:
@@ -634,8 +629,6 @@ class MiniBehaviorEnv(MiniGridEnv):
                         if action_class(self).can(list(self.carrying[arm])[0], arm):
                             action_class(self).do(list(self.carrying[arm])[0], arm)
                             self.action_done = True
-                            if action_name == "noise_toggle" and not any(substring in obj.get_name() for substring in ["music_toy", "piggie_bank"]):
-                                self.silence()
                 # If the agent is not holding an object, then it will perform the action on surrounding objects
                 else:
                     for cell in seq:
@@ -644,15 +637,13 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 if is_obj(obj) and action_class(self).can(obj, arm):
                                     action_class(self).do(obj, arm)
                                     self.action_done = True
-                                    # Take care of noise state if action is toggle but not on a noisy object
-                                    if action_name == "noise_toggle" and not any(substring in obj.get_name() for substring in ["music_toy", "piggie_bank"]):
-                                        self.silence()
                                     break
                             if self.action_done:
                                 break
                         if self.action_done:
-                            self.update_states()
                             break
+            self.update_states()
+            print("\nCURRENTLY CARRYING: ", self.carrying, end='\n\n')
 
         # Go through locomotion action
         if not null_loco:

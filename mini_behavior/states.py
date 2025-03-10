@@ -85,21 +85,16 @@ class InSameRoomAsRobot(AbsoluteObjectState):
 # ABSOLUTE OBJECT STATES
 
 class Attached(AbilityState):
+    '''
+    Dependent on Contains state. Logic implemented in assemble/disassemble action class. 
+    '''
     def __init__(self, obj, key):
         super(Attached, self).__init__(obj, key)
-        self.attached_objects = []
-
-    def add_obj(self, obj):
-        self.contained_objects.append(obj)
     
-    def remove_obj(self):
-        return self.contained_objects.pop(0)
+    def get_value(self, env):
+        # Logic implemented in Contains
+        return self.value
 
-    def get_num_objs(self, env):
-        return len(self.attached_objects)
-    
-    def get_value(self):
-        return self.attached_objects != []
 
 class Contains(AbilityState):
     '''
@@ -134,6 +129,16 @@ class Flipped(AbilityState):
         Flipped can take on a set of values depending on how many ways you can flip the object
         Done through flip action
         '''
+        return self.value
+    
+class Inside(AbilityState):
+    """
+    Depends on contains state. Logic implemented in dropin/takeout action class.
+    """
+    def __init__(self, obj, key):
+        super(Inside, self).__init__(obj, key)
+
+    def get_value(self, env):
         return self.value
     
 class Kicked(AbilityState):
@@ -209,30 +214,6 @@ class AtSameLocation(RelativeObjectState):
                     return True
 
         return False
-
-
-class Inside(RelativeObjectState):
-    """
-    Inside(obj1, obj2) change ONLY IF Pickup(obj1) or Drop(obj1) is called
-    """
-    def __init__(self, obj, key): # env
-        super(RelativeObjectState, self).__init__(obj, key)
-        self.type = 'relative'
-
-    def _get_value(self, other, env=None):
-        # return other in self.inside_of
-        if self.obj == other or other is None:
-            return False
-
-        return other == self.obj.inside_of
-
-    def _set_value(self, other, new_value):
-        if new_value:
-            self.obj.inside_of = other
-            other.contains = self.obj
-        else:
-            self.obj.inside_of = None
-            other.contains = None
 
 
 # TODO: fix for furniture

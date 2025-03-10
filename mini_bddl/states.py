@@ -41,9 +41,10 @@ ABILITIES = [
     'contains',
     'kicked',
     'noise',
+    'inside',
+    'attached',
     'open',
     'popup',
-    #'flipped',
     "thrown",
     "toggled",
 ]
