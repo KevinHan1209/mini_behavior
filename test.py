@@ -3,7 +3,6 @@ import gym
 from NovelD_PPO import NovelD_PPO
 import numpy as np
 import torch
-import time
 import wandb
 from array2gif import write_gif
 from env_wrapper import CustomObservationWrapper
@@ -210,11 +209,16 @@ def main():
     env_id = 'MiniGrid-MultiToy-8x8-N2-v0'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Train model.
+    # Train model
     noveld_ppo = train_agent(env_id, device)
     
-    # Test model.
+    # Test model
     test_agent(env_id, noveld_ppo, device)
+
+    # # Test checkpoints
+    # noveld_ppo = NovelD_PPO(env_id, device)
+    # noveld_ppo.load_checkpoint('checkpoints/checkpoint_10000.pt')
+    # test_agent(env_id, noveld_ppo, device)
 
 
 if __name__ == "__main__":
