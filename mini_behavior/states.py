@@ -131,6 +131,30 @@ class Flipped(AbilityState):
         '''
         return self.value
     
+class GotHit(AbilityState):
+    '''
+    True if obj is hit by another object
+    False if not
+    '''
+    def __init__(self, obj, key):
+        super(GotHit, self).__init__(obj, key)
+
+    def get_value(self, env):
+        # Logic implemented in Hit action class
+        return self.value
+
+class Hitter(AbilityState):
+    '''
+    Anything that can be picked up can be a hitter
+    '''
+    def __init__(self, obj, key):
+        super(Hitter, self).__init__(obj, key)
+
+    def get_value(self, env):
+        # Logic implemented in Hit action class
+        return self.value
+    
+    
 class Inside(AbilityState):
     """
     Depends on contains state. Logic implemented in dropin/takeout action class.

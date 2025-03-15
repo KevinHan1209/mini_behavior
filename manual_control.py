@@ -203,6 +203,12 @@ def key_handler_primitive(event):
         elif event.key == '4':
             action_list.append(env.manipulation_actions.disassemble)
             valid_action = True
+        elif event.key == '5':
+            action_list.append(env.manipulation_actions.hit)
+            valid_action = True
+        elif event.key == '6':  
+            action_list.append(env.manipulation_actions.hitwithobject)
+            valid_action = True
         if not valid_action:
             print("Invalid object manipulation action, please try again.")
 

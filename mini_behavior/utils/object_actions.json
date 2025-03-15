@@ -1,78 +1,101 @@
 {
     "alligator_busy_box": [
-        "toggle"
+        "toggle",
+        "hit"
     ],
     "ball": [
         "pickup",
         "drop",
-        "throw"
+        "throw",
+        "hitwithobject",
+        "hit"
     ],
     "beach_ball": [
         "pickup",
         "drop",
         "kick",
-        "throw"
+        "throw",
+        "hitwithobject",
+        "hit"
     ],
     "broom": [
         "pickup",
         "drop",
-        "throw"
+        "throw",
+        "hitwithobject",
+        "hit"
     ],
     "broom_set": [
         "pickup",
         "drop",
         "throw",
         "assemble",
-        "disasssemble"
+        "disasssemble",
+        "hitwithobject",
+        "hit"
     ],
     "bucket_toy": [
         "pickup",
         "drop",
         "dropin",
         "noise_toggle",
-        "throw"
+        "throw",
+        "hitwithobject",
+        "hit"
     ],
     "cart_toy": [
         "dropin",
         "takeout",
         "push",
-        "pull"
+        "pull",
+        "hit"
     ],
     "coin": [
         "pickup",
         "drop",
-        "dropin"
+        "dropin",
+        "hitwithobject",
+        "hit"
     ],
     "cube": [
         "pickup",
         "drop",
-        "inside"
+        "hitwithobject",
+        "hit"
     ],
     "cube_cabinet": [
         "takeout",
-        "putin"
+        "putin",
+        "hit"
     ],
     "farm_toy": [
-        "toggle"
+        "toggle",
+        "hit"
     ],
     "gear": [
         "pickup",
         "drop",
         "throw",
-        "assemble"
+        "assemble",
+        "hitwithobject",
+        "hit"
     ],
     "gear_toy": [
         "pickup",
         "drop",
         "assemble",
-        "disassemble"
+        "disassemble",
+        "hitwithobject",
+        "hit"
     ],
     "mini_broom": [
         "throw",
-        "assemble"
+        "assemble",
+        "hit"
     ],
     "music_toy": [
-        "noise_toggle"
+        "noise_toggle",
+        "hit"
     ],
     "piggie_bank": [
         "noise_toggle",
@@ -81,50 +104,67 @@
         "toggle",
         "throw",
         "dropin",
-        "takeout"
+        "takeout",
+        "hitwithobject",
+        "hit"
     ],
     "rattle": [
         "pickup",
         "drop",
         "noise_toggle",
         "throw",
-        "dropin"
+        "dropin",
+        "hitwithobject",
+        "hit"
     ],
     "red_spiky_ball": [
         "pickup",
         "drop",
-        "throw"
+        "throw",
+        "hitwithobject",
+        "hit"
     ],
     "ring_toy": [
         "pickup",
         "drop",
-        "throw"
+        "throw",
+        "hitwithobject",
+        "hit"
     ],
     "shape_sorter": [
         "pickup",
-        "drop"
+        "drop",
+        "hitwithobject",
+        "hit"
     ],
     "stroller": [
         "push",
         "pull",
         "putin",
-        "takeout"
+        "takeout",
+        "hit"
     ],
     "tree_busy_box": [
-        "toggle"
+        "toggle",
+        "hit"
     ],
     "winnie": [
         "pickup",
         "drop",
-        "throw"
+        "throw",
+        "hitwithobject",
+        "hit"
     ],
     "winnie_cabinet": [
-        "toggle"
+        "toggle",
+        "hit"
     ],
     "yellow_donut_ring": [
         "pickup",
         "drop",
-        "throw"
+        "throw",
+        "hitwithobject",
+        "hit"
     ]
 }
 

@@ -63,6 +63,8 @@ class MiniBehaviorEnv(MiniGridEnv):
         dropin = 8
         assemble = 9
         disassemble = 10
+        hit = 11
+        hitwithobject = 12
 
     class LocoActions(IntEnum):
         left = 0
@@ -621,6 +623,19 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 action_class(self).do(obj, arm)
                                 self.action_done = True
                                 null_loco = True
+                                break
+                        if self.action_done:
+                            break
+                # Need separate logic for hit and hitwithobject because we don't want to perform hit on anything in agent's hands
+                elif action_name in ['hit', 'hitwithobject']:
+                    for cell in seq:
+                        for dim in cell:
+                            for obj in dim:
+                                if is_obj(obj) and action_class(self).can(obj, arm):
+                                    action_class(self).do(obj, arm)
+                                    self.action_done = True
+                                    break
+                            if self.action_done:
                                 break
                         if self.action_done:
                             break

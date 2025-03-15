@@ -220,6 +220,39 @@ class DropIn(BaseAction):
         obj.states['contains'].add_obj(list(self.env.carrying[arm])[0])
         self.env.carrying[arm].clear()
         
+
+
+class HitWithObject(BaseAction):
+    def __init__(self, env):
+        super(HitWithObject, self).__init__(env)
+        self.key = 'hitwithobject'
+
+    def can(self, obj, arm):
+        """
+        agent can hit anything with anything it's carrying
+        """
+        return super().can(obj, arm) and self.env.carrying[arm]
+
+    def do(self, obj, arm):
+        list(self.env.carrying[arm])[0].states["hitter"].set_value(True)
+        obj.states["gothit"].set_value(True)
+
+class Hit(BaseAction):
+    def __init__(self, env):
+        super(Hit, self).__init__(env)
+        self.key = 'hit'
+
+    def can(self, obj, arm):
+        """
+        agent can hit anything with arms. just make sure agent is not carrying or else that should be HitWithObject
+        """
+        if self.env.carrying[arm]:
+            return False
+        return super().can(obj, arm)
+
+    def do(self, obj, arm):
+        super().do(obj, arm)
+        obj.states["gothit"].set_value(True)
             
 
 class TakeOut(BaseAction):

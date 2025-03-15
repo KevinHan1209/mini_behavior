@@ -57,6 +57,8 @@ STATE_FUNC_MAPPING = {
     'atsamelocation': AtSameLocation,
     'contains': Contains,
     'flipped': Flipped,
+    'hitter' : Hitter,
+    'gothit': GotHit,
     'infovofrobot': InFOVOfRobot,
     'inrighthandofrobot': InRightHandOfRobot,
     'inlefthandofrobot': InLeftHandOfRobot,
