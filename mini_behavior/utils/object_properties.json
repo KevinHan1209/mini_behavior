@@ -38,7 +38,9 @@
     ],
     "cart_toy": [
         "contains",
-        "gothit"
+        "gothit",
+        "pullshed",
+        "climbed"
     ],
     "coin": [
         "inside",
@@ -117,7 +119,9 @@
         "gothit"
     ],
     "stroller": [
-        "gothit"
+        "gothit",
+        "pullshed",
+        "climbed"
     ],
     "tree_busy_box": [
         "toggled",

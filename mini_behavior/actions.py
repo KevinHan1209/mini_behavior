@@ -384,6 +384,7 @@ class Pull(BaseAction):
         self.env.agent_pos = agent_old_pos - self.env.dir_vec
         obj.cur_pos = agent_old_pos
         self.env.grid.set(*agent_old_pos, obj, int(0))
+        obj.states['Pullshed'].set_value(True)
 
 class Push(BaseAction):
     def __init__(self, env):
@@ -428,6 +429,8 @@ class Push(BaseAction):
         obj.cur_pos = front_pos
         self.env.agent_pos = obj_pos
         self.env.grid.set(*front_pos, obj, int(0))
+        obj.states['Pullshed'].set_value(True)
+
 
 class NoiseToggle(BaseAction):
     def __init__(self, env):

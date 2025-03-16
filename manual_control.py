@@ -130,6 +130,9 @@ def key_handler_cartesian(event):
     if event.key == 'o':
         step(env.actions.kick)
         return
+    if event.key == 'c':
+        step(env.actions.climb)
+        return
     # Spacebar
     if event.key == ' ':
         render_furniture()
@@ -228,6 +231,9 @@ def key_handler_primitive(event):
             valid_action = True
         elif event.key == '2':
             action_list.append(env.locomotion_actions.kick)
+            valid_action = True
+        elif event.key == 'c':
+            action_list.append(env.locomotion_actions.climb)
             valid_action = True
 
         if not valid_action:

@@ -71,6 +71,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         right = 1
         forward = 2
         kick = 3
+        climb = 4
 
 
     def __init__(
@@ -176,6 +177,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.mode = mode
 
         self.carrying = {key: set() for key in ['left', 'right']}
+        self.currently_climbing = False
 
 
 
@@ -534,6 +536,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.step_count += 1
         self.action_done = True
 
+
         # Parse action components
         manip_action_left, manip_action_right, locomotion_action = action
 
@@ -553,6 +556,9 @@ class MiniBehaviorEnv(MiniGridEnv):
             null_right = True
             if manip_action_left != manip_action_right and manip_action_right in ["push", "pull"]:
                 null_actions = True
+        # If the agent has climbed onto something, nullify locomotive actions
+        if self.currently_climbing and not (locomotion_action == self.locomotion_actions.climb):
+            null_loco = True
         # Set noise states to false at first
         self.silence()
         # Go through manipulation actions for each arm
@@ -693,6 +699,19 @@ class MiniBehaviorEnv(MiniGridEnv):
                             self.grid.set(*new_pos, obj, dim)
                             obj.states['kicked'].set_value(True)
                             break
+            elif locomotion_action == self.locomotion_actions.climb:
+                for obj in fwd_cell[int(0)]:
+                    if is_obj(obj) and obj.possible_action('climb'):
+                        print("object recognized: ", obj.get_name())
+                        if 'stroller' in obj.get_name() or 'cart_toy' in obj.get_name():
+                            self.currently_climbing = not self.currently_climbing
+                            obj.states['climbed'].set_value(True)
+                            self.action_done = True
+                            print("Climb was executed")
+                            break
+
+
+
 
         self.update_states()
         reward = self._reward()

@@ -95,6 +95,18 @@ class Attached(AbilityState):
         # Logic implemented in Contains
         return self.value
 
+class Climbed(AbilityState):
+    def __init__(self, obj, key):
+        super(Climbed, self).__init__(obj, key)
+
+    def get_value(self, env):
+        '''
+        True if obj is climbed by agent
+        False if not
+        Logic implemented in environment
+        '''
+        return self.value
+
 
 class Contains(AbilityState):
     '''
@@ -202,6 +214,19 @@ class Opened(AbilityState):
         super(Opened, self).__init__(obj, key)
 
     def get_value(self, env):
+        return self.value
+    
+class Pullshed(AbilityState):
+    '''
+    Agent has pushed or pulled an object (not a great name I know)
+    '''
+    def __init__(self, obj, key):
+        super(Pullshed, self).__init__(obj, key)
+
+    def get_value(self, env):
+        '''
+        Logic implemented in Push and Pull actions
+        '''
         return self.value
 
 class Thrown(AbilityState):

@@ -55,6 +55,7 @@ FURNATURE_STATES = []
 STATE_FUNC_MAPPING = {
     'attached': Attached,
     'atsamelocation': AtSameLocation,
+    'climbed': Climbed,
     'contains': Contains,
     'flipped': Flipped,
     'hitter' : Hitter,
@@ -69,10 +70,10 @@ STATE_FUNC_MAPPING = {
     'nextto': NextTo,
     'noise': Noise,
     'open': Opened,
+    'pullshed': Pullshed,
     'popup': Popup,
     'thrown': Thrown,
     'toggled': ToggledOn
-    # 'touching', TODO: uncomment once implemented
 }
 
 
