@@ -93,6 +93,26 @@ class Assemble(BaseAction):
         list(self.env.carrying[main_arm])[0].states["contains"].add_obj(list(self.env.carrying[other_arm])[0])
         self.env.carrying[other_arm].discard(obj)
         
+class Brush(BaseAction):
+    def __init__(self, env):
+        super(Brush, self).__init__(env)
+        self.key = 'brush'
+
+    def can(self, obj, arm):
+        """
+        can only do this if:
+        - agent is holding the correct objects (any type of broom)
+        """
+        if not super().can(obj, arm):
+            return False
+        if "broom" not in obj.get_name() or "broom_set" in obj.get_name():
+            return False
+        
+        return True
+
+    def do(self, obj, arm):
+        super().do(obj, arm)
+        obj.states['usebrush'].set_value(True)
 
 class Disassemble(BaseAction):
     """

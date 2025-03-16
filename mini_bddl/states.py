@@ -22,6 +22,7 @@ ALL_STATES = [
     'hitter',
     'gothit',
     'mouthed',
+    'usebrush'
 ]
 
 # Touching
@@ -55,7 +56,8 @@ ABILITIES = [
     'pullshed',
     'hitter',
     'mouthed',
-    'gothit'
+    'gothit',
+    'usebrush'
 ]
 
 FURNATURE_STATES = []
@@ -83,7 +85,8 @@ STATE_FUNC_MAPPING = {
     'pullshed': Pullshed,
     'popup': Popup,
     'thrown': Thrown,
-    'toggled': ToggledOn
+    'toggled': ToggledOn,
+    'usebrush': UseBrush
 }
 
 

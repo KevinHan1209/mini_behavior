@@ -253,6 +253,18 @@ class ToggledOn(AbilityState):
 
     def get_value(self, env):
         return self.value
+    
+class UseBrush(AbilityState): 
+    def __init__(self, obj, key):
+        super(UseBrush, self).__init__(obj, key)
+
+    def get_value(self, env):
+        """
+        True if brush is used on object. State is for brush object ONLY
+        False if not
+        Logic implemented in brush action class
+        """
+        return self.value
 
 
 ###########################################################################################################

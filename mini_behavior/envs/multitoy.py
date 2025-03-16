@@ -19,9 +19,8 @@ class MultiToyEnv(RoomGrid):
             max_steps=1e5,
     ):
         self.num_objs = {
-            'alligator_busy_box': 1, 'beach_ball': 1, 'cart_toy': 1, 'coin': 1, 
-            'music_toy': 1, 'piggie_bank': 1, 'gear_toy': 1, 'gear' : 3,
-            'rattle': 1
+            'alligator_busy_box': 1, 'broom': 1, 'beach_ball': 1, 'cart_toy': 1, 'coin': 1, 
+            'music_toy': 1, 'piggie_bank': 1, 'gear_toy': 1
         }
 
         self.mission = 'explore'

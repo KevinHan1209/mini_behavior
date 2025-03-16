@@ -23,7 +23,8 @@
         "thrown",
         "gothit",
         "hitter",
-        "mouthed"
+        "mouthed",
+        "usebrush"
     ],
     "broom_set": [
         "thrown",
@@ -88,7 +89,8 @@
         "thrown",
         "inside",
         "attached",
-        "gothit"
+        "gothit",
+        "usebrush"
     ],
     "music_toy": [
         "noise",

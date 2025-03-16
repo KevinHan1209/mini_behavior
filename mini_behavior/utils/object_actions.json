@@ -26,7 +26,8 @@
         "throw",
         "hitwithobject",
         "hit",
-        "mouthing"
+        "mouthing",
+        "brush"
     ],
     "broom_set": [
         "pickup",
@@ -99,9 +100,13 @@
         "mouthing"
     ],
     "mini_broom": [
+        "pickup",
+        "drop",
         "throw",
         "assemble",
-        "hit"
+        "hit",
+        "brush",
+        "hitwithobject"
     ],
     "music_toy": [
         "noise_toggle",

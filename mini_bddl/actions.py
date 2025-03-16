@@ -1,9 +1,10 @@
 from mini_behavior.actions import *
 
-ALL_ACTIONS = ['pickup', 'drop', 'toggle', 'noise_toggle', 'throw', 'push', 'pull', 'takeout', 'dropin', 'assemble', 'disassemble', 'hit', 'hitwithobject']
+ALL_ACTIONS = ['pickup', 'drop', 'toggle', 'noise_toggle', 'throw', 'push', 'pull', 'takeout', 'dropin', 'assemble', 'disassemble', 'hit', 'hitwithobject', 'brush']
 DEFAULT_ACTIONS = []
 
 ACTION_FUNC_MAPPING = {
+    'brush': Brush,
     'pickup': Pickup,
     'drop': Drop,
     'toggle': Toggle,
