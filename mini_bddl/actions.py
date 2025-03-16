@@ -16,8 +16,9 @@ ACTION_FUNC_MAPPING = {
     'assemble': Assemble,
     'disassemble': Disassemble,
     'hit' : Hit,
-    'hitwithobject' : HitWithObject
+    'hitwithobject' : HitWithObject,
+    'mouthing': Mouthing
 }
 
-CONTROLS = ['left', 'right', 'forward', 'kick']  # 'down'
+CONTROLS = ['left', 'right', 'forward', 'kick', 'climb']  # 'down'
 

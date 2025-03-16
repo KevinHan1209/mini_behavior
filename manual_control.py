@@ -200,6 +200,9 @@ def key_handler_primitive(event):
         elif event.key == 'x':
             action_list.append(env.manipulation_actions.dropin)
             valid_action = True
+        elif event.key == 'm':
+            action_list.append(env.manipulation_actions.mouthing)
+            valid_action = True
         elif event.key == '3':
             action_list.append(env.manipulation_actions.assemble)
             valid_action = True

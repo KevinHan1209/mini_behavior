@@ -253,7 +253,19 @@ class Hit(BaseAction):
     def do(self, obj, arm):
         super().do(obj, arm)
         obj.states["gothit"].set_value(True)
-            
+
+class Mouthing(BaseAction):
+    def __init__(self, env):
+        super(Mouthing, self).__init__(env)
+        self.key = 'mouthing'
+    def can(self, obj, arm):
+        """
+        agent can mouth anything it's carrying
+        """
+        return super().can(obj, arm) and self.env.carrying[arm]
+    def do(self, obj, arm):
+        obj.states['mouthed'].set_value(True)
+        print('mouthed successfully')
 
 class TakeOut(BaseAction):
     def __init__(self, env):

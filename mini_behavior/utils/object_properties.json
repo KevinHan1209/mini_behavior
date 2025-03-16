@@ -8,25 +8,29 @@
         "thrown",
         "inside",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "beach_ball": [
         "kicked",
         "thrown",
         "inside",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "broom": [
         "thrown",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "broom_set": [
         "thrown",
         "inside",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "bucket_toy": [
         "contains",
@@ -34,7 +38,8 @@
         "noise",
         "thrown",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "cart_toy": [
         "contains",
@@ -46,12 +51,14 @@
         "inside",
         "thrown",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "cube": [
         "gothit",
         "inside",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "cube_cabinet": [
         "gothit"
@@ -66,14 +73,16 @@
         "inside",
         "attached",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "gear_toy": [
         "thrown",
         "contains",
         "attached",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "mini_broom": [
         "thrown",
@@ -94,26 +103,30 @@
         "thrown",
         "contains",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "rattle": [
         "noise",
         "thrown",
         "inside",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "red_spiky_ball": [
         "thrown",
         "inside",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "ring_toy": [
         "thrown",
         "inside",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "shape_sorter": [
         "gothit"
@@ -131,7 +144,8 @@
         "thrown",
         "inside",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ],
     "winnie_cabinet": [
         "open",
@@ -142,6 +156,7 @@
         "thrown",
         "inside",
         "gothit",
-        "hitter"
+        "hitter",
+        "mouthed"
     ]
 }

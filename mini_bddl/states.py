@@ -2,8 +2,7 @@ from mini_behavior.states import *
 
 ALL_STATES = [
     'atsamelocation',
-    #'attached',
-    #'flipped',
+    'attached',
     'infovofrobot',
     'inlefthandofrobot',
     'inrighthandofrobot',
@@ -17,7 +16,12 @@ ALL_STATES = [
     'popup',
     'thrown',
     "toggled"
-    # 'touching', TODO: uncomment once implemented
+    'pullshed',
+    'climbed',
+    'contains',
+    'hitter',
+    'gothit',
+    'mouthed',
 ]
 
 # Touching
@@ -37,7 +41,8 @@ DEFAULT_STATES = [
 # ATTENTION: Must change init function in BehaviorGrid class in mini_behavior/grid.py to accomodate for new sizes 
 # in ABILITIES and FURNATURE_STATES
 ABILITIES = [
-    #'attached',
+    'attached',
+    'climbed',
     'contains',
     'kicked',
     'noise',
@@ -47,6 +52,10 @@ ABILITIES = [
     'popup',
     "thrown",
     "toggled",
+    'pullshed',
+    'hitter',
+    'mouthed',
+    'gothit'
 ]
 
 FURNATURE_STATES = []
@@ -67,6 +76,7 @@ STATE_FUNC_MAPPING = {
     'inrightreachofrobot': InRightReachOfRobot,
     'inside': Inside,
     'kicked': Kicked,
+    'mouthed': Mouthed,
     'nextto': NextTo,
     'noise': Noise,
     'open': Opened,

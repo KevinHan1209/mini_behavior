@@ -65,6 +65,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         disassemble = 10
         hit = 11
         hitwithobject = 12
+        mouthing = 13
 
     class LocoActions(IntEnum):
         left = 0

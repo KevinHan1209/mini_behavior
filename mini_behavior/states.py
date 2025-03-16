@@ -183,6 +183,17 @@ class Kicked(AbilityState):
 
     def get_value(self, env):
         return self.value
+    
+class Mouthed(AbilityState):
+    def __init__(self, obj, key):
+        super(Mouthed, self).__init__(obj, key)
+    def get_value(self, env):
+        """
+        True if obj is in the mouth of the agent
+        False if not
+        Logic implemented in mouthing class
+        """
+        return self.value
 
 class Noise(AbilityState):
     def __init__(self, obj, key):
