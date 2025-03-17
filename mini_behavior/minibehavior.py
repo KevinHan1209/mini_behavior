@@ -666,7 +666,16 @@ class MiniBehaviorEnv(MiniGridEnv):
                         if self.action_done:
                             break
             self.update_states()
-            print("\nCURRENTLY CARRYING: ", self.carrying, end='\n\n')
+            if list(self.carrying['left']):
+                left_obj = list(self.carrying['left'])[0].get_name()
+            else:
+                left_obj = "None"
+            if list(self.carrying['right']):
+                right_obj = list(self.carrying['right'])[0].get_name()
+            else: 
+                right_obj = "None"
+            
+            print("\nCURRENTLY CARRYING: Left: " + str(left_obj) + ", Right: " + str(right_obj), end='\n\n')
 
         # Go through locomotion action
         if not null_loco:

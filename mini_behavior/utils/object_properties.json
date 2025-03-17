@@ -67,7 +67,6 @@
     ],
     "farm_toy": [
         "popup",
-        "toggled",
         "gothit"
     ],
     "gear": [
@@ -102,7 +101,6 @@
     "piggie_bank": [
         "noise",
         "open",
-        "toggled",
         "thrown",
         "contains",
         "gothit",

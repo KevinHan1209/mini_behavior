@@ -63,14 +63,16 @@
         "dropin",
         "hitwithobject",
         "hit",
-        "mouthing"
+        "mouthing",
+        "throw"
     ],
     "cube": [
         "pickup",
         "drop",
         "hitwithobject",
         "hit",
-        "mouthing"
+        "mouthing",
+        "throw"
     ],
     "cube_cabinet": [
         "takeout",
@@ -97,7 +99,8 @@
         "disassemble",
         "hitwithobject",
         "hit",
-        "mouthing"
+        "mouthing", 
+        "throw"
     ],
     "mini_broom": [
         "pickup",

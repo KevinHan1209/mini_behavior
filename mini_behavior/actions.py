@@ -541,14 +541,16 @@ class Toggle(BaseAction):
         toggle from on to off, or off to on
         """
         super().do(obj, arm)
-        cur = obj.check_abs_state(self.env, 'toggled')
-        obj.states['toggled'].set_value(not cur)
         if any(substring in obj.get_name() for substring in ["winnie_cabinet", "piggie_bank"]):
             open_cur = obj.check_abs_state(self.env, 'open')
             obj.states['open'].set_value(not open_cur)
-        if any(substring in obj.get_name() for substring in ["farm_toy"]):
+        elif any(substring in obj.get_name() for substring in ["farm_toy"]):
             popup_cur = obj.check_abs_state(self.env, 'popup')
             obj.states['popup'].set_value(not popup_cur)
+        else:
+            cur = obj.check_abs_state(self.env, 'toggled')
+            obj.states['toggled'].set_value(not cur)
+
         
 
 
