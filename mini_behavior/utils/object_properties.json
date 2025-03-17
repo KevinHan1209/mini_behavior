@@ -62,7 +62,8 @@
         "mouthed"
     ],
     "cube_cabinet": [
-        "gothit"
+        "gothit",
+        "contains"
     ],
     "farm_toy": [
         "popup",
@@ -130,8 +131,16 @@
         "hitter",
         "mouthed"
     ],
+    "shape_toy": [
+        "thrown",
+        "inside",
+        "gothit",
+        "hitter",
+        "mouthed"
+    ],
     "shape_sorter": [
-        "gothit"
+        "gothit",
+        "contains"
     ],
     "stroller": [
         "gothit",
@@ -140,7 +149,8 @@
     ],
     "tree_busy_box": [
         "toggled",
-        "gothit"
+        "gothit",
+        "climbed"
     ],
     "winnie": [
         "thrown",

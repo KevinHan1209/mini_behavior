@@ -2,7 +2,7 @@ OBJECTS = [
     # Keys from the dictionary
     "alligator_busy_box", "ball", "beach_ball", "broom", "broom_set", "bucket_toy", "cart_toy", "coin", "cube", "cube_cabinet", 
     "farm_toy", "gear", "gear_toy", "mini_broom", "music_toy", "piggie_bank", "rattle", "red_spiky_ball", 
-    "ring_toy", "shape_sorter", "stroller", "tree_busy_box", "winnie", "winnie_cabinet",
+    "ring_toy", "shape_toy", "shape_sorter", "stroller", "tree_busy_box", "winnie", "winnie_cabinet",
 ]
 
 FURNITURE = []
@@ -29,12 +29,13 @@ OBJECT_TO_IDX = {
     'rattle': 18,
     'red_spiky_ball': 19,
     'ring_toy': 20,
-    'shape_sorter': 21,
-    'stroller': 22,
-    'tree_busy_box': 23,
-    'wall': 24,
-    "winnie": 25,
-    'winnie_cabinet': 26
+    'shape_toy': 21, 
+    'shape_sorter': 22,
+    'stroller': 23,
+    'tree_busy_box': 24,
+    'wall': 25,
+    "winnie": 26,
+    'winnie_cabinet': 27
 }
 
 
@@ -62,6 +63,7 @@ OBJECT_TO_STR = {
     "rattle": "R",
     "red_spiky_ball": "R",
     "ring_toy": "R",
+    "shape_toy": "S",
     "shape_sorter": "S",
     "stroller": "S",
     "tree_busy_box": "T",

@@ -150,9 +150,18 @@
         "hit",
         "mouthing"
     ],
+    "shape_toy": [
+        "pickup",
+        "drop",
+        "throw",
+        "hitwithobject",
+        "hit",
+        "mouthing"
+    ],
     "shape_sorter": [
         "pickup",
         "drop",
+        "dropin",
         "hitwithobject",
         "hit"
     ],
@@ -166,7 +175,8 @@
     ],
     "tree_busy_box": [
         "toggle",
-        "hit"
+        "hit",
+        "climb"
     ],
     "winnie": [
         "pickup",

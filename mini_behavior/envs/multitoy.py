@@ -18,9 +18,20 @@ class MultiToyEnv(RoomGrid):
             num_cols=1,
             max_steps=1e5,
     ):
+        '''
+        All unique objects in the dataset: 
+
+        {nan, geartoy, stroller, tree busy box, shapesorter with 3 shapes, red spiky ball, 
+        'bc' (black cloth, not implemented), cabinet with winnie, rattle, broom set, broom, 
+        farm toy, pink beach ball, pink pig and coins, doorknob (not implemented), music toy alligator,
+        alligator busy box, cart, yellow donut ring, bucket w/ 6 balls, cube w/ 6 diff colors}
+        '''
         self.num_objs = {
-            'alligator_busy_box': 1, 'broom': 1, 'beach_ball': 1, 'cart_toy': 1, 'coin': 1, 
-            'music_toy': 1, 'piggie_bank': 1, 'gear_toy': 1
+            'shape_toy': 3, 'shape_sorter': 1, 'gear': 6, 'gear_toy': 1, 'stroller': 1,
+            'tree_busy_box': 1, 'red_spiky_ball': 1, 'rattle': 1, 'broom_set': 1,
+            'broom': 1, 'farm_toy': 1, 'beach_ball': 1, 'piggie_bank': 1, 'mini_broom': 1,
+            'coin': 10, 'cube': 6, 'alligator_busy_box': 1, 'music_toy': 1, 'cube_cabinet': 1,
+            'cart_toy': 1, 'ring_toy': 1, 'bucket_toy': 1, 'winnie': 1, 'winnie_cabinet': 1
         }
 
         self.mission = 'explore'
@@ -41,14 +52,31 @@ class MultiToyEnv(RoomGrid):
         """Places all objects dynamically from self.num_objs"""
         for obj_type in self.num_objs.keys():
             for obj in self.objs[obj_type]:
-                self.place_obj(obj)
+                if "winnie" in obj_type and not "winnie_cabinet" in obj_type:
+                    # Begin with winnie inside the cabinet
+                    self.objs["winnie_cabinet"][0].states["contains"].add_obj(obj)
+                    obj.states["inside"].set_value(True)
+                elif "gear" in obj_type and not "gear_toy" in obj_type:
+                    self.objs["gear_toy"][0].states["contains"].add_obj(obj)
+                    obj.states["attached"].set_value(True)
+                    self.objs["gear_toy"][0].states["attached"].set_value(True)
+                elif "coin" in obj_type:
+                    # Place coins in the piggie bank
+                    self.objs["piggie_bank"][0].states["contains"].add_obj(obj)
+                    obj.states["inside"].set_value(True)
+                elif "cube" in obj_type and not "cube_cabinet" in obj_type:
+                    # Place cubes in the cube cabinet
+                    self.objs["cube_cabinet"][0].states["contains"].add_obj(obj)
+                    obj.states["inside"].set_value(True)
+                else:
+                    self.place_obj(obj)
+                
 
     def _init_conditions(self):
         """Checks all objects are initialized properly"""
         for obj_type in self.num_objs.keys():
             assert obj_type in self.objs, f"No {obj_type}"
             obj = self.objs[obj_type][0]  # Get the first object of this type
-            assert obj.check_abs_state(self, 'onfloor')
 
     def _end_conditions(self):
         """Task is exploration"""

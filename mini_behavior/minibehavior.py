@@ -705,7 +705,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                 for obj in fwd_cell[int(0)]:
                     if is_obj(obj) and obj.possible_action('climb'):
                         print("object recognized: ", obj.get_name())
-                        if 'stroller' in obj.get_name() or 'cart_toy' in obj.get_name():
+                        if 'stroller' in obj.get_name() or 'cart_toy' in obj.get_name() or 'tree_busy_box' in obj.get_name():
                             self.currently_climbing = not self.currently_climbing
                             obj.states['climbed'].set_value(True)
                             self.action_done = True

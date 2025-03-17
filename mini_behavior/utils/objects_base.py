@@ -90,6 +90,9 @@ class WorldObj:
         if "piggie_bank" in self.get_name():
             # can only contain coins. Assume 10 coins?
             self.max_contain = 10
+        if "shape_sorter" in self.get_name():
+            # can only contain 3 shapes
+            self.max_contain = 3
         
     
 

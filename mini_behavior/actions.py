@@ -231,6 +231,10 @@ class DropIn(BaseAction):
             # Cannot drop in if object is not a coin or piggie bank is not open
             return "coin" in list(self.env.carrying[arm])[0].get_name() and obj.states['open'].get_value(self.env)
 
+        if "shape_sorter" in obj.get_name():
+            # Cannot drop in if object is not a shape
+            return "shape_toy" in list(self.env.carrying[arm])[0].get_name()
+
         return True
 
     def do(self, obj, arm):
