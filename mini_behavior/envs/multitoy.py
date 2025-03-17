@@ -80,4 +80,9 @@ class MultiToyEnv(RoomGrid):
 
     def _end_conditions(self):
         """Task is exploration"""
-        pass
+        return False
+    
+    def get_room_size(self):
+        return self.room_size
+
+
