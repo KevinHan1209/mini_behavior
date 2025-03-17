@@ -19,6 +19,7 @@ register(
     entry_point='mini_behavior.envs:MultiToyEnv'
 )
 
+
 def redraw(img):
     if not args.agent_view:
         img = env.render('rgb_array', tile_size=args.tile_size)
@@ -126,6 +127,12 @@ def key_handler_cartesian(event):
     if event.key == 'up':
         step(env.actions.forward)
         return
+    if event.key == 'o':
+        step(env.actions.kick)
+        return
+    if event.key == 'c':
+        step(env.actions.climb)
+        return
     # Spacebar
     if event.key == ' ':
         render_furniture()
@@ -151,39 +158,100 @@ def key_handler_cartesian(event):
     if event.key == '3':
         switch_dim(2)
         return
-
+    
+action_list = []
 def key_handler_primitive(event):
-    print('pressed', event.key)
+    global action_list
+    # Escape action to exit
     if event.key == 'escape':
         window.close()
         return
-    if event.key == 'left':
-        step(env.actions.left)
-        return
-    if event.key == 'right':
-        step(env.actions.right)
-        return
-    if event.key == 'up':
-        step(env.actions.forward)
-        return
-    if event.key == '0':
-        step(env.actions.pickup_0)
-        return
-    if event.key == '1':
-        step(env.actions.drop_0)
-        return
-    if event.key == 't':
-        step(env.actions.toggle)
-        return
-    if event.key == 's':
-        step(env.actions.shake_bang)
-        return
-    if event.key == 'i':
-        step(env.actions.drop_in)
-        return
-    if event.key == 'pagedown':
+    # Pagina down action to show states
+    elif event.key == 'pagedown':
         show_states()
         return
+    if len(action_list) < 2:
+        print("Select object manipulation action")
+
+        valid_action = False  # Flag to check if the action is valid
+        
+        # Object manipulation actions
+        if event.key == '0':
+            action_list.append(env.manipulation_actions.pickup_0)
+            valid_action = True
+        elif event.key == '1':
+            action_list.append(env.manipulation_actions.drop_0)
+            valid_action = True
+        elif event.key == 't':
+            action_list.append(env.manipulation_actions.toggle)
+            valid_action = True
+        elif event.key == 'p':
+            action_list.append(env.manipulation_actions.throw_0)
+            valid_action = True
+        elif event.key == 'w':
+            action_list.append(env.manipulation_actions.push)
+            valid_action = True
+        elif event.key == 'e':
+            action_list.append(env.manipulation_actions.pull)
+            valid_action = True
+        elif event.key == 'z':
+            action_list.append(env.manipulation_actions.takeout)
+            valid_action = True
+        elif event.key == 'x':
+            action_list.append(env.manipulation_actions.dropin)
+            valid_action = True
+        elif event.key == 'm':
+            action_list.append(env.manipulation_actions.mouthing)
+            valid_action = True
+        elif event.key == 'b':
+            action_list.append(env.manipulation_actions.brush)
+            valid_action = True
+        elif event.key == '3':
+            action_list.append(env.manipulation_actions.assemble)
+            valid_action = True
+        elif event.key == '4':
+            action_list.append(env.manipulation_actions.disassemble)
+            valid_action = True
+        elif event.key == '5':
+            action_list.append(env.manipulation_actions.hit)
+            valid_action = True
+        elif event.key == '6':  
+            action_list.append(env.manipulation_actions.hitwithobject)
+            valid_action = True
+        if not valid_action:
+            print("Invalid object manipulation action, please try again.")
+
+    elif len(action_list) == 2:
+        print("Select locomotive action (left/right/up/kick)")
+        valid_action = False  # Reset flag for locomotive actions
+        
+        # Locomotion actions
+        if event.key == 'left':
+            action_list.append(env.locomotion_actions.left)
+            valid_action = True
+        elif event.key == 'right':
+            action_list.append(env.locomotion_actions.right)
+            valid_action = True
+        elif event.key == 'up':
+            action_list.append(env.locomotion_actions.forward)
+            valid_action = True
+        elif event.key == '2':
+            action_list.append(env.locomotion_actions.kick)
+            valid_action = True
+        elif event.key == 'c':
+            action_list.append(env.locomotion_actions.climb)
+            valid_action = True
+
+        if not valid_action:
+            print("Invalid locomotive action, please select from left, right, up, or kick.")
+            
+    elif len(action_list) == 3:
+        print("Final action: ", action_list)
+        step(action_list)
+        action_list = []
+    print("Selected", event.key)
+    return
+
 
 
 parser = argparse.ArgumentParser()

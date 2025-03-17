@@ -18,13 +18,18 @@ class InFOVOfRobot(AbsoluteObjectState):
         return env.in_view(*self.obj.cur_pos)
 
 
-class InHandOfRobot(AbsoluteObjectState):
+class InRightHandOfRobot(AbsoluteObjectState):
     # return true if agent is carrying the object
     def get_value(self, env=None):
-        return np.all(self.obj.cur_pos == np.array([-1, -1]))
+        return not len(env.carrying['right']) == 0
+    
+class InLeftHandOfRobot(AbsoluteObjectState):
+    # return true if agent is carrying the object
+    def get_value(self, env=None):
+        return not len(env.carrying['left']) == 0
 
 
-class InReachOfRobot(AbsoluteObjectState):
+class InLeftReachOfRobot(AbsoluteObjectState):
     # return true if obj is reachable by agent
     def get_value(self, env):
         # obj not reachable if inside closed obj2
@@ -32,7 +37,7 @@ class InReachOfRobot(AbsoluteObjectState):
         if inside is not None and 'openable' in inside.states.keys() and not inside.check_abs_state(env, 'openable'):
             return False
 
-        carrying = self.obj.check_abs_state(env, 'inhandofrobot')
+        carrying = self.obj.check_abs_state(env, 'inlefthandofrobot')
 
         if self.obj.is_furniture():
             in_front = False
@@ -41,9 +46,28 @@ class InReachOfRobot(AbsoluteObjectState):
                     in_front = True
                     break
         else:
-            in_front = np.all(self.obj.cur_pos == env.front_pos)
+            in_position = any(np.all(self.obj.cur_pos == pos) for pos in [env.front_pos, env.upper_left_pos, env.left_pos])
+        return carrying or in_position
+    
+class InRightReachOfRobot(AbsoluteObjectState):
+    # return true if obj is reachable by agent
+    def get_value(self, env):
+        # obj not reachable if inside closed obj2
+        inside = self.obj.inside_of
+        if inside is not None and 'openable' in inside.states.keys() and not inside.check_abs_state(env, 'openable'):
+            return False
 
-        return carrying or in_front
+        carrying = self.obj.check_abs_state(env, 'inrighthandofrobot')
+
+        if self.obj.is_furniture():
+            in_front = False
+            for pos in self.obj.all_pos:
+                if np.all(pos == env.front_pos):
+                    in_front = True
+                    break
+        else:
+            in_position = any(np.all(self.obj.cur_pos == pos) for pos in [env.front_pos, env.upper_right_pos, env.right_pos])
+        return carrying or in_position
 
 
 class InSameRoomAsRobot(AbsoluteObjectState):
@@ -61,20 +85,51 @@ class InSameRoomAsRobot(AbsoluteObjectState):
 # ABSOLUTE OBJECT STATES
 
 class Attached(AbilityState):
+    '''
+    Dependent on Contains state. Logic implemented in assemble/disassemble action class. 
+    '''
     def __init__(self, obj, key):
         super(Attached, self).__init__(obj, key)
+    
+    def get_value(self, env):
+        # Logic implemented in Contains
+        return self.value
 
-    def _update(self, env):
+class Climbed(AbilityState):
+    def __init__(self, obj, key):
+        super(Climbed, self).__init__(obj, key)
+
+    def get_value(self, env):
         '''
-        Attached combines two or more objects into one. 
-        Used for actions which require more sophistication than just dropping an object into another.
-
-        Applies for broom with broom_set, gear with gear_toy, and winnie with winnie_cabinet.
-
-        True if Assemble action is performed
-        False if Disassemble action is performed
+        True if obj is climbed by agent
+        False if not
+        Logic implemented in environment
         '''
         return self.value
+
+
+class Contains(AbilityState):
+    '''
+    For objects which can contain other objects
+    '''
+    def __init__(self, obj, key):
+        super(Contains, self).__init__(obj, key)
+        self.contained_objects = []
+
+    def add_obj(self, obj):
+        self.contained_objects.append(obj)
+    
+    def remove_obj(self):
+        return self.contained_objects.pop(0)
+    
+    def get_num_objs(self):
+        return len(self.contained_objects)
+    
+    def get_value(self, env):
+        return len(self.contained_objects) != 0
+    
+    def get_contained_objs(self):
+        return self.contained_objects
 
 class Flipped(AbilityState):
     def __init__(self, obj, key):
@@ -87,6 +142,58 @@ class Flipped(AbilityState):
         Done through flip action
         '''
         return self.value
+    
+class GotHit(AbilityState):
+    '''
+    True if obj is hit by another object
+    False if not
+    '''
+    def __init__(self, obj, key):
+        super(GotHit, self).__init__(obj, key)
+
+    def get_value(self, env):
+        # Logic implemented in Hit action class
+        return self.value
+
+class Hitter(AbilityState):
+    '''
+    Anything that can be picked up can be a hitter
+    '''
+    def __init__(self, obj, key):
+        super(Hitter, self).__init__(obj, key)
+
+    def get_value(self, env):
+        # Logic implemented in Hit action class
+        return self.value
+    
+    
+class Inside(AbilityState):
+    """
+    Depends on contains state. Logic implemented in dropin/takeout action class.
+    """
+    def __init__(self, obj, key):
+        super(Inside, self).__init__(obj, key)
+
+    def get_value(self, env):
+        return self.value
+    
+class Kicked(AbilityState):
+    def __init__(self, obj, key):
+        super(Kicked, self).__init__(obj, key)
+
+    def get_value(self, env):
+        return self.value
+    
+class Mouthed(AbilityState):
+    def __init__(self, obj, key):
+        super(Mouthed, self).__init__(obj, key)
+    def get_value(self, env):
+        """
+        True if obj is in the mouth of the agent
+        False if not
+        Logic implemented in mouthing class
+        """
+        return self.value
 
 class Noise(AbilityState):
     def __init__(self, obj, key):
@@ -95,7 +202,6 @@ class Noise(AbilityState):
     def get_value(self, env):
         """
         True depending on the action performed and object
-        TODO: If True, False if no other action is performed which could induce noise. Probably do this in environment step?
         """
         return self.value
     
@@ -120,12 +226,44 @@ class Opened(AbilityState):
 
     def get_value(self, env):
         return self.value
+    
+class Pullshed(AbilityState):
+    '''
+    Agent has pushed or pulled an object (not a great name I know)
+    '''
+    def __init__(self, obj, key):
+        super(Pullshed, self).__init__(obj, key)
+
+    def get_value(self, env):
+        '''
+        Logic implemented in Push and Pull actions
+        '''
+        return self.value
+
+class Thrown(AbilityState):
+    def __init__(self, obj, key):
+        super(Thrown, self).__init__(obj, key)
+
+    def get_value(self, env):
+        return self.value
 
 class ToggledOn(AbilityState):
     def __init__(self, obj, key): # env
         super(ToggledOn, self).__init__(obj, key)
 
     def get_value(self, env):
+        return self.value
+    
+class UseBrush(AbilityState): 
+    def __init__(self, obj, key):
+        super(UseBrush, self).__init__(obj, key)
+
+    def get_value(self, env):
+        """
+        True if brush is used on object. State is for brush object ONLY
+        False if not
+        Logic implemented in brush action class
+        """
         return self.value
 
 
@@ -148,30 +286,6 @@ class AtSameLocation(RelativeObjectState):
                     return True
 
         return False
-
-
-class Inside(RelativeObjectState):
-    """
-    Inside(obj1, obj2) change ONLY IF Pickup(obj1) or Drop(obj1) is called
-    """
-    def __init__(self, obj, key): # env
-        super(RelativeObjectState, self).__init__(obj, key)
-        self.type = 'relative'
-
-    def _get_value(self, other, env=None):
-        # return other in self.inside_of
-        if self.obj == other or other is None:
-            return False
-
-        return other == self.obj.inside_of
-
-    def _set_value(self, other, new_value):
-        if new_value:
-            self.obj.inside_of = other
-            other.contains = self.obj
-        else:
-            self.obj.inside_of = None
-            other.contains = None
 
 
 # TODO: fix for furniture

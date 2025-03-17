@@ -1,100 +1,205 @@
 {
     "alligator_busy_box": [
         "toggle",
-        "pickup",
-        "drop"
+        "hit"
     ],
     "ball": [
         "pickup",
-        "drop"
+        "drop",
+        "throw",
+        "hitwithobject",
+        "hit",
+        "mouthing"
     ],
     "beach_ball": [
         "pickup",
-        "drop"
+        "drop",
+        "kick",
+        "throw",
+        "hitwithobject",
+        "hit",
+        "mouthing"
     ],
     "broom": [
         "pickup",
-        "drop"
+        "drop",
+        "throw",
+        "hitwithobject",
+        "hit",
+        "mouthing",
+        "brush"
     ],
     "broom_set": [
         "pickup",
-        "drop"
+        "drop",
+        "throw",
+        "assemble",
+        "disasssemble",
+        "hitwithobject",
+        "hit",
+        "mouthing"
     ],
     "bucket_toy": [
         "pickup",
-        "drop"
+        "drop",
+        "dropin",
+        "noise_toggle",
+        "throw",
+        "hitwithobject",
+        "hit",
+        "mouthing"
     ],
     "cart_toy": [
-        "pickup",
-        "drop"
+        "dropin",
+        "takeout",
+        "push",
+        "pull",
+        "hit",
+        "climb"
     ],
     "coin": [
         "pickup",
-        "drop"
+        "drop",
+        "dropin",
+        "hitwithobject",
+        "hit",
+        "mouthing",
+        "throw"
     ],
     "cube": [
         "pickup",
-        "drop"
+        "drop",
+        "hitwithobject",
+        "hit",
+        "mouthing",
+        "throw"
     ],
     "cube_cabinet": [
-        "pickup",
-        "drop"
+        "takeout",
+        "putin",
+        "hit"
     ],
     "farm_toy": [
         "toggle",
-        "pickup",
-        "drop"
+        "hit"
     ],
     "gear": [
         "pickup",
-        "drop"
+        "drop",
+        "throw",
+        "assemble",
+        "hitwithobject",
+        "hit",
+        "mouthing"
     ],
-    "gear_pole": [
-        "pickup",
-        "drop"
-    ],
-    "music_toy": [
+    "gear_toy": [
         "pickup",
         "drop",
-        "toggle"
+        "assemble",
+        "disassemble",
+        "hitwithobject",
+        "hit",
+        "mouthing", 
+        "throw"
+    ],
+    "mini_broom": [
+        "pickup",
+        "drop",
+        "throw",
+        "assemble",
+        "hit",
+        "brush",
+        "hitwithobject"
+    ],
+    "music_toy": [
+        "noise_toggle",
+        "hit"
     ],
     "piggie_bank": [
-        "toggle",
+        "noise_toggle",
         "pickup",
-        "drop"
+        "drop",
+        "toggle",
+        "throw",
+        "dropin",
+        "takeout",
+        "hitwithobject",
+        "hit",
+        "mouthing"
     ],
     "rattle": [
         "pickup",
         "drop",
-        "shake_bang"
+        "noise_toggle",
+        "throw",
+        "dropin",
+        "hitwithobject",
+        "hit",
+        "mouthing"
     ],
     "red_spiky_ball": [
         "pickup",
-        "drop"
+        "drop",
+        "throw",
+        "hitwithobject",
+        "hit",
+        "mouthing"
     ],
     "ring_toy": [
         "pickup",
-        "drop"
+        "drop",
+        "throw",
+        "hitwithobject",
+        "hit",
+        "mouthing"
+    ],
+    "shape_toy": [
+        "pickup",
+        "drop",
+        "throw",
+        "hitwithobject",
+        "hit",
+        "mouthing"
     ],
     "shape_sorter": [
         "pickup",
-        "drop"
+        "drop",
+        "dropin",
+        "hitwithobject",
+        "hit"
     ],
     "stroller": [
-        "pickup",
-        "drop"
+        "push",
+        "pull",
+        "putin",
+        "takeout",
+        "hit",
+        "climb"
     ],
     "tree_busy_box": [
-        "pickup",
-        "drop"
+        "toggle",
+        "hit",
+        "climb"
     ],
     "winnie": [
         "pickup",
-        "drop"
+        "drop",
+        "throw",
+        "hitwithobject",
+        "hit",
+        "mouthing"
     ],
     "winnie_cabinet": [
+        "toggle",
+        "hit"
+    ],
+    "yellow_donut_ring": [
         "pickup",
-        "drop"
+        "drop",
+        "throw",
+        "hitwithobject",
+        "hit",
+        "mouthing"
     ]
 }
 

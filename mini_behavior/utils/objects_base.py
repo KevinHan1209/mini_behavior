@@ -18,7 +18,7 @@ class WorldObj:
                  action_keys=None,
                  can_contain=False,
                  can_overlap=False,
-                 can_seebehind=True,
+                 can_seebehind=True
                  ):
 
         if action_keys is None:
@@ -75,6 +75,26 @@ class WorldObj:
         self.can_seebehind = can_seebehind
         self.contains = None
         self.inside_of = None
+
+        # Logic for container objects according to toy environment
+        if "gear_toy" in self.get_name():
+            self.max_contain = 6
+        if "cart_toy" in self.get_name():
+            self.max_contain = 8
+        if "broom_set" in self.get_name():
+            # can only contain the mini_broom
+            self.max_contain = 1
+        if "bucket_toy" in self.get_name():
+            # only contain balls?
+            self.max_contain = 6
+        if "piggie_bank" in self.get_name():
+            # can only contain coins. Assume 10 coins?
+            self.max_contain = 10
+        if "shape_sorter" in self.get_name():
+            # can only contain 3 shapes
+            self.max_contain = 3
+        
+    
 
     def get_name(self):
         return self.name
@@ -238,3 +258,6 @@ class FurnitureObj(WorldObj):
         for dx in range(self.width):
             for dy in range(self.height):
                 self.all_pos.append((pos[0] + dx, pos[1] + dy))
+
+
+

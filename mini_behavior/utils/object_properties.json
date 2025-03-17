@@ -1,77 +1,172 @@
 {
     "alligator_busy_box": [
-       "toggled"
+       "toggled",
+       "inside",
+       "gothit"
     ],
     "ball": [
-
+        "thrown",
+        "inside",
+        "gothit",
+        "hitter",
+        "mouthed"
     ],
     "beach_ball": [
-
+        "kicked",
+        "thrown",
+        "inside",
+        "gothit",
+        "hitter",
+        "mouthed"
     ],
     "broom": [
-
+        "thrown",
+        "gothit",
+        "hitter",
+        "mouthed",
+        "usebrush"
     ],
     "broom_set": [
-
+        "thrown",
+        "inside",
+        "gothit",
+        "hitter",
+        "mouthed"
     ],
     "bucket_toy": [
-
+        "contains",
+        "inside",
+        "noise",
+        "thrown",
+        "gothit",
+        "hitter",
+        "mouthed"
     ],
     "cart_toy": [
-
+        "contains",
+        "gothit",
+        "pullshed",
+        "climbed"
     ],
     "coin": [
-
+        "inside",
+        "thrown",
+        "gothit",
+        "hitter",
+        "mouthed"
     ],
     "cube": [
-
+        "gothit",
+        "inside",
+        "hitter",
+        "mouthed"
     ],
     "cube_cabinet": [
-
+        "gothit",
+        "contains"
     ],
     "farm_toy": [
         "popup",
-        "toggled"
+        "gothit"
     ],
     "gear": [
-
+        "thrown",
+        "inside",
+        "attached",
+        "gothit",
+        "hitter",
+        "mouthed"
     ],
-    "gear_pole": [
-
+    "gear_toy": [
+        "thrown",
+        "contains",
+        "attached",
+        "gothit",
+        "hitter",
+        "mouthed"
+    ],
+    "mini_broom": [
+        "thrown",
+        "inside",
+        "attached",
+        "gothit",
+        "usebrush"
     ],
     "music_toy": [
         "noise",
-        "toggled"
+        "thrown",
+        "inside",
+        "gothit"
     ],
     "piggie_bank": [
         "noise",
         "open",
-        "toggled"
+        "thrown",
+        "contains",
+        "gothit",
+        "hitter",
+        "mouthed"
     ],
     "rattle": [
-        "noise"
+        "noise",
+        "thrown",
+        "inside",
+        "gothit",
+        "hitter",
+        "mouthed"
     ],
     "red_spiky_ball": [
-
+        "thrown",
+        "inside",
+        "gothit",
+        "hitter",
+        "mouthed"
     ],
     "ring_toy": [
-
+        "thrown",
+        "inside",
+        "gothit",
+        "hitter",
+        "mouthed"
+    ],
+    "shape_toy": [
+        "thrown",
+        "inside",
+        "gothit",
+        "hitter",
+        "mouthed"
     ],
     "shape_sorter": [
-
+        "gothit",
+        "contains"
     ],
     "stroller": [
-
+        "gothit",
+        "pullshed",
+        "climbed"
     ],
     "tree_busy_box": [
-        "toggled"
-
+        "toggled",
+        "gothit",
+        "climbed"
     ],
     "winnie": [
-
+        "thrown",
+        "inside",
+        "gothit",
+        "hitter",
+        "mouthed"
     ],
     "winnie_cabinet": [
         "open",
-        "toggled"
+        "contains",
+        "gothit"
+    ],
+    "yellow_donut_ring": [
+        "thrown",
+        "inside",
+        "gothit",
+        "hitter",
+        "mouthed"
     ]
 }
