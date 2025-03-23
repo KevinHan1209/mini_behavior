@@ -7,13 +7,13 @@ from env_wrapper import CustomObservationWrapper
 TASK = 'MultiToy'
 ROOM_SIZE = 8
 MAX_STEPS = 1000
-TOTAL_TIMESTEPS = int(2e6)
+TOTAL_TIMESTEPS = int(1e4)
 DENSE_REWARD = False
 POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
 NUM_STEPS = 125
 SAVE_FREQUENCY = 100
-TEST_STEPS = 500000
+TEST_STEPS = 5000
 
 env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-v0"
 env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     )
     env = init_env(NUM_ENVS, seed=1)
     
-    save_dir = f"models/APT_PPO_{TASK}_Run5"
+    save_dir = f"models/APT_PPO_{TASK}"
     # Ensure the directory exists before training
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
