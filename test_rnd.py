@@ -74,11 +74,12 @@ def generate_flag_mapping(env):
     return mapping
 
 
-def test_agent(env_id, model, device, num_episodes=5, max_steps_per_episode=200):
+def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max_steps_per_episode=200):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
     wandb.init(project="rnd-ppo-test",
+               name=f"RND_PPO_{TASK}_{ROOM_SIZE}x{ROOM_SIZE}_STEP{STEP}",
                config={"env_id": env_id,
                        "mode": "testing",
                        "num_episodes": num_episodes,
@@ -177,10 +178,11 @@ def test_agent(env_id, model, device, num_episodes=5, max_steps_per_episode=200)
         })
 
         # Create and log a gif replay of the episode.
-        gif_path = f"episode_{episode + 1}.gif"
-        if frames:
-            write_gif(np.array(frames), gif_path, fps=1)
-            wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+        gif_path = f"img/rnd32x32/0/episode_{episode + 1}.gif"
+        #print(activity)
+        #if frames:
+        #    write_gif(np.array(frames), gif_path, fps=1)
+        #    wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
         
         # Instead of printing the activity details, log them as a table in wandb.
         activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
@@ -204,8 +206,9 @@ def test_agent(env_id, model, device, num_episodes=5, max_steps_per_episode=200)
 def main():
 
     TASK = 'MultiToy'
-    ROOM_SIZE = 8
+    ROOM_SIZE = 32
     MAX_STEPS = 1000
+    STEP = 0
     
     env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v0"
     env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
@@ -224,8 +227,8 @@ def main():
     )
 
     #Pull in trained model
-    model_dir = "models/RND_PPO_MultiToy_Run1"
-    model_path = f"{model_dir}/final_model.pt"
+    model_dir = "models/RND_PPO_MultiToy_Run4_32x32"
+    model_path = f"{model_dir}/model_step_{STEP}.pt"
 
     if not os.path.exists(model_path):
         checkpoints = [f for f in os.listdir(model_dir) if f.startswith("model_step_")]
@@ -244,10 +247,10 @@ def main():
         device=device,
         seed=1
     )
-    model.load(model_path)
+    #model.load(model_path)
     
     # Test model.
-    test_agent(test_env_name, model, device, num_episodes=5, max_steps_per_episode=500)
+    test_agent(test_env_name, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max_steps_per_episode=500)
 
 
 if __name__ == "__main__":

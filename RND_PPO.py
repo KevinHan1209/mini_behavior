@@ -8,14 +8,6 @@ import gym
 import wandb
 from env_wrapper import CustomObservationWrapper
 
-#def make_env(env_id, seed, idx):
-#    def thunk():
-#        env = gym.make(env_id)
-#        env = CustomObservationWrapper(env)
-#        env.seed(seed + idx)
-#        return env
-#    return thunk
-
 def make_env(env_id, seed, idx):
     def thunk():
         env = gym.make(env_id)
@@ -176,6 +168,7 @@ class RND_PPO:
                 obs[step] = next_obs
                 dones[step] = next_done
 
+                # Get actions from the agent
                 with torch.no_grad():
                     action, logprob, _, value = self.agent.get_action_and_value(obs[step])
                 actions[step] = action
@@ -195,7 +188,8 @@ class RND_PPO:
                     #novelty = self.calculate_novelty(next_obs)
                     #curiosity_rewards[step] = self.normalize_rewards(novelty)
 
-                rewards[step] = torch.FloatTensor(reward).to(self.device)
+                #rewards[step] = torch.FloatTensor(reward).to(self.device)
+                rewards[step] = combined_reward #training on both extrinsic and intrinsic
                 next_obs = torch.FloatTensor(next_obs).to(self.device)
                 next_done = torch.FloatTensor(done).to(self.device)
 
@@ -208,7 +202,7 @@ class RND_PPO:
             
                 wandb.log({"checkpoint_saved": True}, step=global_step)
 
-            # Compute advantages for extrinsic and intrinsic rewards.
+            # Compute advantages rewards
             with torch.no_grad():
                 next_value = self.agent.get_value(next_obs)
                 advantages = self.compute_gae(
@@ -294,6 +288,7 @@ class RND_PPO:
         }
 
         for epoch in range(self.update_epochs):
+            # Shuffle data
             inds = np.arange(self.batch_size)
             np.random.shuffle(inds)
 
