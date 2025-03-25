@@ -39,9 +39,8 @@ if __name__ == "__main__":
     model = APT_PPO(
         env=env,
         env_id=env_name,
+        env_kwargs=env_kwargs,
         save_dir=save_dir,
-        test_env_id=env_name,
-        test_env_kwargs=env_kwargs,
         num_envs=NUM_ENVS,
         total_timesteps=TOTAL_TIMESTEPS,
         save_freq=SAVE_FREQUENCY,
@@ -54,4 +53,3 @@ if __name__ == "__main__":
     
     model.train()
     model.test_agent(save_episode="final", num_episodes=1, max_steps_per_episode=TEST_STEPS)
-    model.save(f"{save_dir}/{env_name}", env_kwargs=env_kwargs)

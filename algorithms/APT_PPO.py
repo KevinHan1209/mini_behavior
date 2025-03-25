@@ -20,15 +20,14 @@ class APT_PPO:
     def __init__(self,
                  env,
                  env_id,
+                 env_kwargs,
                  save_dir,
-                 test_env_kwargs=None,
-                 test_env_id=None,
                  device="cpu",
                  save_freq=100,
                  test_steps=500,
                  total_timesteps=2000000,
                  learning_rate=1e-4,
-                 num_envs=125,
+                 num_envs=8,
                  num_steps=125,
                  anneal_lr=True,
                  gamma=0.999,
@@ -49,8 +48,7 @@ class APT_PPO:
                  c=1):
         self.env = env
         self.env_id = env_id
-        self.test_env_kwargs = test_env_kwargs
-        self.test_env_id = test_env_id
+        self.env_kwargs = env_kwargs
         self.save_dir = save_dir
         self.device = device
         self.save_freq = save_freq
@@ -275,7 +273,7 @@ class APT_PPO:
         """Run test episodes using the current agent policy and log a gif replay."""
         print(f"\n=== Testing Agent: {num_episodes} Episode(s) ===")
         action_log = []
-        test_env = gym.make(self.test_env_id, **self.test_env_kwargs)
+        test_env = gym.make(self.env_id, **self.env_kwargs)
         test_env = CustomObservationWrapper(test_env)
 
         for ep in range(num_episodes):
@@ -306,7 +304,7 @@ class APT_PPO:
 
     def get_object_state_pattern(self):
         """Return the number of object states per object (minus three fixed indices)."""
-        test_env = gym.make(self.test_env_id, **self.test_env_kwargs)
+        test_env = gym.make(self.env_id, **self.env_kwargs)
         test_env = CustomObservationWrapper(test_env)
         pattern = []
         for obj_type in test_env.objs.values():

@@ -1,6 +1,6 @@
 # test.py
 import gym
-from NovelD_PPO import NovelD_PPO
+from algorithms.NovelD_PPO import NovelD_PPO
 import numpy as np
 import torch
 import wandb
