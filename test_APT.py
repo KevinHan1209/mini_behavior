@@ -1,25 +1,18 @@
-import gym
 import os
-from mini_behavior.register import register
+import gym
 from algorithms.APT_PPO import APT_PPO
 from env_wrapper import CustomObservationWrapper
 
-TASK = 'MultiToy'
-ROOM_SIZE = 8
-MAX_STEPS = 1000
+# ===== Parameters =====
 TOTAL_TIMESTEPS = int(1e4)
-DENSE_REWARD = False
-POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
-NUM_STEPS = 125
 SAVE_FREQUENCY = 100
-TEST_STEPS = 5000
+TEST_STEPS = 500
 
-env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-v0"
-env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
-test_env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "test_env": True}
-test_env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-v1"
+env_name = 'MiniGrid-MultiToy-8x8-N2-v0'
+env_kwargs = {"room_size": 8, "max_steps": 1000}
 
+# ===== Helper Functions =====
 def make_env(env_id, seed, idx, env_kwargs):
     def thunk():
         env = gym.make(env_id, **env_kwargs)
@@ -28,47 +21,37 @@ def make_env(env_id, seed, idx, env_kwargs):
         return env
     return thunk
 
-def init_env(num_envs: int, seed):
+def init_env(num_envs: int, seed: int):
     return gym.vector.SyncVectorEnv(
         [make_env(env_name, seed, i, env_kwargs) for i in range(num_envs)]
     )
-        
+
+# ===== Main Block =====
 if __name__ == "__main__":
-    register(
-        id=env_name,
-        entry_point=f'mini_behavior.envs:{TASK}Env',
-        kwargs=env_kwargs
-    )
-    register(
-        id=test_env_name, 
-        entry_point=f'mini_behavior.envs:{TASK}Env',
-        kwargs=test_env_kwargs
-    )
+    # Instantiate a vectorized training environment.
     env = init_env(NUM_ENVS, seed=1)
     
-    save_dir = f"models/APT_PPO_{TASK}"
-    # Ensure the directory exists before training
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    save_dir = f"models/APT_PPO"
+    os.makedirs(save_dir, exist_ok=True)
     
-    print('Begin training')
+    print("Begin training")
+    # Use the same env for training and testing by passing the same id and kwargs.
     model = APT_PPO(
-        env, 
-        env_id=env_name, 
-        save_dir=save_dir, 
-        test_env_id=test_env_name, 
-        test_env_kwargs=test_env_kwargs, 
-        num_envs=NUM_ENVS, 
-        total_timesteps=TOTAL_TIMESTEPS, 
-        num_steps=NUM_STEPS, 
-        save_freq=SAVE_FREQUENCY, 
+        env=env,
+        env_id=env_name,
+        save_dir=save_dir,
+        test_env_id=env_name,
+        test_env_kwargs=env_kwargs,
+        num_envs=NUM_ENVS,
+        total_timesteps=TOTAL_TIMESTEPS,
+        save_freq=SAVE_FREQUENCY,
         test_steps=TEST_STEPS
     )
     
-    print(f"\n=== Observation Space ===")
-    print(f"Shape: {env.observation_space.shape}")
-    print(f"Type: {env.observation_space.dtype}")
+    print("\n=== Observation Space ===")
+    print("Shape:", env.observation_space.shape)
+    print("Type:", env.observation_space.dtype)
     
     model.train()
-    
+    model.test_agent(save_episode="final", num_episodes=1, max_steps_per_episode=TEST_STEPS)
     model.save(f"{save_dir}/{env_name}", env_kwargs=env_kwargs)
