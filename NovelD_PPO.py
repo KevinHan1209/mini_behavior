@@ -100,7 +100,7 @@ class NovelD_PPO:
         self.int_reward_scale = 1.0
 
     def train(self):
-
+        '''
         wandb.init(
             project="noveld-ppo-train",
             config={
@@ -125,7 +125,7 @@ class NovelD_PPO:
         # Watch models for gradients and parameter histograms.
         wandb.watch(self.agent, log="all", log_freq=100)
         wandb.watch(self.rnd_model, log="all", log_freq=100)
-        
+        '''
         print("\n=== Training Configuration ===")
         print(f"Env: {self.env_id} | Device: {self.device}")
         print(f"Total Steps: {self.total_timesteps:,} | Batch Size: {self.batch_size} | Minibatch Size: {self.minibatch_size}")
@@ -135,7 +135,8 @@ class NovelD_PPO:
             list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()),
             lr=self.learning_rate, eps=1e-5
         )
-        
+        obs = self.envs.reset()
+
         next_obs = torch.FloatTensor(self.envs.reset()).to(self.device)
         obs = torch.zeros((self.num_steps, self.num_envs) + self.obs_space.shape, dtype=torch.float32).to(self.device)
         actions = torch.zeros((self.num_steps, self.num_envs), dtype=torch.long).to(self.device)
@@ -199,11 +200,12 @@ class NovelD_PPO:
             # Combine advantages using the intrinsic coefficient.
             b_advantages = b_int_advantages * self.int_coef
 
+            '''
             # Log the histogram of actions taken in this batch.
             wandb.log({
                 "action_distribution": wandb.Histogram(b_actions.cpu().numpy())
             }, step=global_step)
-
+            '''
             # Optimize policy and value networks while collecting metrics.
             opt_metrics = self.optimize(
                 b_obs, b_logprobs, b_actions, b_advantages,
@@ -212,6 +214,7 @@ class NovelD_PPO:
 
             # Log update-level training metrics.
             if update % 10 == 0:
+                '''
                 wandb.log({
                     "learning_rate": optimizer.param_groups[0]["lr"],
                     "novelty": novelty.mean().item(),
@@ -221,7 +224,7 @@ class NovelD_PPO:
                     "updates": update,
                     **opt_metrics
                 }, step=global_step)
-
+                '''
                 print(f"\n[Update {update}/{num_updates}] Step: {global_step:,}")
                 print(f"Novelty: {novelty.mean().item():.4f} | Curiosity Reward: {curiosity_rewards.mean().item():.4f}")
                 print(f"Policy Loss: {opt_metrics['pg_loss']:.4f} | Value Loss: {opt_metrics['v_loss']:.4f} | Entropy: {opt_metrics['entropy']:.4f}")
