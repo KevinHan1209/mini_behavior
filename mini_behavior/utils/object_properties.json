@@ -143,7 +143,8 @@
     "stroller": [
         "gothit",
         "pullshed",
-        "climbed"
+        "climbed",
+        "contains"
     ],
     "tree_busy_box": [
         "toggled",

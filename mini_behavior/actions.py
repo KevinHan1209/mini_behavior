@@ -222,7 +222,7 @@ class DropIn(BaseAction):
 
         if not self.env.carrying[arm]:
             return False
-        
+
         if obj.states['contains'].get_num_objs() > obj.max_contain:
             return False
         
@@ -302,6 +302,9 @@ class TakeOut(BaseAction):
         - container obj actually contains obj
         - agent not holding anything else
         """
+        if not super().can(obj, arm):
+            return False
+        print(obj.get_name())
         if not obj.states['contains'].get_value(self.env):
             return False
 
@@ -465,7 +468,7 @@ class Push(BaseAction):
         obj.cur_pos = front_pos
         self.env.agent_pos = obj_pos
         self.env.grid.set(*front_pos, obj, int(0))
-        obj.states['Pullshed'].set_value(True)
+        obj.states['pullshed'].set_value(True)
 
 
 class NoiseToggle(BaseAction):

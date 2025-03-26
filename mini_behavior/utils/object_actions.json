@@ -60,7 +60,6 @@
     "coin": [
         "pickup",
         "drop",
-        "dropin",
         "hitwithobject",
         "hit",
         "mouthing",
@@ -132,7 +131,6 @@
         "drop",
         "noise_toggle",
         "throw",
-        "dropin",
         "hitwithobject",
         "hit",
         "mouthing"

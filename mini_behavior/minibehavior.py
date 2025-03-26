@@ -584,6 +584,8 @@ class MiniBehaviorEnv(MiniGridEnv):
                 if action_name == "pickup":
                     for cell in seq:
                         for obj in cell[int(0)]:
+                            if isinstance(obj, FurnitureObj):
+                                continue
                             if is_obj(obj) and action_class(self).can(obj, arm):
                                 action_class(self).do(obj, arm)
                                 self.action_done = True
@@ -615,6 +617,8 @@ class MiniBehaviorEnv(MiniGridEnv):
                     for cell in seq:
                         for dim in cell:
                             for obj in dim:
+                                if isinstance(obj, FurnitureObj):
+                                    continue
                                 if is_obj(obj) and action_class(self).can(obj, arm):
                                     action_class(self).do(obj, arm)
                                     self.action_done = True
@@ -627,6 +631,8 @@ class MiniBehaviorEnv(MiniGridEnv):
                 elif action_name in ["push", "pull"]:
                     for dim in fwd_cell:
                         for obj in dim:
+                            if isinstance(obj, FurnitureObj):
+                                continue
                             if is_obj(obj) and action_class(self).can(obj, arm):
                                 action_class(self).do(obj, arm)
                                 self.action_done = True
@@ -639,6 +645,8 @@ class MiniBehaviorEnv(MiniGridEnv):
                     for cell in seq:
                         for dim in cell:
                             for obj in dim:
+                                if isinstance(obj, FurnitureObj):
+                                    continue
                                 if is_obj(obj) and action_class(self).can(obj, arm):
                                     action_class(self).do(obj, arm)
                                     self.action_done = True
@@ -657,6 +665,8 @@ class MiniBehaviorEnv(MiniGridEnv):
                     for cell in seq:
                         for dim in cell:
                             for obj in dim:
+                                if isinstance(obj, FurnitureObj):
+                                    continue
                                 if is_obj(obj) and action_class(self).can(obj, arm):
                                     action_class(self).do(obj, arm)
                                     self.action_done = True
@@ -699,6 +709,8 @@ class MiniBehaviorEnv(MiniGridEnv):
             elif locomotion_action == self.locomotion_actions.kick:
                 dim = int(0)
                 for obj in fwd_cell[dim]:
+                    if isinstance(obj, FurnitureObj):
+                        continue
                     if is_obj(obj) and obj.possible_action('kick'):
                         new_pos = fwd_pos + self.dir_vec * self.kick_length
                         dims = self.drop_dims(new_pos)
@@ -712,13 +724,13 @@ class MiniBehaviorEnv(MiniGridEnv):
                             break
             elif locomotion_action == self.locomotion_actions.climb:
                 for obj in fwd_cell[int(0)]:
+                    if isinstance(obj, FurnitureObj):
+                        continue
                     if is_obj(obj) and obj.possible_action('climb'):
-                        print("object recognized: ", obj.get_name())
                         if 'stroller' in obj.get_name() or 'cart_toy' in obj.get_name() or 'tree_busy_box' in obj.get_name():
                             self.currently_climbing = not self.currently_climbing
                             obj.states['climbed'].set_value(True)
                             self.action_done = True
-                            print("Climb was executed")
                             break
 
 

@@ -9,7 +9,7 @@ import wandb
 from collections import deque
 from array2gif import write_gif
 
-from networks.actor import Agent
+from networks.actor_critic import Agent
 from mini_behavior.roomgrid import *
 from mini_behavior.utils.utils import RewardForwardFilter, RMS
 from env_wrapper import CustomObservationWrapper
@@ -105,7 +105,7 @@ class APT_PPO:
         print("k parameter:", self.k)
         print("-------------------")
         assert self.total_timesteps % self.batch_size == 0
-
+        '''
         self.run = wandb.init(project="APT_PPO_Training", config={
             "env_id": self.env_id,
             "Total timesteps": self.total_timesteps,
@@ -119,7 +119,7 @@ class APT_PPO:
             "k parameter": self.k,
             "Save frequency": self.save_freq
         })
-
+        '''
         self.agent = Agent(self.env.action_space[0].nvec, self.env.single_observation_space.shape[0]).to(self.device)
         self.optimizer = optim.Adam(self.agent.parameters(), lr=self.learning_rate, eps=1e-5)
         combined_params = list(self.agent.parameters())
@@ -140,8 +140,7 @@ class APT_PPO:
         global_step = 0
         next_obs = torch.Tensor(self.env.reset()).to(self.device)
         next_done = torch.zeros(self.num_envs).to(self.device)
-        num_updates = self.total_timesteps // self.batch_size
-
+        num_updates = int(self.total_timesteps // self.batch_size)
         for update in range(1, num_updates + 1):
             print(f"UPDATE {update}/{num_updates}")
             if update % self.save_freq == 0:
