@@ -7,6 +7,7 @@ import wandb
 from array2gif import write_gif
 from env_wrapper import CustomObservationWrapper
 from mini_behavior.utils.states_base import RelativeObjectState
+from mini_behavior.register import register
 
 
 def count_binary_flags(env):
@@ -207,8 +208,16 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
 
 def main():
     env_id = 'MiniGrid-MultiToy-8x8-N2-v0'
+    TASK = 'MultiToy'
+    ROOM_SIZE = 8
+    MAX_STEPS = 1000
+    env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+    register(
+        id=env_id,
+        entry_point=f'mini_behavior.envs:{TASK}Env',
+        kwargs=env_kwargs
+    )
     # Train model
     noveld_ppo = train_agent(env_id, device)
     

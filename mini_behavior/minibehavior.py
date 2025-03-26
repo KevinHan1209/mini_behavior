@@ -756,12 +756,20 @@ class MiniBehaviorEnv(MiniGridEnv):
         return dims
     
     def update_exploration_metrics(self):
+        default_states = [
+            'atsamelocation',
+            'infovofrobot',
+            'inleftreachofrobot',
+            'inrightreachofrobot',
+            'inside',
+            'nextto',
+        ]
         objs_dict = {}
         for obj_type in self.objs.values():
             for obj in obj_type:
                 states_dict = {}
                 for state_value in obj.states:
-                    if not isinstance(obj.states[state_value], RelativeObjectState):
+                    if not isinstance(obj.states[state_value], RelativeObjectState) and state_value not in default_states:
                         state = obj.states[state_value].get_value(self)
                         states_dict[state_value] = state
                 objs_dict[obj.name] = states_dict

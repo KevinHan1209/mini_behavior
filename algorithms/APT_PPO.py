@@ -3,7 +3,7 @@
 import numpy as np
 import torch 
 import torch.optim as optim
-from networks.actor import Agent
+from networks.actor_critic import Agent
 from numpy import linalg as LA
 from mini_behavior.roomgrid import *
 from mini_behavior.utils.utils import RewardForwardFilter, RMS, dir_to_rad
@@ -111,6 +111,7 @@ class APT_PPO():
         print("---------------------------------------")
         assert self.total_timesteps % self.batch_size == 0
 
+        '''
         self.run = wandb.init(project="APT_PPO_Training", 
                     config={"env_id": self.env_id, 
                      "Mode": "training",
@@ -124,8 +125,8 @@ class APT_PPO():
                     "Minibatch size": self.minibatch_size,
                     "K parameter": self.k,
                     "Save frequency": self.save_freq})
-
-        self.agent = Agent(self.env.action_space[0].n, self.env.single_observation_space.shape[0]).to(self.device)
+        '''
+        self.agent = Agent(self.env.action_space[0].nvec, self.env.single_observation_space.shape[0]).to(self.device)
         self.optimizer = optim.Adam(
             self.agent.parameters(),
             lr=self.learning_rate,
@@ -222,14 +223,14 @@ class APT_PPO():
 
             reward_rms.update_from_moments(mean, std**2, count)
             self.curiosity_rewards /= np.sqrt(reward_rms.var)
-
+            '''
             self.run.log({
                     "Average Reward": mean,
                     "Standard Deviation in Reward": std,
                     "Actions": actions,
                     "Observations:": obs
                 })
-
+            '''
             # bootstrap value if not done
             with torch.no_grad():
                 next_value_ext, next_value_int = self.agent.get_value(next_obs)
@@ -522,7 +523,7 @@ class APT_PPO():
             gif_path = f"{self.save_dir}/test_replays/episode_{save_episode}.gif"
             os.makedirs(os.path.dirname(gif_path), exist_ok=True)  
             write_gif(np.array(frames), gif_path, fps=10)
-            self.run.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+            #self.run.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
 
         exploration_percentages = test_env.get_exploration_statistics2()
         exploration_state_occurrences = test_env.get_state_exploration_counts()
@@ -594,7 +595,7 @@ class APT_PPO():
         fig.savefig(buffer, format='png')
         buffer.seek(0)
         image = Image.open(buffer)
-        self.run.log({"chart_1": wandb.Image(image, caption="State Space Exploration for Each Object")})
+        #self.run.log({"chart_1": wandb.Image(image, caption="State Space Exploration for Each Object")})
         buffer.close()
 
         # For the second figure
@@ -602,7 +603,7 @@ class APT_PPO():
         fig2.savefig(buffer2, format='png')
         buffer2.seek(0)
         image2 = Image.open(buffer2)
-        self.run.log({"chart_2": wandb.Image(image2, caption="Evolution of State Space Exploration for All Objects")})
+        #self.run.log({"chart_2": wandb.Image(image2, caption="Evolution of State Space Exploration for All Objects")})
         buffer2.close()
 
         # For the third figure (Heatmap)
@@ -610,6 +611,6 @@ class APT_PPO():
         fig3.savefig(buffer3, format='png')
         buffer3.seek(0)
         image3 = Image.open(buffer3)
-        self.run.log({"chart_3": wandb.Image(image3, caption="Heatmap of Actions Taken")})
+        #self.run.log({"chart_3": wandb.Image(image3, caption="Heatmap of Actions Taken")})
         buffer3.close()
 

@@ -45,8 +45,13 @@ class MultiToyEnv(RoomGrid):
                          max_steps=max_steps
                          )
 
-        self.actions = MultiToyEnv.Actions
-        self.action_space = spaces.Discrete(len(self.actions))
+        self.locomotion_actions = MiniBehaviorEnv.LocoActions
+        self.manipulation_actions = MiniBehaviorEnv.ObjectActions
+        self.action_space = spaces.MultiDiscrete([
+            len(self.manipulation_actions),  # First dimension: left arm actions
+            len(self.manipulation_actions),  # Second dimension: right arm actions
+            len(self.locomotion_actions)     # Third dimension: locomotion actions
+        ])
 
     def _gen_objs(self):
         """Places all objects dynamically from self.num_objs"""

@@ -514,6 +514,8 @@ class Throw(BaseAction):
         
         throw_pos = pos + self.env.dir_vec # check if position in front of front position is also open
         check_pos = pos if 0 in throw_pos or throw_pos[0] == self.env.width - 1 or throw_pos[1] == self.env.height - 1 else throw_pos # boundary condition
+        if check_pos[0] < 0 or check_pos[1] < 0 or check_pos[0] >= self.env.width or check_pos[1] >= self.env.height:
+            return False
         dims = self.drop_dims(check_pos)
         return int(0) in dims # Resort to dim = 0 since dims are not really used anymore
     
