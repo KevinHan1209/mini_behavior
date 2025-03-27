@@ -686,6 +686,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                 right_obj = "None"
             
             print("\nCURRENTLY CARRYING: Left: " + str(left_obj) + ", Right: " + str(right_obj), end='\n\n')
+            print(f"\nACTIONS: {action}\n\n")
 
         # Go through locomotion action
         if not null_loco:

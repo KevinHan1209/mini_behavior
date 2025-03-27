@@ -222,7 +222,7 @@ class APT_PPO:
             # Flatten rollout
             b_obs = obs.reshape((-1,) + (self.env.observation_space.shape[1],))
             b_logprobs = logprobs.reshape(-1)
-            b_actions = actions.reshape(-1)
+            b_actions = actions.reshape(-1, actions.shape[-1])
             b_ext_advantages = ext_advantages.reshape(-1)
             b_int_advantages = int_advantages.reshape(-1)
             b_ext_returns = ext_returns.reshape(-1)
@@ -237,6 +237,8 @@ class APT_PPO:
                 for start in range(0, self.batch_size, self.minibatch_size):
                     end = start + self.minibatch_size
                     mb_inds = indices[start:end]
+                    print('epoch:', epoch)
+                    print('b_actions:', b_actions.shape)
                     _, new_logprob, entropy, new_ext_values, new_int_values = self.agent.get_action_and_value(
                         b_obs[mb_inds], b_actions.long()[mb_inds]
                     )

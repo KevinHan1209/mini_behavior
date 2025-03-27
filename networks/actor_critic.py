@@ -81,6 +81,7 @@ class Agent(nn.Module):
         
         if action is None:
             action = multi_dist.sample()
+        print('ACTION: ', action)
         log_prob = multi_dist.log_prob(action)
         entropy = multi_dist.entropy()
         

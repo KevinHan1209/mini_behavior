@@ -31,7 +31,9 @@
         "inside",
         "gothit",
         "hitter",
-        "mouthed"
+        "mouthed",
+        "contains",
+        "attached"
     ],
     "bucket_toy": [
         "contains",
@@ -90,7 +92,8 @@
         "inside",
         "attached",
         "gothit",
-        "usebrush"
+        "usebrush",
+        "hitter"
     ],
     "music_toy": [
         "noise",
@@ -138,7 +141,8 @@
     ],
     "shape_sorter": [
         "gothit",
-        "contains"
+        "contains",
+        "hitter"
     ],
     "stroller": [
         "gothit",

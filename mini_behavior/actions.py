@@ -57,19 +57,20 @@ class Assemble(BaseAction):
             return False
         # Check that both arms are holding the right objects
         if super().can(obj, arm):
-            print("obj get name:", obj.get_name())
             if "gear_toy" in obj.get_name(): 
-                if not find_tool(self.env, ["gear"], opp_arm):
+                if not "gear" in list(self.env.carrying[opp_arm])[0].get_name():
                     return False
             elif "gear" in obj.get_name():
-                if not find_tool(self.env, ["gear_toy"], opp_arm):
+                if not "gear_toy" in list(self.env.carrying[opp_arm])[0].get_name():
                     return False
             elif "broom_set" in obj.get_name():
-                if not find_tool(self.env, ["mini_broom"], opp_arm):
+                if not "mini_broom" in list(self.env.carrying[opp_arm])[0].get_name():
                     return False
             elif "mini_broom" in obj.get_name():
-                if not find_tool(self.env, ["broom_set"], opp_arm):
+                if not "broom_set" in list(self.env.carrying[opp_arm])[0].get_name():
                     return False
+        else:
+            return False
 
         # check if container object is at capacity
         main_arm = arm if ("gear_toy" in obj.get_name() or "broom_set" in obj.get_name()) else opp_arm
@@ -289,7 +290,6 @@ class Mouthing(BaseAction):
         return super().can(obj, arm) and self.env.carrying[arm]
     def do(self, obj, arm):
         obj.states['mouthed'].set_value(True)
-        print('mouthed successfully')
 
 class TakeOut(BaseAction):
     def __init__(self, env):
@@ -304,7 +304,6 @@ class TakeOut(BaseAction):
         """
         if not super().can(obj, arm):
             return False
-        print(obj.get_name())
         if not obj.states['contains'].get_value(self.env):
             return False
 
@@ -423,7 +422,7 @@ class Pull(BaseAction):
         self.env.agent_pos = agent_old_pos - self.env.dir_vec
         obj.cur_pos = agent_old_pos
         self.env.grid.set(*agent_old_pos, obj, int(0))
-        obj.states['Pullshed'].set_value(True)
+        obj.states['pullshed'].set_value(True)
 
 class Push(BaseAction):
     def __init__(self, env):
@@ -529,7 +528,6 @@ class Throw(BaseAction):
 
         two_fwd_pos = pos + self.env.dir_vec
         throw_pos = pos if 0 in two_fwd_pos or two_fwd_pos[0] == self.env.width - 1 or two_fwd_pos[1] == self.env.height - 1 else two_fwd_pos # boundary condition
-        print(throw_pos)
         # change object properties
         obj.cur_pos = throw_pos
         # change agent / grid
