@@ -105,7 +105,6 @@ class APT_PPO:
         print("k parameter:", self.k)
         print("-------------------")
         assert self.total_timesteps % self.batch_size == 0
-        '''
         self.run = wandb.init(project="APT_PPO_Training", config={
             "env_id": self.env_id,
             "Total timesteps": self.total_timesteps,
@@ -119,7 +118,6 @@ class APT_PPO:
             "k parameter": self.k,
             "Save frequency": self.save_freq
         })
-        '''
         self.agent = Agent(self.env.action_space[0].nvec, self.env.single_observation_space.shape[0]).to(self.device)
         self.optimizer = optim.Adam(self.agent.parameters(), lr=self.learning_rate, eps=1e-5)
         combined_params = list(self.agent.parameters())
@@ -183,14 +181,12 @@ class APT_PPO:
             self.total_avg_curiosity_rewards.append(mean_r)
             reward_rms.update_from_moments(mean_r, std_r**2, len(rewards_per_env))
             self.curiosity_rewards /= np.sqrt(reward_rms.var)
-            '''
             self.run.log({
                 "Average Reward": mean_r,
                 "Std Reward": std_r,
                 "Actions": actions,
                 "Observations": obs
             })
-            '''
 
             # Compute advantages and returns
             ext_advantages, int_advantages = torch.zeros_like(rewards), torch.zeros_like(self.curiosity_rewards)
@@ -297,7 +293,7 @@ class APT_PPO:
             gif_path = os.path.join(self.save_dir, "test_replays", f"episode_{save_episode}.gif")
             os.makedirs(os.path.dirname(gif_path), exist_ok=True)
             write_gif(np.array(frames), gif_path, fps=10)
-            #self.run.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+            self.run.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
 
         test_env.close()
         self.test_actions.append(action_log)
