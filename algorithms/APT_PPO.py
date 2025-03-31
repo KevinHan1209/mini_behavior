@@ -7,7 +7,6 @@ import torch.optim as optim
 import gym
 import wandb
 from array2gif import write_gif
-
 from collections import deque
 
 from networks.actor import Agent
@@ -122,7 +121,9 @@ class APT_PPO:
             "Save frequency": self.save_freq
         })
 
-        self.agent = Agent(self.env.action_space[0].n, self.env.single_observation_space.shape[0]).to(self.device)
+        # Use the single environment observation space if available.
+        obs_shape = getattr(self.env, "single_observation_space", self.env.observation_space).shape
+        self.agent = Agent(self.env.action_space[0].n, obs_shape[0]).to(self.device)
         self.optimizer = optim.Adam(self.agent.parameters(), lr=self.learning_rate, eps=1e-5)
 
         reward_rms = RunningMeanStd()
@@ -130,7 +131,7 @@ class APT_PPO:
 
         # Rollout storage
         actions = torch.zeros((self.num_steps, self.num_envs) + self.env.action_space[0].shape, device=self.device)
-        obs = torch.zeros((self.num_steps, self.num_envs) + (self.env.observation_space.shape[1],), device=self.device)
+        obs = torch.zeros((self.num_steps, self.num_envs) + obs_shape, device=self.device)
         logprobs = torch.zeros((self.num_steps, self.num_envs), device=self.device)
         rewards = torch.zeros((self.num_steps, self.num_envs), device=self.device)
         curiosity_rewards = torch.zeros((self.num_steps, self.num_envs), device=self.device)
@@ -225,7 +226,7 @@ class APT_PPO:
                 int_returns = int_advantages + int_values
 
             # Flatten rollout for PPO update
-            b_obs = obs.reshape((-1,) + (self.env.observation_space.shape[1],))
+            b_obs = obs.reshape((-1,) + obs.shape[2:])
             b_logprobs = logprobs.reshape(-1)
             b_actions = actions.reshape(-1)
             b_ext_advantages = ext_advantages.reshape(-1)
@@ -280,11 +281,6 @@ class APT_PPO:
     def test_agent(self, num_episodes, max_steps_per_episode, save_episode=False):
         """
         Run test episodes using the current agent policy and log a gif replay.
-
-        Parameters:
-            num_episodes (int): Number of test episodes.
-            max_steps_per_episode (int): Maximum steps per episode.
-            save_episode (optional): Identifier used for saving the episode gif.
         """
         print(f"\n=== Testing Agent: {num_episodes} Episode(s) ===")
         action_log = []
@@ -309,7 +305,7 @@ class APT_PPO:
                 steps += 1
                 time.sleep(0.1)
 
-            if save_episode is True:
+            if save_episode:
                 gif_path = os.path.join(self.save_dir, "test_replays", f"episode_ep{ep}.gif")
                 os.makedirs(os.path.dirname(gif_path), exist_ok=True)
                 write_gif(np.array(frames), gif_path, fps=10)
@@ -321,8 +317,6 @@ class APT_PPO:
     def get_object_state_pattern(self):
         """
         Precompute the object state pattern for distance calculations.
-        Returns:
-            list: Object state counts per object.
         """
         test_env = gym.make(self.env_id, **self.env_kwargs)
         test_env = CustomObservationWrapper(test_env)
@@ -337,12 +331,6 @@ class APT_PPO:
     def compute_distance_matrix(self, env_obs):
         """
         Compute a Hamming-like distance matrix over object-state slices.
-
-        Parameters:
-            env_obs (Tensor): [num_steps, obs_dim]
-
-        Returns:
-            Tensor: [num_steps, num_steps] distance matrix.
         """
         num_steps = env_obs.shape[0]
         total_distance = torch.zeros((num_steps, num_steps), device=env_obs.device)
@@ -358,12 +346,6 @@ class APT_PPO:
     def compute_reward(self, sim_matrix):
         """
         Compute intrinsic rewards as log(c + average kNN distance).
-
-        Parameters:
-            sim_matrix (Tensor): [num_steps, num_steps, num_envs]
-
-        Returns:
-            Tensor: [num_steps, num_envs] intrinsic rewards.
         """
         num_steps, _, num_envs = sim_matrix.shape
         rewards = torch.zeros((num_steps, num_envs), device=sim_matrix.device)
@@ -378,12 +360,6 @@ class APT_PPO:
     def _compute_similarity_matrix(self, obs):
         """
         Build a similarity (distance) matrix for each environment.
-
-        Parameters:
-            obs (Tensor): [num_steps, num_envs, obs_dim]
-
-        Returns:
-            Tensor: [num_steps, num_steps, num_envs] distance matrices.
         """
         sim_matrices = []
         for env_idx in range(self.num_envs):
