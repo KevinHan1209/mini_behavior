@@ -6,14 +6,18 @@ from env_wrapper import CustomObservationWrapper
 # ===== Parameters =====
 TOTAL_TIMESTEPS = int(1e4)
 NUM_ENVS = 8
+NUM_EPS = 1
 SAVE_FREQUENCY = 100
-TEST_STEPS = 500
+TEST_STEPS = 100
 
 env_name = 'MiniGrid-MultiToy-8x8-N2-v0'
 env_kwargs = {"room_size": 8, "max_steps": 1000}
 
-# ===== Helper Functions =====
-def make_env(env_id, seed, idx, env_kwargs):
+
+def make_env(env_id: str, seed: int, idx: int, env_kwargs: dict):
+    """
+    Create a callable that returns an environment instance.
+    """
     def thunk():
         env = gym.make(env_id, **env_kwargs)
         env = CustomObservationWrapper(env)
@@ -21,21 +25,29 @@ def make_env(env_id, seed, idx, env_kwargs):
         return env
     return thunk
 
+
 def init_env(num_envs: int, seed: int):
+    """
+    Initialize a vectorized environment.
+    """
     return gym.vector.SyncVectorEnv(
         [make_env(env_name, seed, i, env_kwargs) for i in range(num_envs)]
     )
 
-# ===== Main Block =====
+
 if __name__ == "__main__":
     # Instantiate a vectorized training environment.
     env = init_env(NUM_ENVS, seed=1)
     
-    save_dir = f"models/APT_PPO"
+    save_dir = "APT_PPO"
     os.makedirs(save_dir, exist_ok=True)
     
     print("Begin training")
-    # Use the same env for training and testing by passing the same id and kwargs.
+    print("\n=== Observation Space ===")
+    print("Shape:", env.observation_space.shape)
+    print("Type:", env.observation_space.dtype)
+
+    # Instantiate the agent (using the same id and kwargs for training and testing).
     model = APT_PPO(
         env=env,
         env_id=env_name,
@@ -47,9 +59,6 @@ if __name__ == "__main__":
         test_steps=TEST_STEPS
     )
     
-    print("\n=== Observation Space ===")
-    print("Shape:", env.observation_space.shape)
-    print("Type:", env.observation_space.dtype)
-    
     model.train()
-    model.test_agent(save_episode="final", num_episodes=1, max_steps_per_episode=TEST_STEPS)
+    # Test the agent after training.
+    model.test_agent(num_episodes=NUM_EPS, max_steps_per_episode=TEST_STEPS, save_episode=True)

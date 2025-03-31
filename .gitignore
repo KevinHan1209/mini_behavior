@@ -12,4 +12,4 @@ dist/*
 .venv/
 runs/
 wandb/
-models/
+APT_PPO/

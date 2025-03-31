@@ -6,8 +6,9 @@ import torch.nn as nn
 import torch.optim as optim
 import gym
 import wandb
-from collections import deque
 from array2gif import write_gif
+
+from collections import deque
 
 from networks.actor import Agent
 from mini_behavior.roomgrid import *
@@ -88,25 +89,26 @@ class APT_PPO:
         self.test_actions = []
         self.exploration_state_occurrences = []
 
-        # Precompute the object-state pattern for distance calculations
+        # Precompute object-state pattern for distance calculations
         self.objstate_pattern = self.get_object_state_pattern()
 
     def train(self):
+        """Train the agent using PPO."""
         print("TRAINING PARAMETERS")
         print("-------------------")
-        print("Total timesteps:", self.total_timesteps)
-        print("Learning rate:", self.learning_rate)
-        print("Total updates:", self.total_timesteps // self.batch_size)
-        print("Parallel envs:", self.num_envs)
-        print("Steps per rollout:", self.num_steps)
-        print("Batch size:", self.batch_size)
-        print("PPO epochs:", self.update_epochs)
-        print("Minibatch size:", self.minibatch_size)
-        print("k parameter:", self.k)
+        print(f"Total timesteps: {self.total_timesteps}")
+        print(f"Learning rate: {self.learning_rate}")
+        print(f"Total updates: {self.total_timesteps // self.batch_size}")
+        print(f"Parallel envs: {self.num_envs}")
+        print(f"Steps per rollout: {self.num_steps}")
+        print(f"Batch size: {self.batch_size}")
+        print(f"PPO epochs: {self.update_epochs}")
+        print(f"Minibatch size: {self.minibatch_size}")
+        print(f"k parameter: {self.k}")
         print("-------------------")
         assert self.total_timesteps % self.batch_size == 0
 
-        self.run = wandb.init(project="APT_PPO_Training", config={
+        wandb.init(project="APT_PPO", config={
             "env_id": self.env_id,
             "Total timesteps": self.total_timesteps,
             "Learning rate": self.learning_rate,
@@ -122,32 +124,31 @@ class APT_PPO:
 
         self.agent = Agent(self.env.action_space[0].n, self.env.single_observation_space.shape[0]).to(self.device)
         self.optimizer = optim.Adam(self.agent.parameters(), lr=self.learning_rate, eps=1e-5)
-        combined_params = list(self.agent.parameters())
 
         reward_rms = RunningMeanStd()
         discounted_reward = RewardForwardFilter(self.int_gamma)
 
-        # Storage for rollout data
-        actions = torch.zeros((self.num_steps, self.num_envs) + self.env.action_space[0].shape).to(self.device)
-        obs = torch.zeros((self.num_steps, self.num_envs) + (self.env.observation_space.shape[1],)).to(self.device)
-        logprobs = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
-        rewards = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
-        self.curiosity_rewards = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
-        dones = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
-        ext_values = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
-        int_values = torch.zeros((self.num_steps, self.num_envs)).to(self.device)
+        # Rollout storage
+        actions = torch.zeros((self.num_steps, self.num_envs) + self.env.action_space[0].shape, device=self.device)
+        obs = torch.zeros((self.num_steps, self.num_envs) + (self.env.observation_space.shape[1],), device=self.device)
+        logprobs = torch.zeros((self.num_steps, self.num_envs), device=self.device)
+        rewards = torch.zeros((self.num_steps, self.num_envs), device=self.device)
+        curiosity_rewards = torch.zeros((self.num_steps, self.num_envs), device=self.device)
+        dones = torch.zeros((self.num_steps, self.num_envs), device=self.device)
+        ext_values = torch.zeros((self.num_steps, self.num_envs), device=self.device)
+        int_values = torch.zeros((self.num_steps, self.num_envs), device=self.device)
 
         global_step = 0
         next_obs = torch.Tensor(self.env.reset()).to(self.device)
-        next_done = torch.zeros(self.num_envs).to(self.device)
+        next_done = torch.zeros(self.num_envs, device=self.device)
         num_updates = self.total_timesteps // self.batch_size
 
         for update in range(1, num_updates + 1):
             print(f"UPDATE {update}/{num_updates}")
+            # Save model periodically
             if update % self.save_freq == 0:
-                print("Saving model and testing...")
+                print("Saving model...")
                 self.model_saves.append([self.agent.state_dict(), self.optimizer.state_dict()])
-                self.test_agent(save_episode=update, max_steps_per_episode=self.test_steps)
 
             if self.anneal_lr:
                 frac = 1.0 - (update - 1) / num_updates
@@ -161,31 +162,33 @@ class APT_PPO:
 
                 with torch.no_grad():
                     value_ext, value_int = self.agent.get_value(obs[step])
-                    ext_values[step], int_values[step] = value_ext.flatten(), value_int.flatten()
+                    ext_values[step] = value_ext.flatten()
+                    int_values[step] = value_int.flatten()
                     action, logprob, _, _, _ = self.agent.get_action_and_value(obs[step])
                 actions[step] = action
                 logprobs[step] = logprob
 
-                next_obs, reward, done, _ = self.env.step(action.cpu().numpy())
-                rewards[step] = torch.tensor(reward).to(self.device).view(-1)
-                next_obs, next_done = torch.Tensor(next_obs).to(self.device), torch.Tensor(done).to(self.device)
+                next_obs_np, reward, done, _ = self.env.step(action.cpu().numpy())
+                rewards[step] = torch.tensor(reward, device=self.device).view(-1)
+                next_obs = torch.Tensor(next_obs_np).to(self.device)
+                next_done = torch.Tensor(done).to(self.device)
 
             self.total_actions.append(actions.clone())
             self.total_obs.append(obs.clone())
 
             # Compute intrinsic (curiosity) rewards via kNN on state representations
             sim_matrix = self._compute_similarity_matrix(obs)
-            self.curiosity_rewards = self.compute_reward(sim_matrix)
+            curiosity_rewards = self.compute_reward(sim_matrix)
 
             # Normalize curiosity rewards
-            rewards_per_env = np.array([discounted_reward.update(r) for r in self.curiosity_rewards.cpu().numpy().T])
+            rewards_per_env = np.array([discounted_reward.update(r) for r in curiosity_rewards.cpu().numpy().T])
             mean_r, std_r = rewards_per_env.mean(), rewards_per_env.std()
             print("Average intrinsic reward:", mean_r)
             self.total_avg_curiosity_rewards.append(mean_r)
             reward_rms.update_from_moments(mean_r, std_r**2, len(rewards_per_env))
-            self.curiosity_rewards /= np.sqrt(reward_rms.var)
+            curiosity_rewards /= torch.sqrt(torch.tensor(reward_rms.var, device=self.device) + 1e-8)
 
-            self.run.log({
+            wandb.log({
                 "Average Reward": mean_r,
                 "Std Reward": std_r,
                 "Actions": actions,
@@ -193,11 +196,13 @@ class APT_PPO:
             })
 
             # Compute advantages and returns
-            ext_advantages, int_advantages = torch.zeros_like(rewards), torch.zeros_like(self.curiosity_rewards)
+            ext_advantages = torch.zeros_like(rewards)
+            int_advantages = torch.zeros_like(curiosity_rewards)
             ext_lastgaelam, int_lastgaelam = 0, 0
             with torch.no_grad():
                 next_value_ext, next_value_int = self.agent.get_value(next_obs)
-                next_value_ext, next_value_int = next_value_ext.reshape(1, -1), next_value_int.reshape(1, -1)
+                next_value_ext = next_value_ext.reshape(1, -1)
+                next_value_int = next_value_int.reshape(1, -1)
                 for t in reversed(range(self.num_steps)):
                     if t == self.num_steps - 1:
                         ext_nextnonterminal = 1.0 - next_done
@@ -210,7 +215,7 @@ class APT_PPO:
                         ext_nextvalues = ext_values[t + 1]
                         int_nextvalues = int_values[t + 1]
                     ext_delta = rewards[t] + self.gamma * ext_nextvalues * ext_nextnonterminal - ext_values[t]
-                    int_delta = self.curiosity_rewards[t] + self.int_gamma * int_nextvalues * int_nextnonterminal - int_values[t]
+                    int_delta = curiosity_rewards[t] + self.int_gamma * int_nextvalues * int_nextnonterminal - int_values[t]
                     ext_lastgaelam = ext_delta + self.gamma * self.gae_lambda * ext_nextnonterminal * ext_lastgaelam
                     int_lastgaelam = int_delta + self.int_gamma * self.gae_lambda * int_nextnonterminal * int_lastgaelam
                     ext_advantages[t] = ext_lastgaelam
@@ -219,7 +224,7 @@ class APT_PPO:
                 ext_returns = ext_advantages + ext_values
                 int_returns = int_advantages + int_values
 
-            # Flatten rollout
+            # Flatten rollout for PPO update
             b_obs = obs.reshape((-1,) + (self.env.observation_space.shape[1],))
             b_logprobs = logprobs.reshape(-1)
             b_actions = actions.reshape(-1)
@@ -247,9 +252,12 @@ class APT_PPO:
                     mb_advantages = b_advantages[mb_inds]
                     if self.norm_adv:
                         mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
-                    pg_loss = torch.max(-mb_advantages * ratio,
-                                        -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)).mean()
-                    new_ext_values, new_int_values = new_ext_values.view(-1), new_int_values.view(-1)
+                    pg_loss = torch.max(
+                        -mb_advantages * ratio,
+                        -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
+                    ).mean()
+                    new_ext_values = new_ext_values.view(-1)
+                    new_int_values = new_int_values.view(-1)
                     if self.clip_vloss:
                         ext_v_loss = 0.5 * torch.max(
                             (new_ext_values - b_ext_returns[mb_inds])**2,
@@ -263,14 +271,21 @@ class APT_PPO:
 
                     self.optimizer.zero_grad()
                     loss.backward()
-                    nn.utils.clip_grad_norm_(list(self.agent.parameters()), self.max_grad_norm)
+                    nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
                     self.optimizer.step()
 
                 if self.target_kl is not None and approx_kl > self.target_kl:
                     break
 
-    def test_agent(self, save_episode, num_episodes=1, max_steps_per_episode=500):
-        """Run test episodes using the current agent policy and log a gif replay."""
+    def test_agent(self, num_episodes, max_steps_per_episode, save_episode=False):
+        """
+        Run test episodes using the current agent policy and log a gif replay.
+
+        Parameters:
+            num_episodes (int): Number of test episodes.
+            max_steps_per_episode (int): Maximum steps per episode.
+            save_episode (optional): Identifier used for saving the episode gif.
+        """
         print(f"\n=== Testing Agent: {num_episodes} Episode(s) ===")
         action_log = []
         test_env = gym.make(self.env_id, **self.env_kwargs)
@@ -282,28 +297,33 @@ class APT_PPO:
             steps = 0
             frames = []
             while not done and steps < max_steps_per_episode:
-                frames.append(np.moveaxis(test_env.render(), 2, 0))
+                frame = test_env.render()
+                frames.append(np.moveaxis(frame, 2, 0))
                 obs_tensor = torch.FloatTensor(obs).unsqueeze(0)
                 with torch.no_grad():
                     action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
-                obs, reward, done, _ = test_env.step(action.numpy()[0])
-                action_log.append(test_env.actions(action.item()).name)
-                print(f"Step {steps:3d} | Action: {test_env.actions(action.item()).name}")
+                obs, reward, done, _ = test_env.step(action.cpu().numpy()[0])
+                action_name = test_env.actions(action.item()).name
+                action_log.append(action_name)
+                print(f"Step {steps:3d} | Action: {action_name}")
                 steps += 1
                 time.sleep(0.1)
 
-            gif_path = os.path.join(self.save_dir, "test_replays", f"episode_{save_episode}.gif")
-            os.makedirs(os.path.dirname(gif_path), exist_ok=True)
-            write_gif(np.array(frames), gif_path, fps=10)
-            self.run.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+            if save_episode is True:
+                gif_path = os.path.join(self.save_dir, "test_replays", f"episode_ep{ep}.gif")
+                os.makedirs(os.path.dirname(gif_path), exist_ok=True)
+                write_gif(np.array(frames), gif_path, fps=10)
+                wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
 
         test_env.close()
         self.test_actions.append(action_log)
 
-    # ---------------- Helper Methods ----------------
-
     def get_object_state_pattern(self):
-        """Return the number of object states per object (minus three fixed indices)."""
+        """
+        Precompute the object state pattern for distance calculations.
+        Returns:
+            list: Object state counts per object.
+        """
         test_env = gym.make(self.env_id, **self.env_kwargs)
         test_env = CustomObservationWrapper(test_env)
         pattern = []
@@ -317,11 +337,15 @@ class APT_PPO:
     def compute_distance_matrix(self, env_obs):
         """
         Compute a Hamming-like distance matrix over object-state slices.
-        env_obs: [num_steps, obs_dim]
-        Returns: [num_steps, num_steps] distance matrix.
+
+        Parameters:
+            env_obs (Tensor): [num_steps, obs_dim]
+
+        Returns:
+            Tensor: [num_steps, num_steps] distance matrix.
         """
         num_steps = env_obs.shape[0]
-        total_distance = torch.zeros(num_steps, num_steps, device=env_obs.device)
+        total_distance = torch.zeros((num_steps, num_steps), device=env_obs.device)
         start_idx = 3
         for obj_len in self.objstate_pattern:
             state_start = start_idx + 5
@@ -333,12 +357,16 @@ class APT_PPO:
 
     def compute_reward(self, sim_matrix):
         """
-        Compute intrinsic rewards as log(c + average kNN distance)
-        sim_matrix: [num_steps, num_steps, num_envs]
-        Returns: [num_steps, num_envs] rewards.
+        Compute intrinsic rewards as log(c + average kNN distance).
+
+        Parameters:
+            sim_matrix (Tensor): [num_steps, num_steps, num_envs]
+
+        Returns:
+            Tensor: [num_steps, num_envs] intrinsic rewards.
         """
         num_steps, _, num_envs = sim_matrix.shape
-        rewards = torch.zeros(num_steps, num_envs, device=sim_matrix.device)
+        rewards = torch.zeros((num_steps, num_envs), device=sim_matrix.device)
         for env in range(num_envs):
             env_dist = sim_matrix[:, :, env].clone()
             env_dist.fill_diagonal_(float('inf'))
@@ -349,9 +377,13 @@ class APT_PPO:
 
     def _compute_similarity_matrix(self, obs):
         """
-        Build a similarity matrix (distance matrix) for each environment.
-        obs: [num_steps, num_envs, obs_dim]
-        Returns: [num_steps, num_steps, num_envs]
+        Build a similarity (distance) matrix for each environment.
+
+        Parameters:
+            obs (Tensor): [num_steps, num_envs, obs_dim]
+
+        Returns:
+            Tensor: [num_steps, num_steps, num_envs] distance matrices.
         """
         sim_matrices = []
         for env_idx in range(self.num_envs):
