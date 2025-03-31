@@ -30,7 +30,7 @@ class APT_PPO:
                  num_envs=8,
                  num_steps=125,
                  anneal_lr=True,
-                 gamma=0.999,
+                 gamma=0.99,
                  gae_lambda=0.95,
                  num_minibatches=4,
                  update_epochs=4,
@@ -42,7 +42,7 @@ class APT_PPO:
                  max_grad_norm=0.5,
                  target_kl=None,
                  int_coef=1.0,
-                 ext_coef=2.0,
+                 ext_coef=0.0,
                  int_gamma=0.99,
                  k=50,
                  c=1):
@@ -125,6 +125,7 @@ class APT_PPO:
         obs_shape = getattr(self.env, "single_observation_space", self.env.observation_space).shape
         self.agent = Agent(self.env.action_space[0].n, obs_shape[0]).to(self.device)
         self.optimizer = optim.Adam(self.agent.parameters(), lr=self.learning_rate, eps=1e-5)
+        wandb.watch(self.agent, self.optimizer)
 
         reward_rms = RunningMeanStd()
         discounted_reward = RewardForwardFilter(self.int_gamma)
@@ -181,19 +182,19 @@ class APT_PPO:
             sim_matrix = self._compute_similarity_matrix(obs)
             curiosity_rewards = self.compute_reward(sim_matrix)
 
-            # Normalize curiosity rewards
-            rewards_per_env = np.array([discounted_reward.update(r) for r in curiosity_rewards.cpu().numpy().T])
-            mean_r, std_r = rewards_per_env.mean(), rewards_per_env.std()
-            print("Average intrinsic reward:", mean_r)
-            self.total_avg_curiosity_rewards.append(mean_r)
-            reward_rms.update_from_moments(mean_r, std_r**2, len(rewards_per_env))
-            curiosity_rewards /= torch.sqrt(torch.tensor(reward_rms.var, device=self.device) + 1e-8)
+            # Use clipping to prevent extreme intrinsic rewards.
+            curiosity_rewards = torch.clamp(curiosity_rewards, -10.0, 10.0)
 
+            avg_intrinsic = curiosity_rewards.mean().item()
+            std_intrinsic = curiosity_rewards.std().item()
+            print("Average intrinsic reward:", avg_intrinsic)
+            self.total_avg_curiosity_rewards.append(avg_intrinsic)
             wandb.log({
-                "Average Reward": mean_r,
-                "Std Reward": std_r,
-                "Actions": actions,
-                "Observations": obs
+                "update": update,
+                "global_step": global_step,
+                "avg_intrinsic_reward": avg_intrinsic,
+                "std_intrinsic_reward": std_intrinsic,
+                "learning_rate": self.optimizer.param_groups[0]["lr"]
             })
 
             # Compute advantages and returns
@@ -238,6 +239,9 @@ class APT_PPO:
 
             # PPO update loop
             indices = np.arange(self.batch_size)
+            total_pg_loss = 0.0
+            total_v_loss = 0.0
+            total_entropy = 0.0
             for epoch in range(self.update_epochs):
                 np.random.shuffle(indices)
                 for start in range(0, self.batch_size, self.minibatch_size):
@@ -268,15 +272,30 @@ class APT_PPO:
                     else:
                         ext_v_loss = 0.5 * ((new_ext_values - b_ext_returns[mb_inds])**2).mean()
                     int_v_loss = 0.5 * ((new_int_values - b_int_returns[mb_inds])**2).mean()
-                    loss = pg_loss - self.ent_coef * entropy.mean() + (ext_v_loss + int_v_loss) * self.vf_coef
+                    v_loss = ext_v_loss + int_v_loss
+                    loss = pg_loss - self.ent_coef * entropy.mean() + v_loss * self.vf_coef
 
                     self.optimizer.zero_grad()
                     loss.backward()
-                    nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
+                    grad_norm = nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
                     self.optimizer.step()
+
+                    total_pg_loss += pg_loss.item()
+                    total_v_loss += v_loss.item()
+                    total_entropy += entropy.mean().item()
 
                 if self.target_kl is not None and approx_kl > self.target_kl:
                     break
+
+            wandb.log({
+                "update": update,
+                "global_step": global_step,
+                "policy_loss": total_pg_loss / self.update_epochs,
+                "value_loss": total_v_loss / self.update_epochs,
+                "entropy": total_entropy / self.update_epochs,
+                "approx_kl": approx_kl.item(),
+                "learning_rate": self.optimizer.param_groups[0]["lr"],
+            })
 
     def test_agent(self, num_episodes, max_steps_per_episode, save_episode=False):
         """
@@ -292,6 +311,7 @@ class APT_PPO:
             done = False
             steps = 0
             frames = []
+            ep_reward = 0
             while not done and steps < max_steps_per_episode:
                 frame = test_env.render()
                 frames.append(np.moveaxis(frame, 2, 0))
@@ -299,14 +319,21 @@ class APT_PPO:
                 with torch.no_grad():
                     action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
                 obs, reward, done, _ = test_env.step(action.cpu().numpy()[0])
+                ep_reward += reward
                 action_name = test_env.actions(action.item()).name
                 action_log.append(action_name)
                 print(f"Step {steps:3d} | Action: {action_name}")
                 steps += 1
                 time.sleep(0.1)
 
+            wandb.log({
+                "test_episode": ep,
+                "test_episode_reward": ep_reward,
+                "episode_length": steps
+            })
+
             if save_episode:
-                gif_path = os.path.join(self.save_dir, "test_replays", f"episode_ep{ep}.gif")
+                gif_path = os.path.join(self.save_dir, f"episode_{ep}.gif")
                 os.makedirs(os.path.dirname(gif_path), exist_ok=True)
                 write_gif(np.array(frames), gif_path, fps=10)
                 wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})

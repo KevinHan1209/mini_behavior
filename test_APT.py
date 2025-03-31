@@ -11,7 +11,7 @@ SAVE_FREQUENCY = 100
 TEST_STEPS = 500
 
 ENV_NAME = 'MiniGrid-MultiToy-8x8-N2-v0'
-ENV_KWARGS = {"room_size": 8, "max_steps": 1000}
+ENV_KWARGS = {"room_size": 8, "max_steps": 10000}
 SEED = 1
 
 def make_env(env_id: str, seed: int, idx: int, env_kwargs: dict):
