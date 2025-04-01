@@ -6,7 +6,7 @@ from env_wrapper import CustomObservationWrapper
 
 # ===== Parameters =====
 TASK = 'MultiToy'
-ROOM_SIZE = 8
+ROOM_SIZE = 16
 MAX_STEPS = 1000
 TOTAL_TIMESTEPS = 1e6
 DENSE_REWARD = False
@@ -14,7 +14,7 @@ POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
 NUM_STEPS = 125
 SAVE_FREQUENCY = 10
-TEST_STEPS = 50
+TEST_STEPS = 500
 
 # ===== Helper Functions =====
 def make_env(env_id, seed, idx, env_kwargs):

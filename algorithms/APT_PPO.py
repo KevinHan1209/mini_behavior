@@ -285,8 +285,10 @@ class APT_PPO:
                 with torch.no_grad():
                     action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
                 obs, reward, done, _ = test_env.step(action.numpy()[0])
-                action_log.append(test_env.actions(action.item()).name)
-                print(f"Step {steps:3d} | Action: {test_env.actions(action.item()).name}")
+                action_log.append(test_env.manipulation_actions(action[0][0].item()).name)
+                action_log.append(test_env.manipulation_actions(action[0][1].item()).name)
+                action_log.append(test_env.locomotion_actions(action[0][2].item()).name)
+                print(f"Step {steps:3d} | Actions: {test_env.manipulation_actions(action[0][0].item()).name}, {test_env.manipulation_actions(action[0][1].item()).name}, {test_env.locomotion_actions(action[0][2].item()).name}")
                 steps += 1
                 time.sleep(0.1)
 
