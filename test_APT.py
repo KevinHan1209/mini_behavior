@@ -13,7 +13,7 @@ DENSE_REWARD = False
 POLICY_TYPE = 'CnnPolicy'
 NUM_ENVS = 8
 NUM_STEPS = 125
-SAVE_FREQUENCY = 10
+SAVE_FREQUENCY = 100
 TEST_STEPS = 500
 
 # ===== Helper Functions =====
