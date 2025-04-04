@@ -13,3 +13,7 @@ dist/*
 runs/
 wandb/
 models/
+*.gif
+img/
+artifacts/
+*.key

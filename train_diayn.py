@@ -11,8 +11,8 @@ wandb.login()
 TASK = 'MultiToy'
 ROOM_SIZE = 8
 MAX_STEPS = 1000
-TOTAL_TIMESTEPS = 2e6
-N_SKILLS = 64 #test this out, 64?
+TOTAL_TIMESTEPS = 3e6
+N_SKILLS = 8 #test this out, 64?
 
 NUM_ENVS = 8
 NUM_STEPS = 125
@@ -24,7 +24,7 @@ env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
 test_env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v3"
 test_env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "test_env": True}
 
-save_dir = f"models/DIAYN_{TASK}_Run3_64skills"
+save_dir = f"models/DIAYN_{TASK}_Run14_no_priorities"
 
 if __name__ == "__main__":
     register(
