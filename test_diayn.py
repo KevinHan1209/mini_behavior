@@ -117,7 +117,7 @@ def test_all_skills(
     model,
     device,
     fixed_seed=None,
-    n_skills=8,
+    n_skills=16,
     target_dim=792,
     num_episodes=3,
     max_steps_per_episode=200,
@@ -133,7 +133,7 @@ def test_all_skills(
     # Start a single wandb run for all skills
     wandb.init(
         project=project_name,
-        name=f"DIAYN_Test_all_skills_seed_{fixed_layout_seed}",
+        name=f"DIAYN_Run7_seed_{fixed_layout_seed}",
         config={
             "env_id": env_id,
             "layout_seed": fixed_layout_seed,
@@ -227,7 +227,6 @@ def test_all_skills(
                         print(f"Input tensor shape: {obs_tensor.shape}")
                         break
     
-                # Step
                 action_item = action.cpu().numpy()[0] if action.ndim > 0 else action.item()
                 obs_dict, reward, done, info = env.step(action_item)
     
@@ -254,13 +253,12 @@ def test_all_skills(
                 })
     
             # Save GIF
-            gif_path = f"img/diayn/1M/diayn_skill_{skill_id}_ep_{episode+1}.gif"
+            gif_path = f"img/diayn_test/1.5M/diayn_skill_{skill_id}_ep_{episode+1}.gif"
             os.makedirs(os.path.dirname(gif_path), exist_ok=True)
             if frames:
                 write_gif(np.array(frames), gif_path, fps=5)
                 wandb.log({f"skill_{skill_id}_ep_{episode+1}_replay": wandb.Video(gif_path, fps=5, format="gif")})
     
-            # Log episode summary
             wandb.log({
                 "skill_id": skill_id,
                 "episode": episode,
@@ -268,12 +266,10 @@ def test_all_skills(
                 "episode_length": step_count
             })
             
-            # Update skill totals
             skill_activity += episode_activity
             skill_total_reward += ep_reward
             skill_total_steps += step_count
             
-            # Activity table for this episode
             activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
             for idx, count in enumerate(episode_activity):
                 if idx < len(flag_mapping):
@@ -283,18 +279,15 @@ def test_all_skills(
     
             print(f"[Skill={skill_id}] Episode {episode+1}/{num_episodes} ended. Reward={ep_reward:.2f}, Steps={step_count}")
             
-            # Print toy interaction summary for this episode
             print("\nEpisode toy interaction summary:")
             for idx, count in enumerate(episode_activity):
                 if count > 0 and idx < len(flag_mapping):
                     fm = flag_mapping[idx]
                     print(f"  {fm['object_type']}[{fm['object_index']}].{fm['state_name']}: {int(count)} interactions")
         
-        # Calculate skill averages
         skill_avg_reward = skill_total_reward / num_episodes
         skill_avg_steps = skill_total_steps / num_episodes
         
-        # Record skill summary
         skill_summary.append({
             "skill_id": skill_id,
             "avg_reward": skill_avg_reward,
@@ -302,7 +295,6 @@ def test_all_skills(
             "activity": skill_activity
         })
         
-        # Log skill activity table
         skill_activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
         for idx, count in enumerate(skill_activity):
             if idx < len(flag_mapping):
@@ -320,10 +312,8 @@ def test_all_skills(
                 fm = flag_mapping[idx]
                 print(f"    {fm['object_type']}[{fm['object_index']}].{fm['state_name']}: {int(count)} interactions")
     
-    # Create final comparison table for all skills
     comparison_table = wandb.Table(columns=["skill_id", "avg_reward", "avg_steps", "most_active_flags"])
     for summary in skill_summary:
-        # Find top 3 most active flags
         top_indices = np.argsort(summary["activity"])[-3:][::-1]
         top_flags = []
         for idx in top_indices:
@@ -346,10 +336,10 @@ def main():
     TASK = 'MultiToy'
     ROOM_SIZE = 8
     N_SKILLS = 8
-    CHECKPOINT_STEP = 1000000
+    CHECKPOINT_STEP = 1500000
     EPISODES_PER_SKILL = 5
     MAX_STEPS_PER_EPISODE = 500
-    TARGET_DIM = 792  # Set this to the expected input dimension
+    TARGET_DIM = 792  # set to expected input dimension 792 with 8 skills
     FIXED_SEED = 1
 
     env_id = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v2"
@@ -360,8 +350,7 @@ def main():
         kwargs={"room_size": ROOM_SIZE, "max_steps": 1000}
     )
 
-    # Find model
-    model_dir = f"models/DIAYN_{TASK}_Run2"
+    model_dir = f"models/DIAYN_{TASK}_Run9_lr_match"
     model_path = os.path.join(model_dir, f"model_step_{CHECKPOINT_STEP}.pt")
     if not os.path.exists(model_path):
         checkpoints = [f for f in os.listdir(model_dir) if f.startswith("model_step_")]
@@ -375,7 +364,6 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Create and load model
     model = DIAYN(
         env_id=env_id,
         device=device,

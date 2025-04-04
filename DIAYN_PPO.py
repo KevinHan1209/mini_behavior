@@ -20,6 +20,7 @@ class Memory:
         self.buffer_size = buffer_size
         self.buffer = []
         self.seed = seed
+        self.priorities = None
         random.seed(self.seed)
         
     def add(self, *transition):
@@ -27,12 +28,45 @@ class Memory:
         if len(self.buffer) > self.buffer_size:
             self.buffer.pop(0)
         assert len(self.buffer) <= self.buffer_size
-        
+
     def sample(self, size):
-        return random.sample(self.buffer, size)
+        if hasattr(self, 'priorities') and self.priorities is not None and len(self.priorities) == len(self.buffer):
+            indices = np.random.choice(
+                len(self.buffer),
+                size=min(size, len(self.buffer)),
+                replace=False,
+                p=self.priorities
+            )
+            return [self.buffer[i] for i in indices]
+        else:
+            return random.sample(self.buffer, min(size, len(self.buffer)))
     
     def __len__(self):
         return len(self.buffer)
+    
+    def process_priorities(self):
+        """Update priorities based on skill diversity"""
+        if len(self.buffer) < 100:
+            self.priorities = None
+            return
+        
+        skill_counts = {}
+        for transition in self.buffer:
+            skill = transition.z.item()
+            if skill not in skill_counts:
+                skill_counts[skill] = 0
+            skill_counts[skill] += 1
+        
+        total = sum(skill_counts.values())
+        skill_weights = {skill: total / count for skill, count in skill_counts.items()}
+        
+        self.priorities = []
+        for transition in self.buffer:
+            skill = transition.z.item()
+            self.priorities.append(skill_weights[skill])
+        
+        sum_weights = sum(self.priorities)
+        self.priorities = [p / sum_weights for p in self.priorities]
     
     @staticmethod
     def get_rng_state():
@@ -56,9 +90,9 @@ class DIAYNObservationWrapper(gym.ObservationWrapper):
     def __init__(self, env, skill_z=None):
         super().__init__(env)
         self.skill_z = skill_z
-        self.n_skills = 64  #matches N_SKILLS
+        self.n_skills = 8  #matches N_SKILLS
         
-        # Add skill to dictionary observation space
+        #add skill to dictionary observation space
         spaces = dict(env.observation_space.spaces)
         spaces['skill'] = gym.spaces.Box(
             low=0, high=1, 
@@ -94,13 +128,13 @@ class DIAYN:
             gamma=0.99,
             gae_lambda=0.95,
             num_minibatches=4,
-            update_epochs=4,
+            update_epochs=8, #incresed from 4
             clip_coef=0.2,
             ent_coef=0.01,
             vf_coef=0.5,
             max_grad_norm=0.5,
-            disc_coef=0.1, #new
-            n_skills=64, #new
+            disc_coef=0.1, #unused since no external reward
+            n_skills=8, #new
             seed=1
             ):
         
@@ -132,6 +166,8 @@ class DIAYN:
         self.seed = seed
         self.anneal_lr = True
 
+        self.reward_normalizer = RunningMeanStd()
+
         # Calculate batch sizes
         self.batch_size = int(num_envs * num_steps)
         self.minibatch_size = int(self.batch_size // self.num_minibatches)
@@ -141,7 +177,7 @@ class DIAYN:
         self.obs_space = self.envs.single_observation_space
         #print("Observation space:", self.obs_space)
         if isinstance(self.obs_space, gym.spaces.Dict):
-        # Calculate the flattened observation dimension without the skill
+        #calculate the flattened observation dimension without the skill
             self.obs_dim = 0
             for key, space in self.obs_space.spaces.items():
                 if key != 'skill':  # Skip the skill part which we'll handle separately
@@ -152,16 +188,32 @@ class DIAYN:
 
         self.aug_obs_dim = self.obs_dim + self.n_skills
         
-        # Initialize agent and discriminator
+        #initialize agent and discriminator
         self.agent = Agent(self.aug_obs_dim, self.envs.single_action_space.n).to(self.device)
         self.discriminator = Discriminator(self.obs_dim, self.n_skills).to(self.device)
         
-        # Memory buffer for experience replay
-        self.memory = Memory(buffer_size=10000, seed=self.seed)
+        #memory buffer for experience replay
+        self.memory = Memory(buffer_size=1000, seed=self.seed)
 
-        # Add validation for environment compatibility
+        #debugging
         if not hasattr(self.envs.single_observation_space, 'shape'):
             raise ValueError("Environment must have an observation space with a shape attribute")
+        
+    def create_optimizers(self):
+        """Create separate optimizers for policy and discriminator"""
+        policy_optimizer = optim.Adam(
+            self.agent.parameters(),
+            lr=self.learning_rate,
+            eps=1e-5
+        )
+        
+        disc_optimizer = optim.Adam(
+            self.discriminator.parameters(),
+            lr=self.learning_rate, #* 0.1,  #lower learning rate for discriminator
+            eps=1e-5
+        )
+        
+        return policy_optimizer, disc_optimizer
 
     def train(self, save_freq=None, save_path=None):
         wandb.init(
@@ -185,7 +237,6 @@ class DIAYN:
             }
         )
 
-        # Watch models for gradients and parameter histograms
         wandb.watch(self.agent, log="all", log_freq=100)
         wandb.watch(self.discriminator, log="all", log_freq=100)
         
@@ -194,10 +245,7 @@ class DIAYN:
         print(f"Total Steps: {self.total_timesteps:,} | Batch Size: {self.batch_size} | Minibatch Size: {self.minibatch_size}")
         print(f"Learning Rate: {self.learning_rate} | Skills: {self.n_skills}")
         
-        optimizer = optim.Adam(
-            list(self.agent.parameters()) + list(self.discriminator.parameters()),
-            lr=self.learning_rate, eps=1e-5
-        )
+        policy_optimizer, disc_optimizer = self.create_optimizers()
         
         def process_obs(obs_dict):
             """Process observations correctly from dictionary or array format."""
@@ -218,22 +266,22 @@ class DIAYN:
                 
             return processed
         
-        # Reset environments and get initial observations
+        #reset environments and get initial observations
         reset_obs = self.envs.reset()
         processed_obs = process_obs(reset_obs)
         
-        # Create the base observation (without skill)
+        #create base observation (without skill)
         next_obs_base = torch.FloatTensor(processed_obs).to(self.device)
         
-        # Create one-hot encoded skills tensor
+        #create one-hot encoded skills tensor
         skills_onehot = torch.zeros(self.num_envs, self.n_skills, device=self.device)
         for i, skill in enumerate(self.current_skills):
             skills_onehot[i, skill] = 1.0
         
-        # Combine observation with skills
+        #combine observation with skills
         next_obs_aug = torch.cat([next_obs_base, skills_onehot], dim=1)
         
-        # Initialize tensors for rollout collection
+        #initialize tensors for rollout collection
         obs_base = torch.zeros((self.num_steps, self.num_envs, self.obs_dim), dtype=torch.float32).to(self.device)
         obs_aug = torch.zeros((self.num_steps, self.num_envs, self.aug_obs_dim), dtype=torch.float32).to(self.device)
         
@@ -250,17 +298,15 @@ class DIAYN:
         num_updates = self.total_timesteps // self.batch_size
         
         last_save_step = 0
+        #track mean intrinsic reward for logging
+        raw_reward_buffer = []
 
         for update in range(1, num_updates + 1):
             if self.anneal_lr:
                 frac = 1.0 - (update - 1.0) / num_updates
                 lrnow = frac * self.learning_rate
-                optimizer.param_groups[0]["lr"] = lrnow
-
-            #print(f"Expected aug obs shape: {obs_aug.shape}")
-            #print(f"Expected base obs shape: {obs_base.shape}")
-            #print(f"Next augmented observation shape: {next_obs_aug.shape}")
-            #print(f"Next base observation shape: {next_obs_base.shape}")
+                policy_optimizer.param_groups[0]["lr"] = lrnow
+                disc_optimizer.param_groups[0]["lr"] = lrnow
 
             for step in range(self.num_steps):
                 global_step += self.num_envs
@@ -268,36 +314,46 @@ class DIAYN:
                 obs_aug[step] = next_obs_aug
                 dones[step] = next_done
 
-                # Get actions from the agent using AUGMENTED observations
+                #get actions from the agent using aug obs with skill
                 with torch.no_grad():
                     action, logprob, _, value = self.agent.get_action_and_value(obs_aug[step])
                 actions[step] = action
                 logprobs[step] = logprob
                 values[step] = value.flatten()
 
-                # Step the environment
+                #step environment
                 action_list = action.detach().cpu().tolist()
                 next_obs_dict, reward, done, info = self.envs.step(action_list)
+
+                # For each environment that finished an episode:
+                for i in range(self.num_envs):
+                    if done[i]:
+                        #resample a new skill
+                        new_skill = np.random.randint(self.n_skills)
+                        self.current_skills[i] = new_skill
+
+                        #update observation wrapper so that environment’s next reset or next obs will reflect this skill
+                        self.envs.envs[i].skill_z = new_skill
                 
-                # Process the new observation correctly
+                #process new observation correctly
                 next_obs_processed = process_obs(next_obs_dict)
                 next_obs_base = torch.FloatTensor(next_obs_processed).to(self.device)
                 
-                # Create new augmented observation with skill
+                #create new augmented observation with skill
                 skills_onehot = torch.zeros(self.num_envs, self.n_skills, device=self.device)
                 for i, skill in enumerate(self.current_skills):
                     skills_onehot[i, skill] = 1.0
                 next_obs_aug = torch.cat([next_obs_base, skills_onehot], dim=1)
                 
-                # Store transitions in memory
+                #store transitions in memory
                 for i in range(self.num_envs):
                     try:
-                        # Extract the state without skill for discriminator
+                        #extract the state without skill for discriminator
                         raw_obs = obs_base[step, i].cpu()
                         raw_next_obs = next_obs_base[i].cpu()
                         
-                        # Store the transition with skill - making sure skill is a single value, not a list
-                        skill_value = int(self.current_skills[i])  # Convert to int scalar
+                        #store transition with skill - making sure skill is a single value, not a list
+                        skill_value = int(self.current_skills[i])
                         
                         # Create a 1D tensor with a single element for the skill
                         skill_tensor = torch.tensor([skill_value], dtype=torch.long)
@@ -315,21 +371,38 @@ class DIAYN:
                         print(f"Skill: {self.current_skills[i]}, type: {type(self.current_skills[i])}")
                 
                 
-                
-                # Calculate intrinsic rewards using discriminator on BASE observations
+                #calculate intrinsic rewards using discriminator on BASE observations
                 with torch.no_grad():
                     disc_logits = self.discriminator(next_obs_base)
                     
-                    # Calculate log p(z|s) using discriminator
+                    #calculate log q(z|s) using discriminator
                     log_q_z_given_s = F.log_softmax(disc_logits, dim=1)
                     
-                    # Calculate log p(z) (uniform prior)
+                    #calculate log p(z) (uniform prior)
                     log_p_z = torch.log(torch.tensor(1.0 / self.n_skills)).to(self.device)
                     
-                    # Intrinsic reward is log p(z|s) - log p(z)
+                    #intrinsic reward is log p(z|s) - log p(z)
                     skill_indices = torch.LongTensor(self.current_skills).to(self.device)
                     skill_indices_expanded = skill_indices.unsqueeze(1)
-                    intrinsic_r = log_q_z_given_s.gather(1, skill_indices_expanded).squeeze() - log_p_z
+                    #clip intrinsic rewards to prevent extreme negative values
+                    raw_reward = log_q_z_given_s.gather(1, skill_indices_expanded).squeeze() - log_p_z
+                    #clipped_reward = torch.clamp(raw_reward, min=-2.0, max=2.0)
+                    clipped_reward = raw_reward
+                    
+                    #collect raw rewards for normalization
+                    raw_reward_buffer.extend(clipped_reward.cpu().numpy())
+                    
+                    #if collected enough rewards, update the normalizer
+                    if len(raw_reward_buffer) >= 100:
+                        self.reward_normalizer.update(np.array(raw_reward_buffer))
+                        raw_reward_buffer = []
+                    
+                    #apply normalization if we have enough data
+                    if self.reward_normalizer.count > 100:
+                        normalized_reward = self.reward_normalizer.normalize(clipped_reward.cpu().numpy())
+                        intrinsic_r = torch.FloatTensor(normalized_reward).to(self.device)
+                    else:
+                        intrinsic_r = clipped_reward
                     
                 rewards[step] = torch.FloatTensor(reward).to(self.device)
                 intrinsic_rewards[step] = intrinsic_r
@@ -346,12 +419,12 @@ class DIAYN:
             # Compute advantages and returns
             with torch.no_grad():
                 next_value = self.agent.get_value(next_obs_aug)  # Use augmented obs for value
-                # Use intrinsic rewards for learning policy
+                #use intrinsic rewards for learning policy
                 advantages = self.compute_gae(next_value, intrinsic_rewards, dones, values, next_done)
                 returns = advantages + values.reshape(-1)
 
-            # Flatten rollout data
-            b_obs_aug = obs_aug.reshape(-1, self.aug_obs_dim)  # Use correct dimension
+            #flatten rollout data
+            b_obs_aug = obs_aug.reshape(-1, self.aug_obs_dim)
             b_logprobs = logprobs.reshape(-1)
             b_actions = actions.reshape(-1)
             b_advantages = advantages.reshape(-1)
@@ -361,23 +434,32 @@ class DIAYN:
             wandb.log({
                 "action_distribution": wandb.Histogram(b_actions.cpu().numpy()),
                 "intrinsic_rewards": intrinsic_rewards.mean().item(),
-                "extrinsic_rewards": rewards.mean().item()
+                "extrinsic_rewards": rewards.mean().item(),
+                "raw_intrinsic_reward_mean": clipped_reward.mean().item(),
+                "raw_intrinsic_reward_std": clipped_reward.std().item(),
+                "normalized_intrinsic_reward_mean": intrinsic_r.mean().item(),
+                "normalized_intrinsic_reward_std": intrinsic_r.std().item(),
+                "skill_counts": {f"skill_{i}": (self.current_skills == i).sum() for i in range(self.n_skills)}
             }, step=global_step)
             
             # Optimize policy and value networks
             policy_loss, value_loss, entropy_loss = self.update_policy(
-                b_obs_aug, b_logprobs, b_actions, b_advantages, b_returns, optimizer
+                b_obs_aug, b_logprobs, b_actions, b_advantages, b_returns, b_values, policy_optimizer
             )
+
+            #update the memory priorities to balance skill sampling
+            #self.memory.process_priorities()
             
-            # Train discriminator to classify skills from states
-            if len(self.memory) >= self.minibatch_size:
-                disc_loss = self.update_discriminator(optimizer)
-            else:
-                disc_loss = 0.0
+            #train discriminator to classify skills from states
+            #if update % 2 == 0 and len(self.memory) >= self.minibatch_size:
+            disc_loss = self.update_discriminator(disc_optimizer)
+            #else:
+                #disc_loss = 0.0
 
             if update % 10 == 0:
                 wandb.log({
-                    "learning_rate": optimizer.param_groups[0]["lr"],
+                    "learning_rate": policy_optimizer.param_groups[0]["lr"],
+                    "disc_learning_rate": disc_optimizer.param_groups[0]["lr"],
                     "global_step": global_step,
                     "policy_loss": policy_loss,
                     "value_loss": value_loss,
@@ -390,23 +472,6 @@ class DIAYN:
                 print(f"Policy Loss: {policy_loss:.4f} | Value Loss: {value_loss:.4f} | Entropy: {entropy_loss:.4f}")
                 print(f"Discriminator Loss: {disc_loss:.4f}")
                 print("-" * 50)
-
-            # Shuffle skills periodically to encourage exploration
-            if update % 5 == 0:
-                self.current_skills = np.random.choice(self.skills, size=self.num_envs)
-                self.envs.close()
-                self.envs = gym.vector.SyncVectorEnv(
-                    [make_env(self.env_id, self.seed, i, self.current_skills[i]) for i in range(self.num_envs)]
-                )
-                reset_obs = self.envs.reset()
-                processed_obs = process_obs(reset_obs)
-                next_obs_base = torch.FloatTensor(processed_obs).to(self.device)
-                
-                # Create new skills tensor
-                skills_onehot = torch.zeros(self.num_envs, self.n_skills, device=self.device)
-                for i, skill in enumerate(self.current_skills):
-                    skills_onehot[i, skill] = 1.0
-                next_obs_aug = torch.cat([next_obs_base, skills_onehot], dim=1)
 
         wandb.finish()
         self.envs.close()
@@ -434,7 +499,7 @@ class DIAYN:
             
         return advantages.reshape(-1)
 
-    def update_policy(self, b_obs, b_logprobs, b_actions, b_advantages, b_returns, optimizer):
+    def update_policy(self, b_obs, b_logprobs, b_actions, b_advantages, b_returns, b_values, optimizer):
         """Update the policy network using PPO"""
         total_pg_loss = 0
         total_value_loss = 0
@@ -442,6 +507,9 @@ class DIAYN:
         
         # Normalize advantages
         b_advantages = (b_advantages - b_advantages.mean()) / (b_advantages.std() + 1e-8)
+
+        # Value function clipping as in PPO paper
+        value_clip_param = 0.2
         
         for epoch in range(self.update_epochs):
             # Shuffle data
@@ -470,7 +538,20 @@ class DIAYN:
                 
                 # Value loss
                 new_values = new_values.view(-1)
-                v_loss = 0.5 * ((new_values - b_returns[mb_inds]) ** 2).mean()
+
+                # Clipped value function objective
+                value_pred_clipped = b_values[mb_inds] + torch.clamp(
+                    new_values - b_values[mb_inds],
+                    -value_clip_param,
+                    value_clip_param
+                )
+                value_losses = (new_values - b_returns[mb_inds]).pow(2)
+                value_losses_clipped = (value_pred_clipped - b_returns[mb_inds]).pow(2)
+                v_loss = 0.5 * torch.max(value_losses, value_losses_clipped).mean()
+                
+                # Scale down value loss to avoid overwhelming policy
+                v_loss = v_loss * 0.5  # Reduce the impact of value loss
+                #v_loss = 0.5 * ((new_values - b_returns[mb_inds]) ** 2).mean()
                 
                 # Entropy bonus
                 entropy_loss = entropy.mean()
@@ -493,41 +574,42 @@ class DIAYN:
         avg_entropy = total_entropy / (self.update_epochs * (self.batch_size // self.minibatch_size))
         
         return avg_pg_loss, avg_value_loss, avg_entropy
-
+    
     def update_discriminator(self, optimizer):
-        """Update the discriminator network"""
+        """Update the discriminator network to predict which skill is being executed from state information"""
         total_disc_loss = 0
         
         for _ in range(self.update_epochs):
-            # Sample batch from memory
+            #sample batch from memory only when memory is large enough
             if len(self.memory) < self.minibatch_size:
                 return 0.0
                 
-            batch = self.memory.sample(self.minibatch_size)
+            batch = self.memory.sample(self.minibatch_size) #retrieved transitions
             
-            # Unpack batch
-            states = torch.cat([item.state.unsqueeze(0) for item in batch]).to(self.device)
+            #unpack batch
+            #states = torch.cat([item.state.unsqueeze(0) for item in batch]).to(self.device)
+            states = torch.cat([item.next_state.unsqueeze(0) for item in batch]).to(self.device)
             
-            # Handle skills - convert each to a tensor with shape [1] before concatenating
+            #convert each to a tensor with shape [1] before concatenating
             skills = []
             for item in batch:
-                # If z is 0-dim (scalar), unsqueeze it to make it a 1D tensor with one element
+                #if z is scalar unsqueeze it to make it a 1D tensor with one element
                 if item.z.dim() == 0:
                     skills.append(item.z.unsqueeze(0))
                 else:
-                    # If it's already a tensor with shape [1] or more, use it directly
+                    #if already a tensor with shape [1] or more, use it directly
                     skills.append(item.z)
             
-            # concatenate the skills
+            #concatenate skills
             skills = torch.cat(skills).to(self.device)
             
-            # Forward pass
+            #forward pass to predict skill probabilities from state observations 
             logits = self.discriminator(states)
             
-            # cross-entropy loss
+            #cross-entropy loss
             disc_loss = F.cross_entropy(logits, skills)
             
-            # Backward pass
+            #backward pass
             optimizer.zero_grad()
             disc_loss.backward()
             nn.utils.clip_grad_norm_(self.discriminator.parameters(), self.max_grad_norm)
@@ -596,6 +678,42 @@ class DIAYN:
         self.agent.train()
         
         return avg_reward
+    
+class RunningMeanStd:
+    """Tracks running mean and standard deviation of input data"""
+    def __init__(self, shape=()):
+        self.mean = np.zeros(shape, 'float64')
+        self.var = np.ones(shape, 'float64')
+        self.count = 1e-4
+
+    def update(self, x):
+        if not isinstance(x, np.ndarray):
+            x = np.asarray(x)
+        if x.size == 0 or np.any(np.isnan(x)):
+            return
+        batch_mean = np.mean(x, axis=0)
+        batch_var = np.var(x, axis=0)
+        batch_count = x.shape[0]
+        self.update_from_moments(batch_mean, batch_var, batch_count)
+
+    def update_from_moments(self, batch_mean, batch_var, batch_count):
+        delta = batch_mean - self.mean
+        tot_count = self.count + batch_count
+        new_mean = self.mean + delta * batch_count / tot_count
+        m_a = self.var * self.count
+        m_b = batch_var * batch_count
+        M2 = m_a + m_b + np.square(delta) * self.count * batch_count / tot_count
+        new_var = M2 / tot_count
+        new_count = tot_count
+        self.mean = new_mean
+        self.var = new_var
+        self.count = new_count
+        
+    def normalize(self, x):
+        """Normalizes data using running statistics"""
+        if not isinstance(x, np.ndarray):
+            x = np.asarray(x)
+        return (x - self.mean) / np.sqrt(self.var + 1e-8)
     
 class Agent(nn.Module):
     """Neural network for policy and value functions"""
