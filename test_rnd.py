@@ -1,8 +1,10 @@
-# test.py
+# test_rnd.py
 import gym
-from algorithms.NovelD_PPO import NovelD_PPO
+from RND_PPO import RND_PPO
+import os
 import numpy as np
 import torch
+import time
 import wandb
 from array2gif import write_gif
 from env_wrapper import CustomObservationWrapper
@@ -72,22 +74,12 @@ def generate_flag_mapping(env):
     return mapping
 
 
-def train_agent(env_id, device):
-    print("\n=== Starting Agent Training ===")
-    try:
-        noveld_ppo = NovelD_PPO(env_id, device)
-        noveld_ppo.train()
-        return noveld_ppo
-    except Exception as e:
-        print(f"\nError during training: {e}")
-        raise
-
-
-def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode=100):
+def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max_steps_per_episode=200):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
-    wandb.init(project="noveld-ppo-test",
+    wandb.init(project="rnd-ppo-test",
+               name=f"RND_PPO_{TASK}_{ROOM_SIZE}x{ROOM_SIZE}_STEP{STEP}",
                config={"env_id": env_id,
                        "mode": "testing",
                        "num_episodes": num_episodes,
@@ -109,7 +101,7 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
         mapping_table.add_data(idx, mapping["object_type"], mapping["object_index"], mapping["state_name"])
     wandb.log({"flag_mapping": mapping_table})
 
-    noveld_ppo.agent.network.to(device)
+    #model.agent.network.to(device)
     
     for episode in range(num_episodes):
         print(f"\n=== Episode {episode + 1}/{num_episodes} ===")
@@ -130,20 +122,25 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
                 frames.append(np.moveaxis(frame, 2, 0))
             
             with torch.no_grad():
-                obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
-                action, _, _, ext_value, int_value = noveld_ppo.agent.get_action_and_value(obs_tensor)
+                obs_tensor = torch.FloatTensor(obs).to(device)
+                action, _, _, value = model.agent.get_action_and_value(obs_tensor)
             
             # Take an action in the environment.
-            obs, reward, done, _ = test_env.step(action.cpu().numpy()[0])
+            #print(f"Action tensor: {action}, shape: {action.shape}")
+            #obs, reward, done, _ = test_env.step(action.cpu().numpy()[0])
+            obs, reward, done, _ = test_env.step(action.cpu().item())
             total_reward += reward
             steps += 1
-            novelty = noveld_ppo.calculate_novelty(torch.FloatTensor(obs).unsqueeze(0).to(device))
-            novelty_values.append(novelty)
+
+            with torch.no_grad():
+                obs_tensor = torch.FloatTensor(obs).to(device)
+                if obs_tensor.dim() == 1:  # Ensure obs is 2D for batch processing
+                    obs_tensor = obs_tensor.unsqueeze(0)  # Add batch dimension
+
+                novelty = model.calculate_novelty(obs_tensor)
+                #novelty = model.calculate_novelty(torch.FloatTensor(obs).to(device))
+                novelty_values.append(novelty.item())
             
-            # Convert tensor values to Python scalars.
-            novelty_val = novelty.item() if torch.is_tensor(novelty) else novelty
-            ext_val = ext_value.item() if torch.is_tensor(ext_value) else ext_value
-            int_val = int_value.item() if torch.is_tensor(int_value) else int_value
 
             # Extract the binary flags from the current observation.
             current_flags = extract_binary_flags(obs, env_unwrapped)
@@ -156,9 +153,8 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
             # Log step metrics to wandb.
             wandb.log({
                 "step_reward": reward,
-                "step_novelty": novelty_val,
-                "step_ext_value": ext_val,
-                "step_int_value": int_val,
+                "step_novelty": novelty.item(),
+                "step_value": value.item(),
                 "episode": episode,
                 "step": steps
             })
@@ -170,22 +166,23 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
                 action_name = str(action.item())
             print(f"\nStep {steps}/{max_steps_per_episode}")
             print(f"Action Taken: {action_name} | Reward: {reward:.2f}")
-            print(f"Novelty Score: {novelty_val:.4f} | External Value: {ext_val:.4f} | Internal Value: {int_val:.4f}")
+            print(f"Novelty Score: {novelty.item():.4f} | Value: {value.item():.4f}")
         
         # Log episode-level metrics including the activity (cumulative flag changes).
         wandb.log({
             "episode_total_reward": total_reward,
             "episode_length": steps,
-            # "episode_mean_novelty": np.mean(novelty_values),
+            "episode_mean_novelty": np.mean(novelty_values),
             "activity": activity,
             "episode": episode
         })
 
         # Create and log a gif replay of the episode.
-        gif_path = f"episode_{episode + 1}.gif"
-        if frames:
-            write_gif(np.array(frames), gif_path, fps=1)
-            wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+        gif_path = f"img/rnd32x32/0/episode_{episode + 1}.gif"
+        #print(activity)
+        #if frames:
+        #    write_gif(np.array(frames), gif_path, fps=1)
+        #    wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
         
         # Instead of printing the activity details, log them as a table in wandb.
         activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
@@ -195,7 +192,7 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
         wandb.log({f"episode_{episode + 1}_activity": activity_table})
         
         print(f"\n=== Episode {episode + 1} Summary ===")
-        print(f"Total Reward: {total_reward:.2f} | Steps: {steps}")
+        print(f"Total Reward: {total_reward:.2f} | Steps: {steps} | Mean Novelty: {np.mean(novelty_values):.4f}")
         print("\nActivity per binary flag (changes detected):")
         for idx, count in enumerate(activity):
             mapping = flag_mapping[idx]
@@ -207,27 +204,53 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
 
 
 def main():
-    env_id = 'MiniGrid-MultiToy-8x8-N2-v0'
+
     TASK = 'MultiToy'
-    ROOM_SIZE = 8
+    ROOM_SIZE = 32
     MAX_STEPS = 1000
+    STEP = 0
+    
+    env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v0"
     env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    test_env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v1" 
+    test_env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "test_env": True}
+    
     register(
-        id=env_id,
+        id=env_name,
         entry_point=f'mini_behavior.envs:{TASK}Env',
         kwargs=env_kwargs
     )
-    # Train model
-    noveld_ppo = train_agent(env_id, device)
-    
-    # Test model
-    test_agent(env_id, noveld_ppo, device)
+    register(
+        id=test_env_name, 
+        entry_point=f'mini_behavior.envs:{TASK}Env',
+        kwargs=test_env_kwargs
+    )
 
-    # # Test checkpoints
-    # noveld_ppo = NovelD_PPO(env_id, device)
-    # noveld_ppo.load_checkpoint('checkpoints/checkpoint_10000.pt')
-    # test_agent(env_id, noveld_ppo, device)
+    #Pull in trained model
+    model_dir = "models/RND_PPO_MultiToy_Run4_32x32"
+    model_path = f"{model_dir}/model_step_{STEP}.pt"
+
+    if not os.path.exists(model_path):
+        checkpoints = [f for f in os.listdir(model_dir) if f.startswith("model_step_")]
+        if checkpoints:
+            checkpoints.sort(key=lambda x: int(x.split("_")[2].split(".")[0]), reverse=True)
+            model_path = os.path.join(model_dir, checkpoints[0])
+            print(f"Using latest checkpoint: {model_path}")
+        else:
+            print("No model found. Please train a model first.")
+            return
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    model = RND_PPO(
+        env_id=test_env_name,
+        device=device,
+        seed=1
+    )
+    #model.load(model_path)
+    
+    # Test model.
+    test_agent(test_env_name, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max_steps_per_episode=500)
 
 
 if __name__ == "__main__":

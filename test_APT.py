@@ -1,6 +1,7 @@
 import os
 import gym
 from algorithms.APT_PPO import APT_PPO
+from mini_behavior.register import register
 from env_wrapper import CustomObservationWrapper
 
 # ===== Parameters =====
@@ -18,6 +19,7 @@ def make_env(env_id: str, seed: int, idx: int, env_kwargs: dict):
     """
     Create a callable that returns an environment instance.
     """
+
     def thunk():
         env = gym.make(env_id, **env_kwargs)
         env = CustomObservationWrapper(env)
@@ -35,6 +37,16 @@ def init_env(env_name: str, num_envs: int, seed: int, env_kwargs: dict):
     )
 
 if __name__ == "__main__":
+    register(
+         id=env_name,
+         entry_point=f'mini_behavior.envs:{TASK}Env',
+         kwargs=env_kwargs
+     )
+    register(
+         id=test_env_name, 
+         entry_point=f'mini_behavior.envs:{TASK}Env',
+         kwargs=test_env_kwargs
+     )
     # Instantiate a vectorized training environment.
     env = init_env(ENV_NAME, NUM_ENVS, SEED, ENV_KWARGS)
     

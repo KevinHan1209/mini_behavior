@@ -2,17 +2,27 @@ from mini_behavior.states import *
 
 ALL_STATES = [
     'atsamelocation',
-    #'attached',
-    #'flipped',
+    'attached',
     'infovofrobot',
-    'inhandofrobot',
-    'inreachofrobot',
+    'inlefthandofrobot',
+    'inrighthandofrobot',
+    'inleftreachofrobot',
+    'inrightreachofrobot',
     'inside',
+    'kicked',
     'nextto',
     'noise',
     'open',
     'popup',
-    # 'touching', TODO: uncomment once implemented
+    'thrown',
+    "toggled"
+    'pullshed',
+    'climbed',
+    'contains',
+    'hitter',
+    'gothit',
+    'mouthed',
+    'usebrush'
 ]
 
 # Touching
@@ -21,8 +31,10 @@ ALL_STATES = [
 DEFAULT_STATES = [
     'atsamelocation',
     'infovofrobot',
-    'inhandofrobot',
-    'inreachofrobot',
+    'inlefthandofrobot',
+    'inrighthandofrobot',
+    'inleftreachofrobot',
+    'inrightreachofrobot',
     'inside',
     'nextto',
 ]
@@ -30,12 +42,22 @@ DEFAULT_STATES = [
 # ATTENTION: Must change init function in BehaviorGrid class in mini_behavior/grid.py to accomodate for new sizes 
 # in ABILITIES and FURNATURE_STATES
 ABILITIES = [
-    #'attached',
+    'attached',
+    'climbed',
+    'contains',
+    'kicked',
     'noise',
+    'inside',
+    'attached',
     'open',
     'popup',
-    #'flipped',
-    "toggled"
+    "thrown",
+    "toggled",
+    'pullshed',
+    'hitter',
+    'mouthed',
+    'gothit',
+    'usebrush'
 ]
 
 FURNATURE_STATES = []
@@ -44,17 +66,27 @@ FURNATURE_STATES = []
 STATE_FUNC_MAPPING = {
     'attached': Attached,
     'atsamelocation': AtSameLocation,
+    'climbed': Climbed,
+    'contains': Contains,
     'flipped': Flipped,
+    'hitter' : Hitter,
+    'gothit': GotHit,
     'infovofrobot': InFOVOfRobot,
-    'inhandofrobot': InHandOfRobot,
-    'inreachofrobot': InReachOfRobot,
+    'inrighthandofrobot': InRightHandOfRobot,
+    'inlefthandofrobot': InLeftHandOfRobot,
+    'inleftreachofrobot': InLeftReachOfRobot,
+    'inrightreachofrobot': InRightReachOfRobot,
     'inside': Inside,
+    'kicked': Kicked,
+    'mouthed': Mouthed,
     'nextto': NextTo,
     'noise': Noise,
     'open': Opened,
+    'pullshed': Pullshed,
     'popup': Popup,
-    'toggled': ToggledOn
-    # 'touching', TODO: uncomment once implemented
+    'thrown': Thrown,
+    'toggled': ToggledOn,
+    'usebrush': UseBrush
 }
 
 
