@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 def main():
     # Specify the folder containing the CSV files.
-    folder_path = "item_activity/2mil"  # Change this to your folder path.
+    folder_path = "activity"  # Change this to your folder path.
     
     # Get all CSV files in the folder.
     csv_files = glob.glob(os.path.join(folder_path, "*.csv"))

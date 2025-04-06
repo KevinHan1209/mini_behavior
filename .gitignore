@@ -12,6 +12,7 @@ dist/*
 .venv/
 runs/
 wandb/
+APT_PPO/
 models/
 *.gif
 img/

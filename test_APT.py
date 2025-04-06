@@ -5,19 +5,21 @@ from mini_behavior.register import register
 from env_wrapper import CustomObservationWrapper
 
 # ===== Parameters =====
-TASK = 'MultiToy'
-ROOM_SIZE = 16
-MAX_STEPS = 1000
-TOTAL_TIMESTEPS = 1e6
-DENSE_REWARD = False
-POLICY_TYPE = 'CnnPolicy'
+TOTAL_TIMESTEPS = int(2e6)
 NUM_ENVS = 8
-NUM_STEPS = 125
-SAVE_FREQUENCY = 100
+NUM_EPS = 5
+SAVE_FREQUENCY = 500
 TEST_STEPS = 500
 
-# ===== Helper Functions =====
-def make_env(env_id, seed, idx, env_kwargs):
+ENV_NAME = 'MiniGrid-MultiToy-8x8-N2-v0'
+ENV_KWARGS = {"room_size": 8, "max_steps": 10000}
+SEED = 1
+
+def make_env(env_id: str, seed: int, idx: int, env_kwargs: dict):
+    """
+    Create a callable that returns an environment instance.
+    """
+
     def thunk():
         env = gym.make(env_id, **env_kwargs)
         env = CustomObservationWrapper(env)
@@ -25,16 +27,15 @@ def make_env(env_id, seed, idx, env_kwargs):
         return env
     return thunk
 
-def init_env(num_envs: int, seed: int):
+def init_env(env_name: str, num_envs: int, seed: int, env_kwargs: dict):
+    """
+    Initialize a vectorized (synchronous) environment.
+    Note: Use the `single_observation_space` attribute if available.
+    """
     return gym.vector.SyncVectorEnv(
         [make_env(env_name, seed, i, env_kwargs) for i in range(num_envs)]
     )
 
-env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v2"
-env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
-test_env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v3"
-test_env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "test_env": True}
-# ===== Main Block =====
 if __name__ == "__main__":
     register(
          id=env_name,
@@ -47,27 +48,29 @@ if __name__ == "__main__":
          kwargs=test_env_kwargs
      )
     # Instantiate a vectorized training environment.
-    env = init_env(NUM_ENVS, seed=1)
+    env = init_env(ENV_NAME, NUM_ENVS, SEED, ENV_KWARGS)
     
-    save_dir = f"models/APT_PPO"
+    save_dir = "APT_PPO"
     os.makedirs(save_dir, exist_ok=True)
     
     print("Begin training")
-    # Use the same env for training and testing by passing the same id and kwargs.
+    print("\n=== Environment Observation Space ===")
+    obs_space = getattr(env, "single_observation_space", env.observation_space)
+    print("Shape:", obs_space.shape)
+    print("Type:", obs_space.dtype)
+
+    # Instantiate the APT_PPO agent.
     model = APT_PPO(
         env=env,
-        env_id=env_name,
-        env_kwargs=env_kwargs,
+        env_id=ENV_NAME,
+        env_kwargs=ENV_KWARGS,
         save_dir=save_dir,
         num_envs=NUM_ENVS,
+        num_eps=NUM_EPS,
         total_timesteps=TOTAL_TIMESTEPS,
         save_freq=SAVE_FREQUENCY,
         test_steps=TEST_STEPS
     )
     
-    print("\n=== Observation Space ===")
-    print("Shape:", env.observation_space.shape)
-    print("Type:", env.observation_space.dtype)
-    
+    # Train the agent.
     model.train()
-    model.test_agent(save_episode="final", num_episodes=1, max_steps_per_episode=TEST_STEPS)
