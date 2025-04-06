@@ -14,6 +14,7 @@ from mini_behavior.roomgrid import *
 from mini_behavior.utils.utils import RewardForwardFilter, RMS
 from env_wrapper import CustomObservationWrapper
 from gym.wrappers.normalize import RunningMeanStd
+from mini_behavior.utils.states_base import RelativeObjectState
 
 
 class APT_PPO:
@@ -182,8 +183,11 @@ class APT_PPO:
             sim_matrix = self._compute_similarity_matrix(obs)
             curiosity_rewards = self.compute_reward(sim_matrix)
 
-            # Use clipping to prevent extreme intrinsic rewards.
-            curiosity_rewards = torch.clamp(curiosity_rewards, -10.0, 10.0)
+            # Normalize intrinsic rewards using running mean and std (computed from variance)
+            reward_rms.update(curiosity_rewards.cpu().numpy())
+            rms_mean = torch.tensor(reward_rms.mean, device=self.device)
+            rms_std = torch.tensor(np.sqrt(reward_rms.var), device=self.device) + 1e-8
+            curiosity_rewards = (curiosity_rewards - rms_mean) / rms_std
 
             avg_intrinsic = curiosity_rewards.mean().item()
             std_intrinsic = curiosity_rewards.std().item()
@@ -299,19 +303,76 @@ class APT_PPO:
 
     def test_agent(self, num_episodes, max_steps_per_episode, save_episode=False):
         """
-        Run test episodes using the current agent policy and log a gif replay.
+        Run test episodes using the current agent policy, log a gif replay,
+        and track item activity by counting changes in binary flag states.
         """
         print(f"\n=== Testing Agent: {num_episodes} Episode(s) ===")
         action_log = []
         test_env = gym.make(self.env_id, **self.env_kwargs)
         test_env = CustomObservationWrapper(test_env)
+        
+        # Do an initial reset to ensure env.objs is populated.
+        initial_obs = test_env.reset()
+        
+        # Get the underlying (unwrapped) environment for accessing object info.
+        env_unwrapped = getattr(test_env, 'env', test_env)
 
+        def count_binary_flags(env):
+            num_flags = 0
+            for obj_list in env.objs.values():
+                for obj in obj_list:
+                    for state_name, state in obj.states.items():
+                        if not isinstance(state, RelativeObjectState):
+                            num_flags += 1
+            return num_flags
+
+        def generate_flag_mapping(env):
+            mapping = []
+            for obj_type, obj_list in env.objs.items():
+                for idx, obj in enumerate(obj_list):
+                    for state_name, state in obj.states.items():
+                        if not isinstance(state, RelativeObjectState):
+                            mapping.append({
+                                "object_type": obj_type,
+                                "object_index": idx,
+                                "state_name": state_name
+                            })
+            return mapping
+
+        def extract_binary_flags(obs, env):
+            flags = []
+            index = 3  # skip agent state (x, y, direction)
+            for obj_list in env.objs.values():
+                for obj in obj_list:
+                    index += 2  # skip object's position values
+                    for state_name, state in obj.states.items():
+                        if not isinstance(state, RelativeObjectState):
+                            flags.append(obs[index])
+                            index += 1
+            return np.array(flags)
+
+        # Now that the environment is reset, compute binary flags and mapping.
+        num_binary_flags = count_binary_flags(env_unwrapped)
+        flag_mapping = generate_flag_mapping(env_unwrapped)
+        
+        # Log the flag mapping as a wandb table.
+        mapping_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name"])
+        for idx, mapping in enumerate(flag_mapping):
+            mapping_table.add_data(idx, mapping["object_type"], mapping["object_index"], mapping["state_name"])
+        wandb.log({"flag_mapping": mapping_table})
+        
+        # Loop over test episodes.
         for ep in range(num_episodes):
             obs = test_env.reset()
             done = False
             steps = 0
             frames = []
             ep_reward = 0
+
+            # Initialize activity counters (one per binary flag) and previous flag state.
+            activity = [0] * num_binary_flags
+            prev_flags = None
+
             while not done and steps < max_steps_per_episode:
                 frame = test_env.render()
                 frames.append(np.moveaxis(frame, 2, 0))
@@ -320,20 +381,45 @@ class APT_PPO:
                     action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
                 obs, reward, done, _ = test_env.step(action.cpu().numpy()[0])
                 ep_reward += reward
+
+                # Extract binary flags and update activity counts if previous flags exist.
+                current_flags = extract_binary_flags(obs, env_unwrapped)
+                if prev_flags is not None:
+                    differences = (current_flags != prev_flags).astype(int)
+                    activity = [a + d for a, d in zip(activity, differences)]
+                prev_flags = current_flags
+
+                # Log the chosen action.
                 action_name = test_env.actions(action.item()).name
                 action_log.append(action_name)
                 print(f"Step {steps:3d} | Action: {action_name}")
                 steps += 1
                 time.sleep(0.1)
 
+            # Log episode-level metrics.
             wandb.log({
                 "test_episode": ep,
                 "test_episode_reward": ep_reward,
                 "episode_length": steps
             })
+            
+            # Create a new wandb table for this episode’s activity.
+            activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
+            for idx, count in enumerate(activity):
+                mapping = flag_mapping[idx]
+                activity_table.add_data(idx, mapping["object_type"], mapping["object_index"], mapping["state_name"], count)
+            wandb.log({f"episode_{ep+1}_activity": activity_table})
+            
+            # Print episode summary.
+            print(f"\nEpisode {ep+1} Summary:")
+            print(f"Total Reward: {ep_reward:.2f} | Steps: {steps}")
+            print("Activity per binary flag:")
+            for idx, count in enumerate(activity):
+                mapping = flag_mapping[idx]
+                print(f" - Flag {idx} ({mapping['object_type']} #{mapping['object_index']} - {mapping['state_name']}): {count}")
 
             if save_episode:
-                gif_path = os.path.join(self.save_dir, f"episode_{ep}.gif")
+                gif_path = os.path.join(self.save_dir, f"episode_{ep+1}.gif")
                 os.makedirs(os.path.dirname(gif_path), exist_ok=True)
                 write_gif(np.array(frames), gif_path, fps=10)
                 wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})

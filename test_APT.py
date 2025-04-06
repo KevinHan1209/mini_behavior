@@ -4,11 +4,11 @@ from algorithms.APT_PPO import APT_PPO
 from env_wrapper import CustomObservationWrapper
 
 # ===== Parameters =====
-TOTAL_TIMESTEPS = int(2e6)
+TOTAL_TIMESTEPS = int(1e4)
 NUM_ENVS = 8
-NUM_EPS = 5
+NUM_EPS = 1
 SAVE_FREQUENCY = 100
-TEST_STEPS = 500
+TEST_STEPS = 100
 
 ENV_NAME = 'MiniGrid-MultiToy-8x8-N2-v0'
 ENV_KWARGS = {"room_size": 8, "max_steps": 10000}
