@@ -1,5 +1,4 @@
 import os
-import time
 import numpy as np
 import torch
 import torch.nn as nn
@@ -7,7 +6,6 @@ import torch.optim as optim
 import gym
 import wandb
 from array2gif import write_gif
-from collections import deque
 import csv
 
 from networks.actor import Agent
@@ -25,11 +23,12 @@ class APT_PPO:
                  env_kwargs,
                  save_dir,
                  device="cpu",
-                 save_freq=100,
+                 save_freq=500,
                  test_steps=500,
                  total_timesteps=2000000,
                  learning_rate=1e-4,
                  num_envs=8,
+                 num_eps=5,
                  num_steps=125,
                  anneal_lr=True,
                  gamma=0.99,
@@ -58,6 +57,7 @@ class APT_PPO:
         self.total_timesteps = total_timesteps
         self.learning_rate = learning_rate
         self.num_envs = num_envs
+        self.num_eps = num_eps
         self.num_steps = num_steps
         self.anneal_lr = anneal_lr
         self.gamma = gamma
@@ -147,12 +147,18 @@ class APT_PPO:
         next_done = torch.zeros(self.num_envs, device=self.device)
         num_updates = self.total_timesteps // self.batch_size
 
+        # Training loop over updates
         for update in range(1, num_updates + 1):
             print(f"UPDATE {update}/{num_updates}")
-            # Save model periodically
             if update % self.save_freq == 0:
-                print("Saving model...")
-                self.model_saves.append([self.agent.state_dict(), self.optimizer.state_dict()])
+                checkpoint_path = os.path.join(self.save_dir, f"model_{global_step}.pt")
+                print("Saving model checkpoint:", checkpoint_path)
+                torch.save({
+                    'agent_state_dict': self.agent.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict()
+                }, checkpoint_path)
+                self.test_agent(num_episodes=self.num_eps, max_steps_per_episode=self.test_steps,
+                                checkpoint_path=checkpoint_path, checkpoint_id=global_step, save_episode=True)
 
             if self.anneal_lr:
                 frac = 1.0 - (update - 1) / num_updates
@@ -302,21 +308,24 @@ class APT_PPO:
                 "learning_rate": self.optimizer.param_groups[0]["lr"],
             })
 
-    def test_agent(self, num_episodes, max_steps_per_episode, save_episode=False):
+    def test_agent(self, num_episodes, max_steps_per_episode, checkpoint_path, checkpoint_id, save_episode=False):
         """
-        Run test episodes using the current agent policy, log gif replays,
-        and track item activity by counting changes in binary flag states.
-        Log item activities directly to CSV files in the 'activity' folder.
+        Run test episodes using the current agent policy. If a checkpoint_path is provided, load it before testing.
+        Save CSV logs for each episode in a folder named after the checkpoint and log that folder to wandb.
         """
-        print(f"\n=== Testing Agent: {num_episodes} Episode(s) ===")
+        if checkpoint_path is not None:
+            print(f"Loading checkpoint from {checkpoint_path} for testing.")
+            checkpoint_data = torch.load(checkpoint_path, map_location=self.device)
+            self.agent.load_state_dict(checkpoint_data['agent_state_dict'])
+        
+        print(f"\n=== Testing Agent on Checkpoint {checkpoint_id}: {num_episodes} Episode(s) ===")
         action_log = []
         test_env = gym.make(self.env_id, **self.env_kwargs)
         test_env = CustomObservationWrapper(test_env)
 
-        initial_obs = test_env.reset()
-        env_unwrapped = getattr(test_env, 'env', test_env)
-
-        os.makedirs('activity', exist_ok=True)
+        # Create a dedicated folder for this checkpoint's activity logs.
+        activity_dir = os.path.join('activity', f"checkpoint_{checkpoint_id}")
+        os.makedirs(activity_dir, exist_ok=True)
 
         def count_binary_flags(env):
             num_flags = 0
@@ -352,15 +361,14 @@ class APT_PPO:
                             index += 1
             return np.array(flags)
 
-        num_binary_flags = count_binary_flags(env_unwrapped)
-        flag_mapping = generate_flag_mapping(env_unwrapped)
+        num_binary_flags = count_binary_flags(test_env.env if hasattr(test_env, 'env') else test_env)
+        flag_mapping = generate_flag_mapping(test_env.env if hasattr(test_env, 'env') else test_env)
 
         for ep in range(num_episodes):
             obs = test_env.reset()
             done = False
             steps = 0
             frames = []
-
             activity = [0] * num_binary_flags
             prev_flags = None
 
@@ -372,7 +380,7 @@ class APT_PPO:
                     action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
                 obs, _, done, _ = test_env.step(action.cpu().numpy()[0])
 
-                current_flags = extract_binary_flags(obs, env_unwrapped)
+                current_flags = extract_binary_flags(obs, test_env.env if hasattr(test_env, 'env') else test_env)
                 if prev_flags is not None:
                     differences = (current_flags != prev_flags).astype(int)
                     activity = [a + d for a, d in zip(activity, differences)]
@@ -383,8 +391,7 @@ class APT_PPO:
                 print(f"Step {steps:3d} | Action: {action_name}")
                 steps += 1
 
-            # Save activity to CSV
-            csv_path = os.path.join('activity', f'episode_{ep+1}.csv')
+            csv_path = os.path.join(activity_dir, f'episode_{ep+1}.csv')
             with open(csv_path, mode='w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow(['flag_id', 'object_type', 'object_index', 'state_name', 'activity_count'])
@@ -393,10 +400,14 @@ class APT_PPO:
                     writer.writerow([idx, mapping['object_type'], mapping['object_index'], mapping['state_name'], count])
 
             if save_episode:
-                gif_path = os.path.join(self.save_dir, f"episode_{ep+1}.gif")
+                gif_path = os.path.join(self.save_dir, f"episode_{ep+1}_checkpoint_{checkpoint_id}.gif")
                 os.makedirs(os.path.dirname(gif_path), exist_ok=True)
                 write_gif(np.array(frames), gif_path, fps=10)
                 wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+
+        artifact = wandb.Artifact(f"activity_checkpoint_{checkpoint_id}", type="dataset")
+        artifact.add_dir(activity_dir)
+        wandb.log_artifact(artifact)
 
         test_env.close()
         self.test_actions.append(action_log)

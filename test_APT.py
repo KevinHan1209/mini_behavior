@@ -7,7 +7,7 @@ from env_wrapper import CustomObservationWrapper
 TOTAL_TIMESTEPS = int(2e6)
 NUM_ENVS = 8
 NUM_EPS = 5
-SAVE_FREQUENCY = 100
+SAVE_FREQUENCY = 500
 TEST_STEPS = 500
 
 ENV_NAME = 'MiniGrid-MultiToy-8x8-N2-v0'
@@ -54,6 +54,7 @@ if __name__ == "__main__":
         env_kwargs=ENV_KWARGS,
         save_dir=save_dir,
         num_envs=NUM_ENVS,
+        num_eps=NUM_EPS,
         total_timesteps=TOTAL_TIMESTEPS,
         save_freq=SAVE_FREQUENCY,
         test_steps=TEST_STEPS
@@ -61,6 +62,3 @@ if __name__ == "__main__":
     
     # Train the agent.
     model.train()
-    
-    # Test the agent after training.
-    model.test_agent(num_episodes=NUM_EPS, max_steps_per_episode=TEST_STEPS, save_episode=True)
