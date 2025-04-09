@@ -28,27 +28,34 @@ def count_binary_flags(env):
 
 
 def extract_binary_flags(obs, env):
-    """
-    Given an observation vector and the environment, extract only the binary flags.
-    
-    The observation is built as follows:
-      - First three values: agent_x, agent_y, agent_dir.
-      - For each object:
-          - Two position values: pos_x, pos_y.
-          - Then each non-relative state is appended as a binary flag.
-    
-    This function skips the agent state and object positions, returning only the flags.
-    """
+    index = 4  # or 3, etc.
     flags = []
-    index = 3  # skip agent state (x, y, direction)
+    
     for obj_list in env.objs.values():
         for obj in obj_list:
-            index += 2  # skip the object's position (2 values)
+            # Instead of blindly skipping 2, let's do the "stop-when-you-run-out" approach:
+            possible_pos = 0
+            if index + 2 <= len(obs):
+                possible_pos = 2  # try skipping up to 2 for position
+            index += possible_pos
+
+            # Now read each non-relative state in the object
             for state_name, state in obj.states.items():
+                # Make sure we haven't run out of obs
+                if index >= len(obs):
+                    break
+                # If it's not a RelativeObjectState, read a binary flag
                 if not isinstance(state, RelativeObjectState):
                     flags.append(obs[index])
                     index += 1
+
+            # If we've already used up obs, better break out of the loop
+            if index >= len(obs):
+                break
+
     return np.array(flags)
+
+
 
 
 def generate_flag_mapping(env):
@@ -73,6 +80,12 @@ def generate_flag_mapping(env):
                     })
     return mapping
 
+def make_single_env(env_id, seed, env_kwargs):
+    env = gym.make(env_id, **env_kwargs)
+    env = CustomObservationWrapper(env)
+    env.seed(seed)
+    return env
+
 
 def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max_steps_per_episode=200):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
@@ -85,8 +98,11 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
                        "num_episodes": num_episodes,
                        "max_steps": max_steps_per_episode})
 
-    test_env = gym.make(env_id)
-    test_env = CustomObservationWrapper(test_env)
+    #test_env = gym.make(env_id)
+    #test_env = CustomObservationWrapper(test_env)
+
+    test_env_kwargs = {"room_size": ROOM_SIZE, "max_steps": max_steps_per_episode, "test_env": True}
+    test_env = make_single_env(env_id, seed=123, env_kwargs=test_env_kwargs)
     
     # Get the underlying (unwrapped) environment for accessing object info.
     env_unwrapped = getattr(test_env, 'env', test_env)
@@ -95,7 +111,6 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
     num_binary_flags = count_binary_flags(env_unwrapped)
     flag_mapping = generate_flag_mapping(env_unwrapped)
 
-    # Log flag mapping to wandb as a table.
     mapping_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name"])
     for idx, mapping in enumerate(flag_mapping):
         mapping_table.add_data(idx, mapping["object_type"], mapping["object_index"], mapping["state_name"])
@@ -106,36 +121,42 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
     for episode in range(num_episodes):
         print(f"\n=== Episode {episode + 1}/{num_episodes} ===")
         obs = test_env.reset()
+        print("len(obs) =", len(obs))
+        print("obs[:10] =", obs[:10])
         done = False
         total_reward = 0
         steps = 0
         novelty_values = []
         frames = []
-        # Initialize the activity counter (one per binary flag).
         activity = [0] * num_binary_flags
         prev_flags = None
         
         while not done and steps < max_steps_per_episode:
-            # Render and store the current frame (if available)
+
             frame = test_env.render()
             if frame is not None:
                 frames.append(np.moveaxis(frame, 2, 0))
             
             with torch.no_grad():
-                obs_tensor = torch.FloatTensor(obs).to(device)
-                action, _, _, value = model.agent.get_action_and_value(obs_tensor)
+                #obs_tensor = torch.FloatTensor(obs).to(device)
+                obs_tensor = torch.FloatTensor(obs).to(device).unsqueeze(0)
+                #action, _, _, value = model.agent.get_action_and_value(obs_tensor)
+                action, logp, entropy, value_ext, value_int = model.agent.get_action_and_value(obs_tensor)
+                action_np = action[0].cpu().numpy().tolist()  # e.g. [4, 0, 1]
             
             # Take an action in the environment.
             #print(f"Action tensor: {action}, shape: {action.shape}")
             #obs, reward, done, _ = test_env.step(action.cpu().numpy()[0])
-            obs, reward, done, _ = test_env.step(action.cpu().item())
+            #obs, reward, done, _ = test_env.step(action.cpu().item())
+            obs, reward, done, _ = test_env.step(action_np)  
+            print(f"obs length = {len(obs)} at step {steps}")
             total_reward += reward
             steps += 1
 
             with torch.no_grad():
                 obs_tensor = torch.FloatTensor(obs).to(device)
-                if obs_tensor.dim() == 1:  # Ensure obs is 2D for batch processing
-                    obs_tensor = obs_tensor.unsqueeze(0)  # Add batch dimension
+                if obs_tensor.dim() == 1:  #obs should be 2D for batch processing
+                    obs_tensor = obs_tensor.unsqueeze(0)  #add batch dimension
 
                 novelty = model.calculate_novelty(obs_tensor)
                 #novelty = model.calculate_novelty(torch.FloatTensor(obs).to(device))
@@ -150,25 +171,25 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
                 activity = [a + d for a, d in zip(activity, differences)]
             prev_flags = current_flags
 
-            # Log step metrics to wandb.
             wandb.log({
                 "step_reward": reward,
                 "step_novelty": novelty.item(),
-                "step_value": value.item(),
+                #"step_value": value.item(),
+                #"step_value_ext": value_ext.item(),
+                "step_value": value_int.item(),
                 "episode": episode,
                 "step": steps
             })
             
-            # Print step information.
             try:
                 action_name = test_env.actions(action.item()).name
             except Exception as e:
-                action_name = str(action.item())
+                #action_name = str(action.item())
+                action_name = str(action_np)
             print(f"\nStep {steps}/{max_steps_per_episode}")
             print(f"Action Taken: {action_name} | Reward: {reward:.2f}")
-            print(f"Novelty Score: {novelty.item():.4f} | Value: {value.item():.4f}")
+            print(f"Novelty Score: {novelty.item():.4f} | Value: {value_int.item():.4f}")
         
-        # Log episode-level metrics including the activity (cumulative flag changes).
         wandb.log({
             "episode_total_reward": total_reward,
             "episode_length": steps,
@@ -177,14 +198,12 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
             "episode": episode
         })
 
-        # Create and log a gif replay of the episode.
-        gif_path = f"img/rnd32x32/0/episode_{episode + 1}.gif"
+        gif_path = f"img/rnd_new_16x16/2000000/episode_{episode + 1}.gif"
         #print(activity)
-        #if frames:
-        #    write_gif(np.array(frames), gif_path, fps=1)
-        #    wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+        if frames:
+            write_gif(np.array(frames), gif_path, fps=1)
+            wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
         
-        # Instead of printing the activity details, log them as a table in wandb.
         activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
         for idx, count in enumerate(activity):
             mapping = flag_mapping[idx]
@@ -206,13 +225,19 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
 def main():
 
     TASK = 'MultiToy'
-    ROOM_SIZE = 32
+    ROOM_SIZE = 16
     MAX_STEPS = 1000
-    STEP = 0
+    STEP = 2000000
     
+    #env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v0"
+    #env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
+    #test_env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v1" 
+    #test_env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "test_env": True}
+    #test_env = make_single_env(env_id, seed=123, env_kwargs=test_env_kwargs)
+
     env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v0"
+    test_env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v1"
     env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
-    test_env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v1" 
     test_env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "test_env": True}
     
     register(
@@ -226,8 +251,7 @@ def main():
         kwargs=test_env_kwargs
     )
 
-    #Pull in trained model
-    model_dir = "models/RND_PPO_MultiToy_Run4_32x32"
+    model_dir = "models/RND_PPO_MultiToy_Run6_16x16_new_env"
     model_path = f"{model_dir}/model_step_{STEP}.pt"
 
     if not os.path.exists(model_path):
@@ -242,12 +266,19 @@ def main():
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
+    test_env = make_single_env(
+        env_id=test_env_name,
+        seed=1,
+        env_kwargs={"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "test_env": True}
+    )
+    
     model = RND_PPO(
+        env=test_env,
         env_id=test_env_name,
         device=device,
         seed=1
     )
-    #model.load(model_path)
+    model.load(model_path)
     
     # Test model.
     test_agent(test_env_name, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max_steps_per_episode=500)

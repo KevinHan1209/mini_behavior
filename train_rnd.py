@@ -4,12 +4,13 @@ import os
 import numpy as np
 from mini_behavior.register import register
 from RND_PPO import RND_PPO
+from env_wrapper import CustomObservationWrapper
 import torch
 import wandb
 wandb.login()
 
 TASK = 'MultiToy'
-ROOM_SIZE = 8
+ROOM_SIZE = 16
 MAX_STEPS = 1000
 TOTAL_TIMESTEPS = 3e6
 
@@ -19,12 +20,26 @@ NUM_STEPS = 125
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 SAVE_FREQUENCY = 100000 
 
+# ===== Helper Functions =====
+def make_env(env_id, seed, idx, env_kwargs):
+    def thunk():
+        env = gym.make(env_id, **env_kwargs)
+        env = CustomObservationWrapper(env)
+        env.seed(seed + idx)
+        return env
+    return thunk
+
+def init_env(num_envs: int, seed: int):
+    return gym.vector.SyncVectorEnv(
+        [make_env(env_name, seed, i, env_kwargs) for i in range(num_envs)]
+    )
+
 env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v0"
 env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
 test_env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v1"
 test_env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "test_env": True}
 
-save_dir = f"models/RND_PPO_{TASK}_Run4_32x32"
+save_dir = f"models/RND_PPO_{TASK}_Run6_16x16_new_env"
 
 if __name__ == "__main__":
     register(
@@ -37,6 +52,8 @@ if __name__ == "__main__":
         entry_point=f'mini_behavior.envs:{TASK}Env',
         kwargs=test_env_kwargs
     )
+
+    env = init_env(NUM_ENVS, seed=1)
     
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -62,6 +79,7 @@ if __name__ == "__main__":
     )
     
     model = RND_PPO(
+        env=env,
         env_id=env_name,
         device=DEVICE,
         total_timesteps=int(TOTAL_TIMESTEPS),

@@ -3,6 +3,7 @@ import json
 import re
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 def find_global_max_y(dir_step_map):
     global_max_y = 0
@@ -22,7 +23,7 @@ def find_global_max_y(dir_step_map):
 
             df = pd.DataFrame(table_json["data"], columns=table_json["columns"])
 
-            excluded_states = ["infovofrobot", "inreachofrobot"]
+            excluded_states = ["infovofrobot", "inreachofrobot", "inleftreachofrobot", "inrightreachofrobot"]
             filtered_df = df[~df["state_name"].isin(excluded_states)]
             total_activity = filtered_df["activity_count"].sum()
 
@@ -30,7 +31,7 @@ def find_global_max_y(dir_step_map):
 
     return global_max_y
 
-def process_directory(tables_dir, steps_label, global_max_y, output_root="img/rnd32x32"):
+def process_directory(tables_dir, steps_label, global_max_y, output_root="img/rnd_new_env"):
 
     output_dir = os.path.join(output_root, steps_label)
     os.makedirs(output_dir, exist_ok=True)
@@ -61,7 +62,7 @@ def process_directory(tables_dir, steps_label, global_max_y, output_root="img/rn
 
     combined_df = pd.concat(dfs, ignore_index=True)
 
-    excluded_states = ["infovofrobot", "inreachofrobot"]
+    excluded_states = ["infovofrobot", "inreachofrobot", "inleftreachofrobot", "inrightreachofrobot"]
     filtered_df = combined_df[~combined_df["state_name"].isin(excluded_states)]
 
     total_activities = filtered_df["activity_count"].sum()
@@ -73,11 +74,16 @@ def process_directory(tables_dir, steps_label, global_max_y, output_root="img/rn
         values="activity_count"
     ).fillna(0)
 
+    num_colors = 20
+    colors = cm.get_cmap("tab20", num_colors).colors
+
+
     plt.figure(figsize=(10, 6))
     pivot_df.plot(
         kind="bar",
         stacked=True,
-        figsize=(10, 6)
+        figsize=(10, 6),
+        color=colors[:pivot_df.shape[1]]
     )
 
     plt.title(f"Combined Activity Counts {steps_label} Steps (Total = {total_activities})")
@@ -94,7 +100,7 @@ def process_directory(tables_dir, steps_label, global_max_y, output_root="img/rn
 
 def main():
 
-    dir_step_map8x8 = {
+    dir_step_map8x8_old = {
         "wandb/run-20250226_161228-wujjib4o/files/media/table": "1M",
         "wandb/run-20250226_153950-yjtx8jn3/files/media/table": "1.5M",
         "wandb/run-20250226_152956-r9bjaghg/files/media/table": "2M",
@@ -112,7 +118,7 @@ def main():
         "wandb/run-20250311_113947-snrpkwkt/files/media/table": "0"
     }
 
-    dir_step_map = {
+    dir_step_map_old = {
         "wandb/run-20250311_125815-7ghfto8y/files/media/table": "0",
         "wandb/run-20250311_125214-dkipt8dh/files/media/table": "100K",
         "wandb/run-20250311_124630-8uxl4u0z/files/media/table": "1M",
@@ -120,9 +126,29 @@ def main():
         "wandb/run-20250311_123502-egepa1md/files/media/table": "3M"
     }
 
-    global_max_y = find_global_max_y(dir_step_map)
+    dir_step_map_new = {
+        "wandb/run-20250407_195639-cdutkqe4/files/media/table": "0",
+        "wandb/run-20250407_160352-alwis7ej/files/media/table": "500000",
+        "wandb/run-20250407_183526-5cbpfqp5/files/media/table": "1000000",
+        "wandb/run-20250407_162146-kjgmb3jm/files/media/table": "1500000",
+        "wandb/run-20250407_184707-0rh74cxo/files/media/table": "2000000",
+        "wandb/run-20250407_190842-x4lab6zb/files/media/table": "2500000",
+        "wandb/run-20250409_113241-rkuy15kx/files/media/table": "3000000"
+    }
 
-    for tables_dir, steps_label in dir_step_map.items():
+    dir_step_map_new_16 = {
+        "wandb/run-20250408_092328-a9ppvla9/files/media/table": "0",
+        "wandb/run-20250408_095857-d8fbj6v3/files/media/table": "500000",
+        "wandb/run-20250408_104553-b0rq6uis/files/media/table": "1000000",
+        "wandb/run-20250408_113952-jx9mezb1/files/media/table": "1500000",
+        "wandb/run-20250409_142933-o3abarld/files/media/table": "2000000",
+        "wandb/run-20250408_124344-yma6jku9/files/media/table": "2500000",
+        "wandb/run-20250409_105419-417q1dck/files/media/table": "3000000"
+    }
+
+    global_max_y = find_global_max_y(dir_step_map_new)
+
+    for tables_dir, steps_label in dir_step_map_new.items():
         process_directory(tables_dir, steps_label, global_max_y)
 
 if __name__ == "__main__":
