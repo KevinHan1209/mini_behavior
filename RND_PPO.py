@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from mini_behavior.utils.utils import RewardForwardFilter, RMS #added
+from networks.actor_critic import Agent
 import gym
 import wandb
 from env_wrapper import CustomObservationWrapper
@@ -23,6 +25,7 @@ class RND_PPO:
     """
     def __init__(
             self,
+            env, #added
             env_id,
             device="cpu",
             total_timesteps=500000,
@@ -50,7 +53,7 @@ class RND_PPO:
         self.envs = gym.vector.SyncVectorEnv(
             [make_env(env_id, seed, i) for i in range(num_envs)]
         )
-        
+        self.env = env #new addition
         self.env_id = env_id
         self.device = torch.device(device)
         self.total_timesteps = total_timesteps
@@ -82,13 +85,25 @@ class RND_PPO:
         # Initialize running statistics
         self.reward_rms = RunningMeanStd()
         self.obs_rms = RunningMeanStd(shape=self.envs.single_observation_space.shape)
+        self.rms = RMS(self.device)
 
         # Use the environment's observation space
         self.obs_space = self.envs.single_observation_space
         self.obs_dim = self.obs_space.shape[0]
 
         # Initialize agent and RND model
-        self.agent = Agent(self.obs_dim, self.envs.single_action_space.n).to(self.device).float()
+        #self.agent = Agent(self.obs_dim, self.envs.single_action_space.n).to(self.device).float()
+        action_dims = self.envs.single_action_space.nvec  # [5, 2, 3]
+        print("self.envs.single_action_space =", self.envs.single_action_space)
+        print("self.envs.single_action_space.nvec =", self.envs.single_action_space.nvec)
+        print("action_dims =", action_dims)
+        obs_dim = self.envs.single_observation_space.shape[0]
+
+        self.agent = Agent(obs_dim=obs_dim, action_dims=action_dims).to(self.device)
+
+        #action_dim = int(np.prod(self.envs.single_action_space.nvec))
+        #self.agent = Agent(obs_dim=self.envs.single_observation_space.shape[0],action_dims=action_dim).to(self.device)
+        #self.agent = Agent(self.env.action_space[0].nvec, self.env.single_observation_space.shape[0]).to(self.device)
         self.rnd_model = RNDModel(self.obs_dim).to(self.device).float()
 
         # Add validation for environment compatibility
@@ -140,9 +155,12 @@ class RND_PPO:
         
         next_obs = torch.FloatTensor(self.envs.reset()).to(self.device)
         obs = torch.zeros((self.num_steps, self.num_envs) + self.obs_space.shape, dtype=torch.float32).to(self.device)
-        actions = torch.zeros((self.num_steps, self.num_envs), dtype=torch.long).to(self.device)
+        #actions = torch.zeros((self.num_steps, self.num_envs), dtype=torch.long).to(self.device)
+        actions = torch.zeros((self.num_steps, self.num_envs, 3), dtype=torch.long).to(self.device)
         logprobs = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
+        extrinsic_rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
+        intrinsic_rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         #curiosity_rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         dones = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         #ext_values = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
@@ -170,7 +188,10 @@ class RND_PPO:
 
                 # Get actions from the agent
                 with torch.no_grad():
-                    action, logprob, _, value = self.agent.get_action_and_value(obs[step])
+                    action, logprob, entropy, value_ext, value = self.agent.get_action_and_value(obs[step])
+                    #print("Sampled action shape:", action.shape) 
+                    #print("Sampled actions (first env) =", action[0])
+                    #action, logprob, _, value = self.agent.get_action_and_value(obs[step])
                 actions[step] = action
                 logprobs[step] = logprob
                 #ext_values[step] = value_ext.flatten()
@@ -204,7 +225,7 @@ class RND_PPO:
 
             # Compute advantages rewards
             with torch.no_grad():
-                next_value = self.agent.get_value(next_obs)
+                next_value_ext, next_value = self.agent.get_value(next_obs) # added next_value_ext, 
                 advantages = self.compute_gae(
                     next_value, rewards, dones, values, next_done
                 )
@@ -213,7 +234,10 @@ class RND_PPO:
             # Flatten the rollout data.
             b_obs = obs.reshape((-1,) + (self.obs_dim,))
             b_logprobs = logprobs.reshape(-1)
-            b_actions = actions.reshape(-1)
+            #print("actions.shape before flatten:", actions.shape)
+            b_actions = actions.reshape(-1, 3)
+            #print("b_actions.shape after flatten:", b_actions.shape)
+            #print("First row of b_actions =", b_actions[0])
             b_advantages = advantages.reshape(-1)
             b_returns = (b_advantages + values.reshape(-1))
 
@@ -239,12 +263,13 @@ class RND_PPO:
                     #"curiosity_reward": curiosity_rewards.mean().item(),
                     #"extrinsic_reward": rewards.mean().item(),
                     "global_step": global_step,
+                    "rnd_reward": rnd_reward.mean().item(),
                     #"updates": update,
                     **opt_metrics
                 }, step=global_step)
 
                 print(f"\n[Update {update}/{num_updates}] Step: {global_step:,}")
-                #print(f"Novelty: {novelty.mean().item():.4f} | Curiosity Reward: {curiosity_rewards.mean().item():.4f}")
+                print(f"RND Reward: {rnd_reward_scaled.mean().item():.4f}")
                 print(f"Policy Loss: {opt_metrics['pg_loss']:.4f} | Value Loss: {opt_metrics['v_loss']:.4f} | Entropy: {opt_metrics['entropy']:.4f}")
                 print(f"RND Loss: {opt_metrics['rnd_loss']:.4f} | ClipFrac: {opt_metrics['clipfrac']:.4f}")
                 print("-" * 50)
@@ -297,7 +322,7 @@ class RND_PPO:
                 mb_inds = inds[start:end]
 
                 # New log probabilities, entropy and value predictions.
-                _, newlogprob, entropy, new_values = self.agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
+                _, newlogprob, entropy, new_value_ext, new_values = self.agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
@@ -398,7 +423,7 @@ class RunningMeanStd:
         self.var = new_var
         self.count = new_count
 
-class Agent(nn.Module):
+'''class Agent(nn.Module):
     """Neural network for policy and value functions"""
     def __init__(self, obs_dim, action_dim):
         super().__init__()
@@ -424,7 +449,7 @@ class Agent(nn.Module):
         probs = torch.distributions.Categorical(logits=logits)
         if action is None:
             action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)
+        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)'''
 
 class RNDModel(nn.Module):
     """Random Network Distillation model for novelty detection"""
