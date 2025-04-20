@@ -1,6 +1,6 @@
 # test_rnd.py
 import gym
-from RND_PPO import RND_PPO
+from algorithms.RND_PPO import RND_PPO
 import os
 import numpy as np
 import torch

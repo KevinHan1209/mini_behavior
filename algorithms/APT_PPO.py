@@ -327,7 +327,7 @@ class APT_PPO:
         test_env = CustomObservationWrapper(test_env)
 
         # Create a dedicated folder for this checkpoint's activity logs.
-        activity_dir = os.path.join('activity', f"checkpoint_{checkpoint_id}")
+        activity_dir = os.path.join('item_interaction', f"checkpoint_{checkpoint_id}")
         os.makedirs(activity_dir, exist_ok=True)
 
         def count_binary_flags(env):
@@ -408,7 +408,7 @@ class APT_PPO:
                 write_gif(np.array(frames), gif_path, fps=10)
                 wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
 
-        artifact = wandb.Artifact(f"activity_checkpoint_{checkpoint_id}", type="dataset")
+        artifact = wandb.Artifact(f"checkpoint_{checkpoint_id}", type="dataset")
         artifact.add_dir(activity_dir)
         wandb.log_artifact(artifact)
 

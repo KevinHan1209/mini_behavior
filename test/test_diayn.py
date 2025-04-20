@@ -6,7 +6,7 @@ from array2gif import write_gif
 import gym
 import random
 
-from DIAYN_PPO import DIAYN, DIAYNObservationWrapper
+from algorithms.DIAYN_PPO import DIAYN, DIAYNObservationWrapper
 from mini_behavior.utils.states_base import RelativeObjectState
 from mini_behavior.register import register
 
