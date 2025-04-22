@@ -8,7 +8,8 @@ from mini_behavior.utils.utils import RewardForwardFilter, RMS #added
 from networks.actor_critic import Agent
 import gym
 import wandb
-from env_wrapper import CustomObservationWrapper
+#from env_wrapper import CustomObservationWrapper
+from env_wrapper_no_position import CustomObservationWrapper #rnd without agent position
 
 def make_env(env_id, seed, idx):
     def thunk():
@@ -94,9 +95,6 @@ class RND_PPO:
         # Initialize agent and RND model
         #self.agent = Agent(self.obs_dim, self.envs.single_action_space.n).to(self.device).float()
         action_dims = self.envs.single_action_space.nvec  # [5, 2, 3]
-        print("self.envs.single_action_space =", self.envs.single_action_space)
-        print("self.envs.single_action_space.nvec =", self.envs.single_action_space.nvec)
-        print("action_dims =", action_dims)
         obs_dim = self.envs.single_observation_space.shape[0]
 
         self.agent = Agent(obs_dim=obs_dim, action_dims=action_dims).to(self.device)

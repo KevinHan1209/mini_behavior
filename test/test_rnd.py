@@ -7,7 +7,7 @@ import torch
 import time
 import wandb
 from array2gif import write_gif
-from env_wrapper import CustomObservationWrapper
+from env_wrapper_no_position import CustomObservationWrapper
 from mini_behavior.utils.states_base import RelativeObjectState
 from mini_behavior.register import register
 
@@ -103,6 +103,10 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
 
     test_env_kwargs = {"room_size": ROOM_SIZE, "max_steps": max_steps_per_episode, "test_env": True}
     test_env = make_single_env(env_id, seed=123, env_kwargs=test_env_kwargs)
+
+    print("Test Env Observation Space Dim:", test_env.observation_space.shape)
+
+    
     
     # Get the underlying (unwrapped) environment for accessing object info.
     env_unwrapped = getattr(test_env, 'env', test_env)
@@ -121,8 +125,8 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
     for episode in range(num_episodes):
         print(f"\n=== Episode {episode + 1}/{num_episodes} ===")
         obs = test_env.reset()
-        print("len(obs) =", len(obs))
-        print("obs[:10] =", obs[:10])
+        #print("len(obs) =", len(obs))
+        #print("obs[:10] =", obs[:10])
         done = False
         total_reward = 0
         steps = 0
@@ -141,6 +145,7 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
                 #obs_tensor = torch.FloatTensor(obs).to(device)
                 obs_tensor = torch.FloatTensor(obs).to(device).unsqueeze(0)
                 #action, _, _, value = model.agent.get_action_and_value(obs_tensor)
+                #print("obs_tensor shape:", obs_tensor.shape)
                 action, logp, entropy, value_ext, value_int = model.agent.get_action_and_value(obs_tensor)
                 action_np = action[0].cpu().numpy().tolist()  # e.g. [4, 0, 1]
             
@@ -198,7 +203,7 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
             "episode": episode
         })
 
-        gif_path = f"img/rnd_new_16x16/2000000/episode_{episode + 1}.gif"
+        gif_path = f"img/rnd_8x8_new_env_no_agent_pos/500000/episode_{episode + 1}.gif"
         #print(activity)
         if frames:
             write_gif(np.array(frames), gif_path, fps=1)
@@ -217,7 +222,7 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
             mapping = flag_mapping[idx]
             print(f"- Flag {idx} ({mapping['object_type']} #{mapping['object_index']} - {mapping['state_name']}): {count}")
 
-    
+
     test_env.close()
     wandb.finish()
 
@@ -225,9 +230,9 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
 def main():
 
     TASK = 'MultiToy'
-    ROOM_SIZE = 16
+    ROOM_SIZE = 8
     MAX_STEPS = 1000
-    STEP = 2000000
+    STEP = 500000
     
     #env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v0"
     #env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
@@ -235,10 +240,11 @@ def main():
     #test_env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "test_env": True}
     #test_env = make_single_env(env_id, seed=123, env_kwargs=test_env_kwargs)
 
-    env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v0"
-    test_env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v1"
+    env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v4"
+    test_env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v5"
     env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
     test_env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS, "test_env": True}
+
     
     register(
         id=env_name,
@@ -251,7 +257,7 @@ def main():
         kwargs=test_env_kwargs
     )
 
-    model_dir = "models/RND_PPO_MultiToy_Run6_16x16_new_env"
+    model_dir = "models/RND_PPO_MultiToy_Run7_8x8_new_env_no_agent_pos"
     model_path = f"{model_dir}/model_step_{STEP}.pt"
 
     if not os.path.exists(model_path):

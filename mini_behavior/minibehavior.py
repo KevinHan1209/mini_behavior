@@ -181,7 +181,45 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.carrying = {key: set() for key in ['left', 'right']}
         self.currently_climbing = False
 
+    @property
+    def left_vec(self):
+        """
+        Get the vector that points to the left of the agent
+        """
+        # Rotate the direction vector 90 degrees counter-clockwise
+        return np.array([-self.dir_vec[1], self.dir_vec[0]])
 
+    @property
+    def right_pos(self):
+        """
+        Get the position of the cell that is on the right of the agent
+        """
+
+        return self.agent_pos + self.right_vec
+    
+    @property
+    def left_pos(self):
+        """
+        Get the position of the cell that is on the left of the agent
+        """
+
+        return self.agent_pos + self.left_vec
+    
+    @property
+    def upper_right_pos(self):
+        """
+        Get the position of the cell that is on the upper right corner of the agent
+        """
+
+        return self.agent_pos + self.right_vec + self.dir_vec
+    
+    @property
+    def upper_left_pos(self):
+        """
+        Get the position of the cell that is on the upper left corner of the agent
+        """
+
+        return self.agent_pos + self.left_vec + self.dir_vec
 
     def copy_objs(self):
         from copy import deepcopy
