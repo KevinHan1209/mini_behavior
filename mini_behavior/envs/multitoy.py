@@ -14,9 +14,32 @@ class MultiToyEnv(RoomGrid):
             test_env=False,
             mode='primitive',
             room_size=16,
+            room_width=26,
+            room_height=16,
             num_rows=1,
             num_cols=1,
             max_steps=1e5,
+            agent_pos=(15, 11),
+            object_positions={
+                'gear_toy': (21, 3),
+                'stroller': (21, 6),
+                'tree_busy_box': (4, 4),
+                'piggie_bank': (4, 9),
+                'shape_sorter': (4, 13),
+                'bucket_toy': (21, 9),
+                'cube_cabinet': (19, 1),
+                'alligator_busy_box': (18, 1),
+                'beach_ball': (14, 5),
+                'ring_toy': (17, 11),
+                'music_toy': (13, 13),
+                'red_spiky_ball': (13, 9),
+                'broom_set': (12, 9),
+                'farm_toy': (12, 10),
+                'cart_toy': (8, 12),
+                'broom': (8, 14),
+                'winnie_cabinet': (5, 14),
+                'rattle': (14, 11)
+            }
     ):
         '''
         All unique objects in the dataset: 
@@ -35,6 +58,7 @@ class MultiToyEnv(RoomGrid):
         }
 
         self.mission = 'explore'
+        self.object_positions = object_positions
 
         super().__init__(mode=mode,
                          test_env=test_env,
@@ -42,7 +66,10 @@ class MultiToyEnv(RoomGrid):
                          room_size=room_size,
                          num_rows=num_rows,
                          num_cols=num_cols,
-                         max_steps=max_steps
+                         max_steps=max_steps,
+                         room_width=room_width,
+                         room_height=room_height,
+                         agent_pos=agent_pos
                          )
 
         self.locomotion_actions = MiniBehaviorEnv.LocoActions
@@ -74,8 +101,13 @@ class MultiToyEnv(RoomGrid):
                     self.objs["cube_cabinet"][0].states["contains"].add_obj(obj)
                     obj.states["inside"].set_value(True)
                 else:
-                    self.place_obj(obj)
-                
+                    # If position is specified, use it
+                    if self.object_positions and obj_type in self.object_positions:
+                        pos = self.object_positions[obj_type]
+                        self.put_obj(obj, pos[0], pos[1])
+                    else:
+                        # Otherwise use default placement
+                        self.place_obj(obj)
 
     def _init_conditions(self):
         """Checks all objects are initialized properly"""

@@ -388,20 +388,23 @@ class MiniBehaviorEnv(MiniGridEnv):
                 # Don't place the object on top of another object
                 if not self.grid.is_empty(x, y):
                     valid = False
+                    print('1')
                     break
 
                 # Don't place the object where the agent is
                 if np.array_equal((x, y), self.agent_pos):
                     valid = False
+                    print('2')
                     break
 
                 # Check if there is a filtering criterion
                 if reject_fn and reject_fn(self, (x, y)):
                     valid = False
+                    print('3')
                     break
 
         if not valid:
-            raise ValidationErr(f'failed in place_obj at {pos}')
+            raise ValueError(f'failed in place_obj_pos at {pos}')
 
         self.grid.set(*pos, obj)
 

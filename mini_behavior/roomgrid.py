@@ -89,6 +89,8 @@ class RoomGrid(MiniBehaviorEnv):
         test_env = False,
         num_objs=None,
         room_size=10,
+        room_width=None,
+        room_height=None,
         num_rows=2,
         num_cols=2,
         max_steps=1e4,
@@ -98,6 +100,7 @@ class RoomGrid(MiniBehaviorEnv):
         highlight=True,
         init_dict=None,
         dense_reward=False,
+        agent_pos=None
     ):
         if init_dict:
             self.init_dict = init_dict
@@ -112,14 +115,18 @@ class RoomGrid(MiniBehaviorEnv):
             assert room_size >= 3
             assert num_rows > 0
             assert num_cols > 0
-            self.room_size = room_size
+            
+            # Use room_size for both dimensions if room_width and room_height are not specified
+            self.room_width = room_width if room_width is not None else room_size
+            self.room_height = room_height if room_height is not None else room_size
+            
             self.num_rows = num_rows
             self.num_cols = num_cols
 
-            height = (room_size - 1) * num_rows + 1
-            width = (room_size - 1) * num_cols + 1
+            height = (self.room_height - 1) * num_rows + 1
+            width = (self.room_width - 1) * num_cols + 1
             self.init_dict = None
-
+            self.custom_agent_pos = agent_pos
 
         super().__init__(
             mode=mode,
@@ -132,7 +139,7 @@ class RoomGrid(MiniBehaviorEnv):
             seed=seed,
             agent_view_size=agent_view_size,
             highlight=highlight,
-            dense_reward=dense_reward
+            dense_reward=dense_reward,
         )
     
     def add_walls(self, width, height):
@@ -420,8 +427,8 @@ class RoomGrid(MiniBehaviorEnv):
                                     obj.states[ability].set_value(True)
 
     def room_num_from_pos(self, x, y):
-        i = x // (self.room_size-1)
-        j = y // (self.room_size-1)
+        i = x // (self.room_width-1)
+        j = y // (self.room_height-1)
         room_num = i * self.num_cols + j
         return room_num
 
@@ -436,8 +443,8 @@ class RoomGrid(MiniBehaviorEnv):
         assert x >= 0
         assert y >= 0
 
-        i = x // (self.room_size-1)
-        j = y // (self.room_size-1)
+        i = x // (self.room_width-1)
+        j = y // (self.room_height-1)
 
         assert i < self.num_cols
         assert j < self.num_rows
@@ -488,8 +495,8 @@ class RoomGrid(MiniBehaviorEnv):
             # For each column of rooms
             for i in range(0, self.num_cols):
                 room = Room(
-                    top=(i * (self.room_size-1), j * (self.room_size-1)),
-                    size=(self.room_size, self.room_size),
+                    top=(i * (self.room_width-1), j * (self.room_height-1)),
+                    size=(self.room_width, self.room_height),
                     row=j,
                     col=i
                 )
@@ -675,11 +682,15 @@ class RoomGrid(MiniBehaviorEnv):
 
         room = self.room_grid[j][i]
 
-        # Find a position that is not right in front of an object
-        while True:
-            super().place_agent(room.top, room.size, rand_dir, max_tries=1000)
-            if self.grid.is_empty(*self.front_pos):
-                break
+        if self.custom_agent_pos is None:
+            # Find a position that is not right in front of an object
+            while True:
+                super().place_agent(room.top, room.size, rand_dir, max_tries=1000)
+                if self.grid.is_empty(*self.front_pos):
+                    break
+        else:
+            self.agent_pos = self.custom_agent_pos
+            self.agent_dir = 0
 
         return self.agent_pos
 
