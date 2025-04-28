@@ -31,7 +31,7 @@ def find_global_max_y(dir_step_map):
 
     return global_max_y
 
-def process_directory(tables_dir, steps_label, global_max_y, output_root="img/rnd_new_env"):
+def process_directory(tables_dir, steps_label, global_max_y, output_root="img/rnd_8x8_new_env_no_agent_pos"):
 
     output_dir = os.path.join(output_root, steps_label)
     os.makedirs(output_dir, exist_ok=True)
@@ -146,9 +146,15 @@ def main():
         "wandb/run-20250409_105419-417q1dck/files/media/table": "3000000"
     }
 
-    global_max_y = find_global_max_y(dir_step_map_new)
+    dir_step_map_new_no_pos = {
+        "wandb/run-20250422_102039-fnnw1c2c/files/media/table": "0",
+        "wandb/run-20250422_115357-zl9pq6uj/files/media/table": "500000",
+        "wandb/run-20250422_133739-g2zxusev/files/media/table": "1000000"
+    }
 
-    for tables_dir, steps_label in dir_step_map_new.items():
+    global_max_y = find_global_max_y(dir_step_map_new_no_pos)
+
+    for tables_dir, steps_label in dir_step_map_new_no_pos.items():
         process_directory(tables_dir, steps_label, global_max_y)
 
 if __name__ == "__main__":
