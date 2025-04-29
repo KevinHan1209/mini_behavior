@@ -25,10 +25,10 @@ class NovelD_PPO:
             self,
             env_id,
             device="cpu",
-            total_timesteps=2000000,
+            total_timesteps=16000,
             learning_rate=3e-4,
             num_envs=8,
-            num_steps=125,
+            num_steps=200,
             gamma=0.99,
             gae_lambda=0.95,
             num_minibatches=4,
@@ -86,7 +86,7 @@ class NovelD_PPO:
         self.obs_dim = self.obs_space.shape[0]
 
         # Initialize agent and RND model
-        self.agent = Agent(self.obs_dim, self.envs.single_action_space.n).to(self.device).float()
+        self.agent = Agent(self.obs_dim, self.envs.single_action_space.nvec).to(self.device).float()
         self.rnd_model = RNDModel(self.obs_dim).to(self.device).float()
 
         # Add validation for environment compatibility
@@ -96,36 +96,10 @@ class NovelD_PPO:
         # Additional reward scaling parameters
         self.reward_scale = 1.0
         self.novelty_scale = 1.0
-        self.ext_reward_scale = 1.0
+        self.ext_reward_scale = 0.0
         self.int_reward_scale = 1.0
 
     def train(self):
-        '''
-        wandb.init(
-            project="noveld-ppo-train",
-            config={
-                "env_id": self.env_id,
-                "total_timesteps": self.total_timesteps,
-                "learning_rate": self.learning_rate,
-                "num_envs": self.num_envs,
-                "num_steps": self.num_steps,
-                "gamma": self.gamma,
-                "gae_lambda": self.gae_lambda,
-                "num_minibatches": self.num_minibatches,
-                "update_epochs": self.update_epochs,
-                "clip_coef": self.clip_coef,
-                "ent_coef": self.ent_coef,
-                "vf_coef": self.vf_coef,
-                "int_coef": self.int_coef,
-                "ext_coef": self.ext_coef,
-                "device": str(self.device)
-            }
-        )
-
-        # Watch models for gradients and parameter histograms.
-        wandb.watch(self.agent, log="all", log_freq=100)
-        wandb.watch(self.rnd_model, log="all", log_freq=100)
-        '''
         print("\n=== Training Configuration ===")
         print(f"Env: {self.env_id} | Device: {self.device}")
         print(f"Total Steps: {self.total_timesteps:,} | Batch Size: {self.batch_size} | Minibatch Size: {self.minibatch_size}")
@@ -139,7 +113,15 @@ class NovelD_PPO:
 
         next_obs = torch.FloatTensor(self.envs.reset()).to(self.device)
         obs = torch.zeros((self.num_steps, self.num_envs) + self.obs_space.shape, dtype=torch.float32).to(self.device)
-        actions = torch.zeros((self.num_steps, self.num_envs), dtype=torch.long).to(self.device)
+        
+        # Get action dimensions
+        action_dims = self.envs.single_action_space.nvec
+        action_shape = (len(action_dims),)  # Shape of a single action
+        
+        # Adjust actions tensor to store multi-dimensional actions
+        actions = torch.zeros((self.num_steps, self.num_envs) + action_shape, dtype=torch.long).to(self.device)
+        
+        # Rest of tensor initializations
         logprobs = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         curiosity_rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
@@ -167,11 +149,12 @@ class NovelD_PPO:
 
                 with torch.no_grad():
                     action, logprob, _, value_ext, value_int = self.agent.get_action_and_value(obs[step])
-                actions[step] = action
+                actions[step] = action  # Now correctly stores multi-dimensional actions
                 logprobs[step] = logprob
                 ext_values[step] = value_ext.flatten()
                 int_values[step] = value_int.flatten()
 
+                # When passing to env.step(), ensure proper reshaping if needed
                 next_obs, reward, done, info = self.envs.step(action.cpu().numpy())
                 rewards[step] = torch.FloatTensor(reward).to(self.device)
                 next_obs = torch.FloatTensor(next_obs).to(self.device)
@@ -192,7 +175,7 @@ class NovelD_PPO:
             # Flatten the rollout data.
             b_obs = obs.reshape((-1,) + (self.obs_dim,))
             b_logprobs = logprobs.reshape(-1)
-            b_actions = actions.reshape(-1)
+            b_actions = actions.reshape(-1, action_shape[0])  # Properly reshape multi-dim actions
             b_ext_advantages = ext_advantages.reshape(-1)
             b_int_advantages = int_advantages.reshape(-1)
             b_ext_returns = (b_ext_advantages + ext_values.reshape(-1))
@@ -231,7 +214,7 @@ class NovelD_PPO:
                 print(f"KL: {opt_metrics['approx_kl']:.4f} | ClipFrac: {opt_metrics['clipfrac']:.4f}")
                 print("-" * 50)
 
-            if global_step % 500000 < self.num_envs:
+            if global_step % 400000 < self.num_envs or global_step < self.num_envs:
                 checkpoint_dir = "checkpoints"
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
@@ -429,7 +412,10 @@ class Agent(nn.Module):
             nn.Linear(448, 448),
             nn.ReLU()
         )
-        self.actor = nn.Linear(448, action_dim)
+        
+        # Handle MultiDiscrete action space
+        self.action_dims = action_dim
+        self.actor = nn.ModuleList([nn.Linear(448, dim) for dim in action_dim])
         self.critic_ext = nn.Linear(448, 1)
         self.critic_int = nn.Linear(448, 1)
         self.float()
@@ -440,11 +426,21 @@ class Agent(nn.Module):
 
     def get_action_and_value(self, x, action=None):
         hidden = self.network(x)
-        logits = self.actor(hidden)
-        probs = torch.distributions.Categorical(logits=logits)
+        
+        # Handle MultiDiscrete action space
+        logits = [actor(hidden) for actor in self.actor]
+        multi_categoricals = [torch.distributions.Categorical(logits=logit) for logit in logits]
+        
         if action is None:
-            action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic_ext(hidden), self.critic_int(hidden)
+            action = torch.stack([categorical.sample() for categorical in multi_categoricals], dim=1)
+        
+        log_prob = torch.stack([
+            categorical.log_prob(action[:, i]) for i, categorical in enumerate(multi_categoricals)
+        ], dim=1).sum(dim=1)
+        
+        entropy = torch.stack([categorical.entropy() for categorical in multi_categoricals], dim=1).sum(dim=1)
+        
+        return action, log_prob, entropy, self.critic_ext(hidden), self.critic_int(hidden)
 
 class RNDModel(nn.Module):
     """Random Network Distillation model for novelty detection"""

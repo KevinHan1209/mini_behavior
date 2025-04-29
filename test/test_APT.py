@@ -40,7 +40,7 @@ if __name__ == "__main__":
     # Instantiate a vectorized training environment.
     env = init_env(ENV_NAME, NUM_ENVS, SEED, ENV_KWARGS)
     
-    save_dir = "APT_PPO"
+    save_dir = "checkpoints2"
     os.makedirs(save_dir, exist_ok=True)
     
     print("Begin training")

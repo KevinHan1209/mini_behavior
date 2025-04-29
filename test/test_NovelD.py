@@ -8,19 +8,29 @@ from array2gif import write_gif
 from env_wrapper import CustomObservationWrapper
 from mini_behavior.utils.states_base import RelativeObjectState
 from mini_behavior.register import register
+import os
 
 
 def count_binary_flags(env):
     """
     Count the total number of non-relative (binary) state flags in the environment.
     For each object, we skip the two position values and then count each state 
-    that is not an instance of RelativeObjectState.
+    that is not an instance of RelativeObjectState and not in default_states.
     """
+    default_states = [
+        'atsamelocation',
+        'infovofrobot',
+        'inleftreachofrobot',
+        'inrightreachofrobot',
+        'inside',
+        'nextto',
+    ]
+    
     num_flags = 0
     for obj_list in env.objs.values():
         for obj in obj_list:
             for state_name, state in obj.states.items():
-                if not isinstance(state, RelativeObjectState):
+                if not isinstance(state, RelativeObjectState) and state_name not in default_states:
                     num_flags += 1
     return num_flags
 
@@ -37,33 +47,53 @@ def extract_binary_flags(obs, env):
     
     This function skips the agent state and object positions, returning only the flags.
     """
+    # Same default states list used in CustomObservationWrapper.gen_obs
+    default_states = [
+        'atsamelocation',
+        'infovofrobot',
+        'inleftreachofrobot',
+        'inrightreachofrobot',
+        'inside',
+        'nextto',
+    ]
+    
     flags = []
     index = 3  # skip agent state (x, y, direction)
+    
     for obj_list in env.objs.values():
         for obj in obj_list:
             index += 2  # skip the object's position (2 values)
             for state_name, state in obj.states.items():
                 if not isinstance(state, RelativeObjectState):
-                    flags.append(obs[index])
-                    index += 1
+                    # Only process states that aren't in the default_states list
+                    # This matches the behavior in gen_obs
+                    if state_name not in default_states:
+                        flags.append(obs[index])
+                        index += 1
+                    # Don't increment index for skipped states
+    
     return np.array(flags)
 
 
 def generate_flag_mapping(env):
     """
     Generate a mapping (list of dictionaries) that tells you which binary flag 
-    (by its order in the observation) corresponds to which object's non-relative state.
-    
-    Each mapping entry contains:
-      - object_type: the key from env.objs (e.g., "toy", "key", etc.)
-      - object_index: the index of the object in the list for that type
-      - state_name: the name of the state (e.g., "is_active", "has_been_used", etc.)
+    corresponds to which object's non-relative state.
     """
+    default_states = [
+        'atsamelocation',
+        'infovofrobot',
+        'inleftreachofrobot',
+        'inrightreachofrobot',
+        'inside',
+        'nextto',
+    ]
+    
     mapping = []
     for obj_type_name, obj_list in env.objs.items():
         for obj_index, obj in enumerate(obj_list):
             for state_name, state in obj.states.items():
-                if not isinstance(state, RelativeObjectState):
+                if not isinstance(state, RelativeObjectState) and state_name not in default_states:
                     mapping.append({
                         "object_type": obj_type_name,
                         "object_index": obj_index,
@@ -83,7 +113,7 @@ def train_agent(env_id, device):
         raise
 
 
-def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode=100):
+def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode=200):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
@@ -103,11 +133,11 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
     num_binary_flags = count_binary_flags(env_unwrapped)
     flag_mapping = generate_flag_mapping(env_unwrapped)
 
-    # Log flag mapping to wandb as a table.
+    # Log static flag mapping once (no commit).
     mapping_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name"])
     for idx, mapping in enumerate(flag_mapping):
         mapping_table.add_data(idx, mapping["object_type"], mapping["object_index"], mapping["state_name"])
-    wandb.log({"flag_mapping": mapping_table})
+    wandb.log({"flag_mapping": mapping_table}, step=0, commit=False)
 
     noveld_ppo.agent.network.to(device)
     
@@ -132,9 +162,11 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
             with torch.no_grad():
                 obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
                 action, _, _, ext_value, int_value = noveld_ppo.agent.get_action_and_value(obs_tensor)
-            
+                # Add this line to convert tensor action to numpy array
+                action_np = action[0].cpu().numpy().tolist()
+        
             # Take an action in the environment.
-            obs, reward, done, _ = test_env.step(action.cpu().numpy()[0])
+            obs, reward, done, _ = test_env.step(action_np)  # Use action_np instead of action.cpu().numpy()[0]
             total_reward += reward
             steps += 1
             novelty = noveld_ppo.calculate_novelty(torch.FloatTensor(obs).unsqueeze(0).to(device))
@@ -153,46 +185,48 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
                 activity = [a + d for a, d in zip(activity, differences)]
             prev_flags = current_flags
 
-            # Log step metrics to wandb.
+            # Log step metrics (batch, no commit).
             wandb.log({
                 "step_reward": reward,
                 "step_novelty": novelty_val,
                 "step_ext_value": ext_val,
                 "step_int_value": int_val,
-                "episode": episode,
                 "step": steps
-            })
+            }, commit=False)
             
             # Print step information.
             try:
-                action_name = test_env.actions(action.item()).name
+                action_name = test_env.actions(action_np[0]).name  # Try with the first action dimension
             except Exception as e:
-                action_name = str(action.item())
+                # Fall back to showing the full action vector as a string
+                action_name = str(action_np)
+            
             print(f"\nStep {steps}/{max_steps_per_episode}")
             print(f"Action Taken: {action_name} | Reward: {reward:.2f}")
             print(f"Novelty Score: {novelty_val:.4f} | External Value: {ext_val:.4f} | Internal Value: {int_val:.4f}")
         
-        # Log episode-level metrics including the activity (cumulative flag changes).
-        wandb.log({
-            "episode_total_reward": total_reward,
-            "episode_length": steps,
-            # "episode_mean_novelty": np.mean(novelty_values),
-            "activity": activity,
-            "episode": episode
-        })
-
-        # Create and log a gif replay of the episode.
-        gif_path = f"episode_{episode + 1}.gif"
+        # Write out replay, etc.
+        checkpoint_dir = "checkpoints"
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        gif_path = os.path.join(checkpoint_dir, f"episode_{episode + 1}.gif")
         if frames:
             write_gif(np.array(frames), gif_path, fps=1)
             wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
-        
-        # Instead of printing the activity details, log them as a table in wandb.
-        activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
+
+        # At episode end: log scalars + activity table in one call.
+        activity_table = wandb.Table(columns=[
+            "flag_id", "object_type", "object_index", "state_name", "activity_count"
+        ])
         for idx, count in enumerate(activity):
-            mapping = flag_mapping[idx]
-            activity_table.add_data(idx, mapping["object_type"], mapping["object_index"], mapping["state_name"], count)
-        wandb.log({f"episode_{episode + 1}_activity": activity_table})
+            m = flag_mapping[idx]
+            activity_table.add_data(idx, m["object_type"], m["object_index"], m["state_name"], count)
+
+        wandb.log({
+            "episode_total_reward": total_reward,
+            "episode_length": steps,
+            "activity_counts": activity,
+            "episode_activity_table": activity_table
+        })  # final commit for this episode
         
         print(f"\n=== Episode {episode + 1} Summary ===")
         print(f"Total Reward: {total_reward:.2f} | Steps: {steps}")
@@ -207,10 +241,10 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
 
 
 def main():
-    env_id = 'MiniGrid-MultiToy-8x8-N2-v0'
+    env_id = 'MiniGrid-MultiToy-16x16-N2-v0'
     TASK = 'MultiToy'
-    ROOM_SIZE = 8
-    MAX_STEPS = 1000
+    ROOM_SIZE = 16
+    MAX_STEPS = 10000
     env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     register(
@@ -226,7 +260,7 @@ def main():
 
     # # Test checkpoints
     # noveld_ppo = NovelD_PPO(env_id, device)
-    # noveld_ppo.load_checkpoint('checkpoints/checkpoint_10000.pt')
+    # noveld_ppo.load_checkpoint('checkpoints/checkpoint_400000.pt')
     # test_agent(env_id, noveld_ppo, device)
 
 

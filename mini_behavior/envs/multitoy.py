@@ -122,7 +122,7 @@ class MultiToyEnv(RoomGrid):
     def get_room_size(self):
         return self.room_size
     
-    register(
-        id='MiniGrid-MultiToy-8x8-N2-v0',
-        entry_point='mini_behavior.envs.multitoy:MultiToyEnv',
-    )
+    # register(
+    #     id='MiniGrid-MultiToy-8x8-N2-v0',
+    #     entry_point='mini_behavior.envs.multitoy:MultiToyEnv',
+    # )
