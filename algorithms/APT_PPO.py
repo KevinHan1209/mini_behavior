@@ -29,7 +29,7 @@ class APT_PPO:
                  learning_rate=1e-4,
                  num_envs=8,
                  num_eps=5,
-                 num_steps=125,
+                 num_steps=200,
                  anneal_lr=True,
                  gamma=0.99,
                  gae_lambda=0.95,
@@ -134,7 +134,10 @@ class APT_PPO:
         discounted_reward = RewardForwardFilter(self.int_gamma)
 
         # Rollout storage
-        actions = torch.zeros((self.num_steps, self.num_envs) + self.env.action_space[0].shape, device=self.device)
+        # Get action dimensions from the environment
+        action_dims = self.env.action_space[0].nvec  # This will be like [5, 2, 3]
+        action_shape = (len(action_dims),)  # Shape of actions (e.g., 3)
+        actions = torch.zeros((self.num_steps, self.num_envs) + action_shape, dtype=torch.long, device=self.device)
         obs = torch.zeros((self.num_steps, self.num_envs) + obs_shape, device=self.device)
         logprobs = torch.zeros((self.num_steps, self.num_envs), device=self.device)
         rewards = torch.zeros((self.num_steps, self.num_envs), device=self.device)
@@ -179,7 +182,8 @@ class APT_PPO:
                 actions[step] = action
                 logprobs[step] = logprob
 
-                next_obs_np, reward, done, _ = self.env.step(action.cpu().numpy())
+                action_list = action.detach().cpu().numpy()  # Properly convert to numpy for the environment
+                next_obs_np, reward, done, _ = self.env.step(action_list)
                 rewards[step] = torch.tensor(reward, device=self.device).view(-1)
                 next_obs = torch.Tensor(next_obs_np).to(self.device)
                 next_done = torch.Tensor(done).to(self.device)
@@ -241,7 +245,7 @@ class APT_PPO:
             # Flatten rollout for PPO update
             b_obs = obs.reshape((-1,) + obs.shape[2:])
             b_logprobs = logprobs.reshape(-1)
-            b_actions = actions.reshape(-1, actions.shape[-1])
+            b_actions = actions.reshape(-1, action_shape[0])  # Reshape properly for multi-dimensional actions
             b_ext_advantages = ext_advantages.reshape(-1)
             b_int_advantages = int_advantages.reshape(-1)
             b_ext_returns = ext_returns.reshape(-1)
@@ -381,7 +385,8 @@ class APT_PPO:
                 obs_tensor = torch.FloatTensor(obs).unsqueeze(0)
                 with torch.no_grad():
                     action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
-                obs, _, done, _ = test_env.step(action.cpu().numpy()[0])
+                action_list = action.detach().cpu().numpy()[0]  # Get the first env's action
+                obs, _, done, _ = test_env.step(action_list)
 
                 current_flags = extract_binary_flags(obs, test_env.env if hasattr(test_env, 'env') else test_env)
                 if prev_flags is not None:
