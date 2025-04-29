@@ -1,4 +1,3 @@
-# NovelD_PPO.py
 import numpy as np
 import torch
 import torch.nn as nn
@@ -9,11 +8,13 @@ import wandb
 from env_wrapper import CustomObservationWrapper
 import os
 
+
 def make_env(env_id, seed, idx):
     def thunk():
         env = gym.make(env_id)
         env = CustomObservationWrapper(env)
         env.seed(seed + idx)
+        env.action_space.seed(seed + idx)
         return env
     return thunk
 
@@ -25,8 +26,8 @@ class NovelD_PPO:
             self,
             env_id,
             device="cpu",
-            total_timesteps=16000,
-            learning_rate=3e-4,
+            total_timesteps=2000000,
+            learning_rate=1e-4,
             num_envs=8,
             num_steps=200,
             gamma=0.99,
@@ -34,16 +35,17 @@ class NovelD_PPO:
             num_minibatches=4,
             update_epochs=4,
             clip_coef=0.2,
-            ent_coef=0.01,
+            ent_coef=0.02,
             vf_coef=0.5,
             max_grad_norm=0.5,
-            target_kl=None,
-            int_coef=1.0,
+            target_kl=0.02,
             ext_coef=0.0,
+            int_coef=1.0,
             int_gamma=0.99,
-            alpha=0.5,
-            update_proportion=0.25,
-            seed=1
+            update_proportion=0.4,
+            seed=1,
+            log_interval=10,
+            use_wandb=True
             ):
         
         self.envs = gym.vector.SyncVectorEnv(
@@ -65,63 +67,70 @@ class NovelD_PPO:
         self.vf_coef = vf_coef
         self.max_grad_norm = max_grad_norm
         self.target_kl = target_kl
-        self.int_coef = int_coef
         self.ext_coef = ext_coef
+        self.int_coef = int_coef
         self.int_gamma = int_gamma
-        self.alpha = alpha
         self.update_proportion = update_proportion
         self.anneal_lr = True
+        self.log_interval = log_interval
+        self.use_wandb = use_wandb
 
         # Calculate batch sizes
         self.batch_size = int(num_envs * num_steps)
         self.minibatch_size = int(self.batch_size // self.num_minibatches)
         self.num_iterations = total_timesteps // self.batch_size
 
-        # Initialize running statistics
-        self.reward_rms = RunningMeanStd()
+        # Running statistics for obs & rewards
         self.obs_rms = RunningMeanStd(shape=self.envs.single_observation_space.shape)
+        self.reward_rms = RunningMeanStd()
 
-        # Use the environment's observation space
+        # Observation dimensions
         self.obs_space = self.envs.single_observation_space
         self.obs_dim = self.obs_space.shape[0]
 
-        # Initialize agent and RND model
+        # Agent and RND
         self.agent = Agent(self.obs_dim, self.envs.single_action_space.nvec).to(self.device).float()
         self.rnd_model = RNDModel(self.obs_dim).to(self.device).float()
+        self.seed = seed
 
-        # Add validation for environment compatibility
         if not hasattr(self.envs.single_observation_space, 'shape'):
             raise ValueError("Environment must have an observation space with a shape attribute")
-        
-        # Additional reward scaling parameters
-        self.reward_scale = 1.0
-        self.novelty_scale = 1.0
-        self.ext_reward_scale = 0.0
-        self.int_reward_scale = 1.0
 
     def train(self):
-        print("\n=== Training Configuration ===")
-        print(f"Env: {self.env_id} | Device: {self.device}")
-        print(f"Total Steps: {self.total_timesteps:,} | Batch Size: {self.batch_size} | Minibatch Size: {self.minibatch_size}")
-        print(f"Learning Rate: {self.learning_rate}\n")
+        # Configure wandb if enabled
+        if self.use_wandb:
+            run = wandb.init(
+                project="noveld-ppo-train",
+                config={
+                    "env_id": self.env_id,
+                    "total_timesteps": self.total_timesteps,
+                    "learning_rate": self.learning_rate,
+                    "num_envs": self.num_envs,
+                    "num_steps": self.num_steps,
+                    "gamma": self.gamma,
+                    "gae_lambda": self.gae_lambda,
+                    "ext_coef": self.ext_coef,
+                    "int_coef": self.int_coef,
+                    "int_gamma": self.int_gamma,
+                    "seed": self.seed,
+                },
+                mode="online"
+            )
+        
+        # Log a short summary of training configuration
+        print(f"📋 NovelD-PPO | {self.env_id} | {self.device}")
+        print(f"📈 Steps: {self.total_timesteps:,} | LR: {self.learning_rate}")
         
         optimizer = optim.Adam(
             list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()),
             lr=self.learning_rate, eps=1e-5
         )
-        obs = self.envs.reset()
-
         next_obs = torch.FloatTensor(self.envs.reset()).to(self.device)
         obs = torch.zeros((self.num_steps, self.num_envs) + self.obs_space.shape, dtype=torch.float32).to(self.device)
-        
-        # Get action dimensions
+
         action_dims = self.envs.single_action_space.nvec
-        action_shape = (len(action_dims),)  # Shape of a single action
-        
-        # Adjust actions tensor to store multi-dimensional actions
+        action_shape = (len(action_dims),)
         actions = torch.zeros((self.num_steps, self.num_envs) + action_shape, dtype=torch.long).to(self.device)
-        
-        # Rest of tensor initializations
         logprobs = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         curiosity_rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
@@ -129,19 +138,15 @@ class NovelD_PPO:
         ext_values = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         int_values = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
 
-        # Training loop variables
         global_step = 0
         next_done = torch.zeros(self.num_envs).to(self.device)
         num_updates = self.total_timesteps // self.batch_size
 
         for update in range(1, num_updates + 1):
-
             if self.anneal_lr:
                 frac = 1.0 - (update - 1.0) / num_updates
-                lrnow = frac * self.learning_rate
-                optimizer.param_groups[0]["lr"] = lrnow
+                optimizer.param_groups[0]["lr"] = frac * self.learning_rate
 
-            # Collect rollout data for one update
             for step in range(self.num_steps):
                 global_step += self.num_envs
                 obs[step] = next_obs
@@ -149,171 +154,156 @@ class NovelD_PPO:
 
                 with torch.no_grad():
                     action, logprob, _, value_ext, value_int = self.agent.get_action_and_value(obs[step])
-                actions[step] = action  # Now correctly stores multi-dimensional actions
+                actions[step] = action
                 logprobs[step] = logprob
                 ext_values[step] = value_ext.flatten()
                 int_values[step] = value_int.flatten()
 
-                # When passing to env.step(), ensure proper reshaping if needed
-                next_obs, reward, done, info = self.envs.step(action.cpu().numpy())
-                rewards[step] = torch.FloatTensor(reward).to(self.device)
-                next_obs = torch.FloatTensor(next_obs).to(self.device)
-                next_done = torch.FloatTensor(done).to(self.device)
+                next_obs_np, reward_np, done_np, _ = self.envs.step(action.cpu().numpy())
+                # Update obs RMS
+                self.obs_rms.update(next_obs_np)
+                next_obs = torch.FloatTensor(next_obs_np).to(self.device)
+                next_done = torch.FloatTensor(done_np).to(self.device)
+                rewards[step] = torch.FloatTensor(reward_np).to(self.device)
 
                 with torch.no_grad():
                     novelty = self.calculate_novelty(next_obs)
                     curiosity_rewards[step] = self.normalize_rewards(novelty)
 
-            # Compute advantages for extrinsic and intrinsic rewards.
+            # Compute advantages
             with torch.no_grad():
                 next_value_ext, next_value_int = self.agent.get_value(next_obs)
-                ext_advantages, int_advantages = self.compute_advantages(
+                ext_adv, int_adv = self.compute_advantages(
                     next_value_ext, next_value_int, rewards, curiosity_rewards,
                     ext_values, int_values, dones, next_done
                 )
 
-            # Flatten the rollout data.
+            # Flatten rollout
             b_obs = obs.reshape((-1,) + (self.obs_dim,))
             b_logprobs = logprobs.reshape(-1)
-            b_actions = actions.reshape(-1, action_shape[0])  # Properly reshape multi-dim actions
-            b_ext_advantages = ext_advantages.reshape(-1)
-            b_int_advantages = int_advantages.reshape(-1)
-            b_ext_returns = (b_ext_advantages + ext_values.reshape(-1))
-            b_int_returns = (b_int_advantages + int_values.reshape(-1))
-            # Combine advantages using the intrinsic coefficient.
-            b_advantages = b_int_advantages * self.int_coef
+            b_actions = actions.reshape(-1, action_shape[0])
+            b_ext_adv = ext_adv.reshape(-1)
+            b_int_adv = int_adv.reshape(-1)
+            b_ext_ret = b_ext_adv + ext_values.reshape(-1)
+            b_int_ret = b_int_adv + int_values.reshape(-1)
+            # Combine advantages
+            b_advantages = self.ext_coef * b_ext_adv + self.int_coef * b_int_adv
 
-            '''
-            # Log the histogram of actions taken in this batch.
-            wandb.log({
-                "action_distribution": wandb.Histogram(b_actions.cpu().numpy())
-            }, step=global_step)
-            '''
-            # Optimize policy and value networks while collecting metrics.
             opt_metrics = self.optimize(
                 b_obs, b_logprobs, b_actions, b_advantages,
-                b_ext_returns, b_int_returns, optimizer, global_step
+                b_ext_ret, b_int_ret, optimizer, global_step
             )
 
-            # Log update-level training metrics.
-            if update % 10 == 0:
-                '''
-                wandb.log({
-                    "learning_rate": optimizer.param_groups[0]["lr"],
-                    "novelty": novelty.mean().item(),
-                    "curiosity_reward": curiosity_rewards.mean().item(),
-                    "extrinsic_reward": rewards.mean().item(),
-                    "global_step": global_step,
-                    "updates": update,
-                    **opt_metrics
-                }, step=global_step)
-                '''
-                print(f"\n[Update {update}/{num_updates}] Step: {global_step:,}")
-                print(f"Novelty: {novelty.mean().item():.4f} | Curiosity Reward: {curiosity_rewards.mean().item():.4f}")
-                print(f"Policy Loss: {opt_metrics['pg_loss']:.4f} | Value Loss: {opt_metrics['v_loss']:.4f} | Entropy: {opt_metrics['entropy']:.4f}")
-                print(f"KL: {opt_metrics['approx_kl']:.4f} | ClipFrac: {opt_metrics['clipfrac']:.4f}")
-                print("-" * 50)
-
+            # Log metrics
+            if update % self.log_interval == 0:
+                # Collect metrics
+                metrics = {
+                    "train/update": update,
+                    "train/step": global_step,
+                    "train/lr": optimizer.param_groups[0]["lr"],
+                    "train/novelty_mean": novelty.mean().item(),
+                    "train/curiosity_reward_mean": curiosity_rewards.mean().item(),
+                    "train/policy_loss": opt_metrics["pg_loss"],
+                    "train/value_loss": opt_metrics["v_loss"],
+                    "train/entropy": opt_metrics["entropy"],
+                    "train/approx_kl": opt_metrics["approx_kl"],
+                    "train/clipfrac": opt_metrics["clipfrac"],
+                    "train/rnd_loss": opt_metrics["rnd_forward_loss"],
+                }
+                
+                # Print concise summary
+                print(f"⏱️  Update {update}/{num_updates} | Step {global_step:,}")
+                print(f"🔍 Novelty: {metrics['train/novelty_mean']:.4f} | Reward: {metrics['train/curiosity_reward_mean']:.4f}")
+                print(f"📉 Loss: {metrics['train/policy_loss']:.4f} | KL: {metrics['train/approx_kl']:.4f}")
+                
+                # Log to wandb if enabled
+                if self.use_wandb:
+                    wandb.log(metrics)
+        
             if global_step % 400000 < self.num_envs or global_step < self.num_envs:
-                checkpoint_dir = "checkpoints"
-                os.makedirs(checkpoint_dir, exist_ok=True)
-                checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
+                os.makedirs("checkpoints", exist_ok=True)
+                path = f"checkpoints/checkpoint_{global_step}.pt"
                 torch.save({
                     'agent_state_dict': self.agent.state_dict(),
                     'rnd_predictor_state_dict': self.rnd_model.predictor.state_dict(),
-                }, checkpoint_path)
-                print(f"Saved checkpoint at {global_step} timesteps to {checkpoint_path}")
+                }, path)
+                print(f"💾 Checkpoint saved: {path}")
 
-        wandb.finish()
+        # Cleanup
+        if self.use_wandb:
+            wandb.finish()
         self.envs.close()
+        print(f"✅ Training completed after {global_step:,} steps")
 
-    def compute_advantages(self, next_value_ext, next_value_int, rewards, curiosity_rewards, ext_values, int_values, dones, next_done):
-        next_value_ext = next_value_ext.flatten()
-        next_value_int = next_value_int.flatten()
-        
-        ext_advantages = torch.zeros_like(rewards, device=self.device)
-        int_advantages = torch.zeros_like(curiosity_rewards, device=self.device)
-        ext_lastgaelam = torch.zeros(self.num_envs, device=self.device)
-        int_lastgaelam = torch.zeros(self.num_envs, device=self.device)
+    def compute_advantages(self, next_val_ext, next_val_int, rewards, curiosity_rewards, ext_vals, int_vals, dones, next_done):
+        next_ext = next_val_ext.flatten()
+        next_int = next_val_int.flatten()
+        ext_adv = torch.zeros_like(rewards, device=self.device)
+        int_adv = torch.zeros_like(curiosity_rewards, device=self.device)
+        last_ext = torch.zeros(self.num_envs, device=self.device)
+        last_int = torch.zeros(self.num_envs, device=self.device)
 
         for t in reversed(range(self.num_steps)):
             if t == self.num_steps - 1:
-                ext_nextnonterminal = 1.0 - next_done
-                int_nextnonterminal = torch.ones_like(next_done)
-                ext_nextvalues = next_value_ext
-                int_nextvalues = next_value_int
+                nonterm_ext = 1.0 - next_done
+                nonterm_int = torch.ones_like(next_done)
+                val_ext = next_ext
+                val_int = next_int
             else:
-                ext_nextnonterminal = 1.0 - dones[t + 1]
-                int_nextnonterminal = torch.ones_like(dones[t + 1])
-                ext_nextvalues = ext_values[t + 1]
-                int_nextvalues = int_values[t + 1]
+                nonterm_ext = 1.0 - dones[t + 1]
+                nonterm_int = torch.ones_like(dones[t + 1])
+                val_ext = ext_vals[t + 1]
+                val_int = int_vals[t + 1]
 
-            ext_delta = (rewards[t] * self.ext_reward_scale) + \
-                        self.gamma * ext_nextvalues * ext_nextnonterminal - ext_values[t]
-            int_delta = (curiosity_rewards[t] * self.int_reward_scale) + \
-                        self.int_gamma * int_nextvalues * int_nextnonterminal - int_values[t]
+            delta_ext = rewards[t] * self.ext_coef + self.gamma * val_ext * nonterm_ext - ext_vals[t]
+            delta_int = curiosity_rewards[t] * self.int_coef + self.int_gamma * val_int * nonterm_int - int_vals[t]
 
-            ext_advantages[t] = ext_lastgaelam = ext_delta + self.gamma * self.gae_lambda * ext_nextnonterminal * ext_lastgaelam
-            int_advantages[t] = int_lastgaelam = int_delta + self.int_gamma * self.gae_lambda * int_nextnonterminal * int_lastgaelam
+            last_ext = delta_ext + self.gamma * self.gae_lambda * nonterm_ext * last_ext
+            last_int = delta_int + self.int_gamma * self.gae_lambda * nonterm_int * last_int
+            ext_adv[t] = last_ext
+            int_adv[t] = last_int
 
-        return ext_advantages, int_advantages
+        return ext_adv, int_adv
 
-    def optimize(self, b_obs, b_logprobs, b_actions, b_advantages, b_ext_returns, b_int_returns, optimizer, global_step):
-        # Normalize observations for the RND loss.
-        rnd_next_obs = self.normalize_obs(b_obs)
-        metrics = {
-            "pg_loss": [],
-            "v_loss": [],
-            "entropy": [],
-            "rnd_forward_loss": [],
-            "total_loss": [],
-            "approx_kl": [],
-            "clipfrac": []
-        }
+    def optimize(self, b_obs, b_logp, b_actions, b_adv, b_ext_ret, b_int_ret, optimizer, global_step):
+        rnd_in = self.normalize_obs(b_obs)
+        metrics = {k: [] for k in ["pg_loss","v_loss","entropy","rnd_forward_loss","total_loss","approx_kl","clipfrac"]}
+        early_stop = False
 
         for epoch in range(self.update_epochs):
-            inds = np.arange(self.batch_size)
-            np.random.shuffle(inds)
+            idxs = np.arange(self.batch_size)
+            np.random.shuffle(idxs)
             for start in range(0, self.batch_size, self.minibatch_size):
-                end = start + self.minibatch_size
-                mb_inds = inds[start:end]
+                mb = idxs[start:start + self.minibatch_size]
 
-                # RND loss.
-                predict_next_state_feature, target_next_state_feature = self.rnd_model(rnd_next_obs[mb_inds])
-                forward_loss = F.mse_loss(predict_next_state_feature, target_next_state_feature.detach(), reduction="none").mean(-1)
-                mask = (torch.rand(len(forward_loss), device=self.device) < self.update_proportion).float()
-                forward_loss = (forward_loss * mask).sum() / torch.max(mask.sum(), torch.tensor([1], device=self.device, dtype=torch.float32))
-                metrics["rnd_forward_loss"].append(forward_loss.item())
+                # RND loss
+                pred_feat, targ_feat = self.rnd_model(rnd_in[mb])
+                fwd_loss = F.mse_loss(pred_feat, targ_feat.detach(), reduction="none").mean(-1)
+                mask = (torch.rand(len(fwd_loss), device=self.device) < self.update_proportion).float()
+                fwd_loss = (fwd_loss * mask).sum() / torch.clamp(mask.sum(), min=1.0)
+                metrics["rnd_forward_loss"].append(fwd_loss.item())
 
-                # New log probabilities, entropy and value predictions.
-                _, newlogprob, entropy, new_ext_values, new_int_values = self.agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
-                logratio = newlogprob - b_logprobs[mb_inds]
+                _, newlogp, entropy, new_ext_val, new_int_val = self.agent.get_action_and_value(b_obs[mb], b_actions.long()[mb])
+                logratio = newlogp - b_logp[mb]
                 ratio = logratio.exp()
+                approx_kl = ((ratio - 1) - logratio).mean()
+                clipfrac = ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
+                metrics["approx_kl"].append(approx_kl.item())
+                metrics["clipfrac"].append(clipfrac)
 
-                with torch.no_grad():
-                    approx_kl = ((ratio - 1) - logratio).mean()
-                    metrics["approx_kl"].append(approx_kl.item())
-                    clip_frac = ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
-                    metrics["clipfrac"].append(clip_frac)
-
-                mb_advantages = b_advantages[mb_inds]
-                pg_loss1 = -mb_advantages * ratio
-                pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
-                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                pg1 = -b_adv[mb] * ratio
+                pg2 = -b_adv[mb] * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
+                pg_loss = torch.max(pg1, pg2).mean()
                 metrics["pg_loss"].append(pg_loss.item())
 
-                # Value loss.
-                new_ext_values = new_ext_values.view(-1)
-                new_int_values = new_int_values.view(-1)
-                ext_v_loss = 0.5 * ((new_ext_values - b_ext_returns[mb_inds]) ** 2).mean()
-                int_v_loss = 0.5 * ((new_int_values - b_int_returns[mb_inds]) ** 2).mean()
-                v_loss = int_v_loss
+                new_ext_val = new_ext_val.view(-1)
+                new_int_val = new_int_val.view(-1)
+                v_loss = 0.5 * ((new_int_val - b_int_ret[mb]) ** 2).mean()
                 metrics["v_loss"].append(v_loss.item())
 
-                # Combined loss.
-                entropy_loss = entropy.mean()
-                loss = pg_loss - self.ent_coef * entropy_loss + v_loss * self.vf_coef + forward_loss
-                metrics["entropy"].append(entropy_loss.item())
+                ent_loss = entropy.mean()
+                loss = pg_loss - self.ent_coef * ent_loss + self.vf_coef * v_loss + fwd_loss
+                metrics["entropy"].append(ent_loss.item())
                 metrics["total_loss"].append(loss.item())
 
                 optimizer.zero_grad()
@@ -322,147 +312,117 @@ class NovelD_PPO:
                     torch.nn.utils.clip_grad_norm_(list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()), self.max_grad_norm)
                 optimizer.step()
 
-                if self.target_kl is not None:
-                    if approx_kl > self.target_kl:
-                        break
+                if self.target_kl is not None and approx_kl > self.target_kl:
+                    early_stop = True
+                    break
+            if early_stop:
+                break
 
-        # Average the collected metrics.
-        avg_metrics = {k: np.mean(v) for k, v in metrics.items()}
-        return avg_metrics
+        return {k: np.mean(v) for k, v in metrics.items()} 
 
     def calculate_novelty(self, obs):
         with torch.no_grad():
-            normalized_obs = self.normalize_obs(obs)
-            target_feature = self.rnd_model.target(normalized_obs)
-            predict_feature = self.rnd_model.predictor(normalized_obs)
-            novelty = ((target_feature - predict_feature) ** 2).sum(1) / 2 + 1e-8
+            normalized = self.normalize_obs(obs)
+            target_feat = self.rnd_model.target(normalized)
+            predict_feat = self.rnd_model.predictor(normalized)
+            novelty = ((target_feat - predict_feat) ** 2).sum(1) / 2 + 1e-8
             return novelty.clamp(0, 10)
 
     def normalize_obs(self, obs):
-        original_dim = len(obs.shape)
-        if torch.isnan(obs).any():
-            raise ValueError("NaN values detected in observations")
         if obs.requires_grad:
             obs = obs.detach()
+        original_dim = len(obs.shape)
         if original_dim == 1:
             obs = obs.unsqueeze(0)
-        normalized = ((obs - torch.FloatTensor(self.obs_rms.mean).to(self.device)) / 
-                    torch.sqrt(torch.FloatTensor(self.obs_rms.var).to(self.device) + 1e-8)).clip(-5, 5)
+        mean = torch.tensor(self.obs_rms.mean, device=self.device, dtype=torch.float32)
+        var = torch.tensor(self.obs_rms.var, device=self.device, dtype=torch.float32)
+        normalized = ((obs - mean) / (torch.sqrt(var + 1e-8))).clip(-5, 5)
         return normalized.squeeze(0) if original_dim == 1 else normalized
-
-    def normalize_reward(self, reward):
-        return reward / torch.sqrt(torch.FloatTensor([self.reward_rms.var]).to(self.device) + 1e-8)
 
     def normalize_rewards(self, rewards):
         if torch.isnan(rewards).any():
-            print("Warning: NaN rewards detected")
             rewards = torch.nan_to_num(rewards, 0.0)
-        rewards_np = rewards.detach().cpu().numpy()
-        self.reward_rms.update(rewards_np.reshape(-1))
-        normalized_rewards = rewards / torch.sqrt(
-            torch.FloatTensor([self.reward_rms.var]).to(self.device) + 1e-8
-        )
-        return normalized_rewards.clamp(-10, 10)
+        arr = rewards.detach().cpu().numpy().reshape(-1)
+        self.reward_rms.update(arr)
+        var = torch.tensor(self.reward_rms.var, device=self.device, dtype=torch.float32)
+        normed = rewards / torch.sqrt(var + 1e-8)
+        return normed.clamp(-10, 10)
 
-    def load_checkpoint(self, checkpoint_path):
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
-        self.agent.load_state_dict(checkpoint['agent_state_dict'])
-        self.rnd_model.predictor.load_state_dict(checkpoint['rnd_predictor_state_dict'])
-        print(f"Loaded checkpoint from {checkpoint_path}")
+    def load_checkpoint(self, path):
+        ckpt = torch.load(path, map_location=self.device)
+        self.agent.load_state_dict(ckpt['agent_state_dict'])
+        self.rnd_model.predictor.load_state_dict(ckpt['rnd_predictor_state_dict'])
+        print(f"Loaded checkpoint from {path}")
 
 class RunningMeanStd:
-    """Tracks running mean and standard deviation of input data"""
+    """Tracks running mean and variance"""
     def __init__(self, shape=()):
         self.mean = np.zeros(shape, 'float64')
         self.var = np.ones(shape, 'float64')
         self.count = 1e-4
 
     def update(self, x):
-        if not isinstance(x, np.ndarray):
-            x = np.asarray(x)
-        if x.size == 0 or np.any(np.isnan(x)):
+        x = np.asarray(x)
+        if x.size == 0 or np.isnan(x).any():
             return
         batch_mean = np.mean(x, axis=0)
         batch_var = np.var(x, axis=0)
         batch_count = x.shape[0]
-        self.update_from_moments(batch_mean, batch_var, batch_count)
+        self._update_from_moments(batch_mean, batch_var, batch_count)
 
-    def update_from_moments(self, batch_mean, batch_var, batch_count):
-        delta = batch_mean - self.mean
-        tot_count = self.count + batch_count
-        new_mean = self.mean + delta * batch_count / tot_count
+    def _update_from_moments(self, bm, bv, bc):
+        delta = bm - self.mean
+        tot = self.count + bc
+        new_mean = self.mean + delta * bc / tot
         m_a = self.var * self.count
-        m_b = batch_var * batch_count
-        M2 = m_a + m_b + np.square(delta) * self.count * batch_count / tot_count
-        new_var = M2 / tot_count
-        new_count = tot_count
+        m_b = bv * bc
+        M2 = m_a + m_b + delta**2 * self.count * bc / tot
         self.mean = new_mean
-        self.var = new_var
-        self.count = new_count
+        self.var = M2 / tot
+        self.count = tot
 
 class Agent(nn.Module):
-    """Neural network for policy and value functions"""
     def __init__(self, obs_dim, action_dim):
         super().__init__()
         self.network = nn.Sequential(
-            nn.Linear(obs_dim, 256),
-            nn.ReLU(),
-            nn.Linear(256, 448),
-            nn.ReLU(),
-            nn.Linear(448, 448),
-            nn.ReLU()
+            nn.Linear(obs_dim, 256), nn.ReLU(),
+            nn.Linear(256, 448), nn.ReLU(),
+            nn.Linear(448, 448), nn.ReLU()
         )
-        
-        # Handle MultiDiscrete action space
         self.action_dims = action_dim
-        self.actor = nn.ModuleList([nn.Linear(448, dim) for dim in action_dim])
+        self.actor = nn.ModuleList([nn.Linear(448, d) for d in action_dim])
         self.critic_ext = nn.Linear(448, 1)
         self.critic_int = nn.Linear(448, 1)
         self.float()
 
     def get_value(self, x):
-        hidden = self.network(x)
-        return self.critic_ext(hidden), self.critic_int(hidden)
+        h = self.network(x)
+        return self.critic_ext(h), self.critic_int(h)
 
     def get_action_and_value(self, x, action=None):
-        hidden = self.network(x)
-        
-        # Handle MultiDiscrete action space
-        logits = [actor(hidden) for actor in self.actor]
-        multi_categoricals = [torch.distributions.Categorical(logits=logit) for logit in logits]
-        
+        h = self.network(x)
+        logits = [a(h) for a in self.actor]
+        cats = [torch.distributions.Categorical(logits=lg) for lg in logits]
         if action is None:
-            action = torch.stack([categorical.sample() for categorical in multi_categoricals], dim=1)
-        
-        log_prob = torch.stack([
-            categorical.log_prob(action[:, i]) for i, categorical in enumerate(multi_categoricals)
-        ], dim=1).sum(dim=1)
-        
-        entropy = torch.stack([categorical.entropy() for categorical in multi_categoricals], dim=1).sum(dim=1)
-        
-        return action, log_prob, entropy, self.critic_ext(hidden), self.critic_int(hidden)
+            action = torch.stack([c.sample() for c in cats], dim=1)
+        logp = torch.stack([c.log_prob(action[:, i]) for i, c in enumerate(cats)], dim=1).sum(1)
+        ent = torch.stack([c.entropy() for c in cats], dim=1).sum(1)
+        return action, logp, ent, self.critic_ext(h), self.critic_int(h)
 
 class RNDModel(nn.Module):
-    """Random Network Distillation model for novelty detection"""
     def __init__(self, input_size, hidden_size=256):
         super().__init__()
         self.target = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
+            nn.Linear(input_size, hidden_size), nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size), nn.ReLU(),
             nn.Linear(hidden_size, hidden_size)
         )
         self.predictor = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
+            nn.Linear(input_size, hidden_size), nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size), nn.ReLU(),
             nn.Linear(hidden_size, hidden_size)
         )
         self.float()
 
     def forward(self, x):
-        target_feature = self.target(x)
-        predict_feature = self.predictor(x)
-        return predict_feature, target_feature
+        return self.predictor(x), self.target(x)

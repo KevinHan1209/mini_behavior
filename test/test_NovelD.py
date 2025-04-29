@@ -1,4 +1,3 @@
-# test.py
 import gym
 from algorithms.NovelD_PPO import NovelD_PPO
 import numpy as np
@@ -113,131 +112,147 @@ def train_agent(env_id, device):
         raise
 
 
-def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode=200):
-    print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
+def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode=200, use_wandb=True):
+    print(f"🧪 Testing Agent | {env_id} | Episodes: {num_episodes}")
     
-    # Initialize wandb for testing
-    wandb.init(project="noveld-ppo-test",
-               config={"env_id": env_id,
-                       "mode": "testing",
-                       "num_episodes": num_episodes,
-                       "max_steps": max_steps_per_episode})
+    # Initialize wandb for testing if enabled
+    if use_wandb:
+        wandb.init(
+            project="noveld-ppo-test",
+            config={
+                "env_id": env_id,
+                "mode": "testing",
+                "num_episodes": num_episodes,
+                "max_steps": max_steps_per_episode
+            }
+        )
 
     test_env = gym.make(env_id)
     test_env = CustomObservationWrapper(test_env)
     
-    # Get the underlying (unwrapped) environment for accessing object info.
+    # Get the underlying environment for accessing object info
     env_unwrapped = getattr(test_env, 'env', test_env)
-
-    # Compute the total number of binary flags and generate the mapping.
     num_binary_flags = count_binary_flags(env_unwrapped)
     flag_mapping = generate_flag_mapping(env_unwrapped)
 
-    # Log static flag mapping once (no commit).
-    mapping_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name"])
-    for idx, mapping in enumerate(flag_mapping):
-        mapping_table.add_data(idx, mapping["object_type"], mapping["object_index"], mapping["state_name"])
-    wandb.log({"flag_mapping": mapping_table}, step=0, commit=False)
+    # Log flag mapping once if using wandb
+    if use_wandb:
+        mapping_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name"])
+        for idx, mapping in enumerate(flag_mapping):
+            mapping_table.add_data(idx, mapping["object_type"], mapping["object_index"], mapping["state_name"])
+        wandb.log({"flag_mapping": mapping_table}, commit=False)
 
     noveld_ppo.agent.network.to(device)
     
     for episode in range(num_episodes):
-        print(f"\n=== Episode {episode + 1}/{num_episodes} ===")
+        print(f"\n🔄 Episode {episode + 1}/{num_episodes}")
         obs = test_env.reset()
         done = False
         total_reward = 0
         steps = 0
         novelty_values = []
         frames = []
-        # Initialize the activity counter (one per binary flag).
+        # Track state changes
         activity = [0] * num_binary_flags
         prev_flags = None
         
         while not done and steps < max_steps_per_episode:
-            # Render and store the current frame (if available)
+            # Collect frames if rendering is available
             frame = test_env.render()
             if frame is not None:
                 frames.append(np.moveaxis(frame, 2, 0))
             
+            # Get action from agent
             with torch.no_grad():
                 obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
                 action, _, _, ext_value, int_value = noveld_ppo.agent.get_action_and_value(obs_tensor)
-                # Add this line to convert tensor action to numpy array
                 action_np = action[0].cpu().numpy().tolist()
         
-            # Take an action in the environment.
-            obs, reward, done, _ = test_env.step(action_np)  # Use action_np instead of action.cpu().numpy()[0]
+            # Take action in environment
+            obs, reward, done, _ = test_env.step(action_np)
             total_reward += reward
             steps += 1
+            
+            # Calculate novelty and track values
             novelty = noveld_ppo.calculate_novelty(torch.FloatTensor(obs).unsqueeze(0).to(device))
             novelty_values.append(novelty)
             
-            # Convert tensor values to Python scalars.
+            # Convert tensor values to Python scalars
             novelty_val = novelty.item() if torch.is_tensor(novelty) else novelty
             ext_val = ext_value.item() if torch.is_tensor(ext_value) else ext_value
             int_val = int_value.item() if torch.is_tensor(int_value) else int_value
 
-            # Extract the binary flags from the current observation.
+            # Track state changes
             current_flags = extract_binary_flags(obs, env_unwrapped)
             if prev_flags is not None:
-                # Compare flags: if a flag has changed (0->1 or 1->0), count it as an activity.
                 differences = (current_flags != prev_flags).astype(int)
                 activity = [a + d for a, d in zip(activity, differences)]
             prev_flags = current_flags
 
-            # Log step metrics (batch, no commit).
-            wandb.log({
-                "step_reward": reward,
-                "step_novelty": novelty_val,
-                "step_ext_value": ext_val,
-                "step_int_value": int_val,
-                "step": steps
-            }, commit=False)
+            # Log step data to wandb if enabled
+            if use_wandb:
+                wandb.log({
+                    "test/step": steps,
+                    "test/step_reward": reward,
+                    "test/step_novelty": novelty_val,
+                    "test/step_ext_value": ext_val,
+                    "test/step_int_value": int_val,
+                    "test/episode": episode + 1
+                }, commit=False)
             
-            # Print step information.
-            try:
-                action_name = test_env.actions(action_np[0]).name  # Try with the first action dimension
-            except Exception as e:
-                # Fall back to showing the full action vector as a string
-                action_name = str(action_np)
-            
-            print(f"\nStep {steps}/{max_steps_per_episode}")
-            print(f"Action Taken: {action_name} | Reward: {reward:.2f}")
-            print(f"Novelty Score: {novelty_val:.4f} | External Value: {ext_val:.4f} | Internal Value: {int_val:.4f}")
+            # Print concise step info (only every 10 steps to avoid clutter)
+            if steps % 10 == 0 or steps == 1:
+                try:
+                    action_name = test_env.actions(action_np[0]).name
+                except:
+                    action_name = str(action_np)
+                print(f"  Step {steps:3d} | Action: {action_name:10s} | Reward: {reward:.2f} | Novelty: {novelty_val:.2f}")
         
-        # Write out replay, etc.
-        checkpoint_dir = "checkpoints"
-        os.makedirs(checkpoint_dir, exist_ok=True)
-        gif_path = os.path.join(checkpoint_dir, f"episode_{episode + 1}.gif")
+        # Save GIF of episode
         if frames:
+            checkpoint_dir = "checkpoints"
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            gif_path = os.path.join(checkpoint_dir, f"episode_{episode + 1}.gif")
             write_gif(np.array(frames), gif_path, fps=1)
-            wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+            
+            if use_wandb:
+                wandb.log({"test/episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
 
-        # At episode end: log scalars + activity table in one call.
-        activity_table = wandb.Table(columns=[
-            "flag_id", "object_type", "object_index", "state_name", "activity_count"
-        ])
-        for idx, count in enumerate(activity):
-            m = flag_mapping[idx]
-            activity_table.add_data(idx, m["object_type"], m["object_index"], m["state_name"], count)
-
-        wandb.log({
-            "episode_total_reward": total_reward,
-            "episode_length": steps,
-            "activity_counts": activity,
-            "episode_activity_table": activity_table
-        })  # final commit for this episode
+        # Log episode summary
+        if use_wandb:
+            # Create activity table with all states (including those with zero changes)
+            full_activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
+            for idx, count in enumerate(activity):
+                m = flag_mapping[idx]
+                full_activity_table.add_data(idx, m["object_type"], m["object_index"], m["state_name"], count)
+            
+            # Keep the filtered table for states that changed (for backward compatibility)
+            filtered_activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
+            for idx, count in enumerate(activity):
+                if count > 0:  # Only log states that changed
+                    m = flag_mapping[idx]
+                    filtered_activity_table.add_data(idx, m["object_type"], m["object_index"], m["state_name"], count)
+            
+            # Log episode data with explicit commit=True to ensure it's saved
+            wandb.log({
+                "test/episode_total_reward": total_reward,
+                "test/episode_length": steps,
+                "test/activity_table": filtered_activity_table,
+                "test/full_activity_table": full_activity_table,
+                f"episode_{episode + 1}_activity": full_activity_table,  # Match RND naming convention
+                "test/episode_complete": episode + 1
+            }, commit=True)
+            
+            # Add explicit summary table logging with unique step to prevent overwriting
+            wandb.log({
+                f"activity_summary_{episode + 1}": filtered_activity_table,
+            }, step=10000000 + episode)  # Use large offset to avoid collision with regular steps
         
-        print(f"\n=== Episode {episode + 1} Summary ===")
-        print(f"Total Reward: {total_reward:.2f} | Steps: {steps}")
-        print("\nActivity per binary flag (changes detected):")
-        for idx, count in enumerate(activity):
-            mapping = flag_mapping[idx]
-            print(f"- Flag {idx} ({mapping['object_type']} #{mapping['object_index']} - {mapping['state_name']}): {count}")
-
-    
-    test_env.close()
-    wandb.finish()
+        # Print episode summary
+        print(f"\n📊 Episode {episode + 1} Summary:")
+        print(f"   Total Reward: {total_reward:.2f}")
+        print(f"   Steps: {steps}")
+        print(f"   Active States: {sum(1 for c in activity if c > 0)}/{len(activity)}")
 
 
 def main():
