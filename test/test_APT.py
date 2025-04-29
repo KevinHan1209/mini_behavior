@@ -5,14 +5,15 @@ from mini_behavior.register import register
 from env_wrapper import CustomObservationWrapper
 
 # ===== Parameters =====
-TOTAL_TIMESTEPS = int(1e4)
+TOTAL_TIMESTEPS = 16000
 NUM_ENVS = 8
 NUM_EPS = 1
-SAVE_FREQUENCY = 500
-TEST_STEPS = 100
+SAVE_FREQUENCY = 5
+TEST_STEPS = 200
 
-ENV_NAME = 'MiniGrid-MultiToy-8x8-N2-v0'
-ENV_KWARGS = {"room_size": 8, "max_steps": 10000}
+ENV_NAME = 'MiniGrid-MultiToy-16x16-N2-v0'
+TASK = 'MultiToy'
+ENV_KWARGS = {"room_size": 16, "max_steps": 10000}
 SEED = 1
 
 def make_env(env_id: str, seed: int, idx: int, env_kwargs: dict):
@@ -37,9 +38,16 @@ def init_env(env_name: str, num_envs: int, seed: int, env_kwargs: dict):
     )
 
 if __name__ == "__main__":
+
+    register(
+        id=ENV_NAME,
+        entry_point=f'mini_behavior.envs:{TASK}Env',
+        kwargs=ENV_KWARGS
+    )
+    
     # Instantiate a vectorized training environment.
     env = init_env(ENV_NAME, NUM_ENVS, SEED, ENV_KWARGS)
-    
+
     save_dir = "checkpoints2"
     os.makedirs(save_dir, exist_ok=True)
     

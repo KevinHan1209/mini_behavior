@@ -113,7 +113,7 @@ def train_agent(env_id, device):
         raise
 
 
-def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode=200):
+def test_agent(env_id, noveld_ppo, device, num_episodes=1, max_steps_per_episode=200):
     print(f"\n=== Testing Agent: {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
