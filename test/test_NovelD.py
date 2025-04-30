@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import wandb
 from array2gif import write_gif
-from env_wrapper import CustomObservationWrapper
+from env_wrapper import CustomObservationWrapper, SafeActionWrapper
 from mini_behavior.utils.states_base import RelativeObjectState
 from mini_behavior.register import register
 import os
@@ -104,7 +104,23 @@ def generate_flag_mapping(env):
 def train_agent(env_id, device):
     print("\n=== Starting Agent Training ===")
     try:
-        noveld_ppo = NovelD_PPO(env_id, device)
+        # Create a custom version of the make_env function that includes our SafeActionWrapper
+        def safe_make_env(env_id, seed, idx):
+            def thunk():
+                env = gym.make(env_id)
+                env = SafeActionWrapper(env)  # Apply safety wrapper first
+                env = CustomObservationWrapper(env)  # Then apply observation wrapper
+                env.seed(seed + idx)
+                env.action_space.seed(seed + idx)
+                return env
+            return thunk
+        
+        # Create a NovelD_PPO instance with our custom environment maker
+        noveld_ppo = NovelD_PPO(
+            env_id=env_id, 
+            device=device,
+            make_env_func=safe_make_env  # Pass our custom env maker
+        )
         noveld_ppo.train()
         return noveld_ppo
     except Exception as e:
@@ -128,6 +144,7 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
         )
 
     test_env = gym.make(env_id)
+    test_env = SafeActionWrapper(test_env)  # Apply safety wrapper first
     test_env = CustomObservationWrapper(test_env)
     
     # Get the underlying environment for accessing object info

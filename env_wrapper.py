@@ -130,5 +130,23 @@ class CustomObservationWrapper(gym.ObservationWrapper):
                             continue
         obs = list(self.env.agent_pos) + [self.env.agent_dir] + obj_states
         return np.array(obs, dtype=np.float32)
-    
 
+class SafeActionWrapper(gym.Wrapper):
+    """
+    Wrapper that prevents actions that would cause errors like attempting to 
+    remove objects from empty containers.
+    """
+    def step(self, action):
+        try:
+            # Try to execute the original step
+            return self.env.step(action)
+        except IndexError as e:
+            if "pop from empty list" in str(e):
+                # If the error is about popping from an empty list,
+                # return the current state with a small negative reward
+                print("⚠️ Warning: Agent tried invalid action (empty container). Action ignored.")
+                obs = self.env.gen_obs() if hasattr(self.env, 'gen_obs') else self.observation_space.sample()
+                return obs, -0.1, False, {'error': 'invalid_action'}
+            else:
+                # Re-raise other index errors
+                raise e

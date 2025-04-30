@@ -45,11 +45,14 @@ class NovelD_PPO:
             update_proportion=0.4,
             seed=1,
             log_interval=10,
-            use_wandb=True
+            use_wandb=True,
+            make_env_func=None  # Add this parameter
             ):
         
+        # Use the provided environment maker if available, otherwise use the default
+        env_maker = make_env_func or make_env
         self.envs = gym.vector.SyncVectorEnv(
-            [make_env(env_id, seed, i) for i in range(num_envs)]
+            [env_maker(env_id, seed, i) for i in range(num_envs)]
         )
         
         self.env_id = env_id
