@@ -55,7 +55,7 @@ class DIAYNObservationWrapper(gym.ObservationWrapper):
 
 
 class RunningMeanStd:
-    """Tracks running mean and stdev of input data"""
+    """running mean and stdev of input data"""
     def __init__(self, shape=()):
         self.mean = np.zeros(shape, 'float64')
         self.var = np.ones(shape, 'float64')
@@ -92,7 +92,7 @@ class RunningMeanStd:
 
 class RollingRewardNormalizer:
     """
-    Maintains a rolling window of intrinsic rewards for normalization.
+    rolling window of intrinsic rewards for normalization
     """
     def __init__(self, window_size=1000):
         self.window_size = window_size
@@ -259,14 +259,12 @@ class DIAYN:
         else:
             self.obs_dim = int(np.prod(self.obs_space.shape))
 
-        #Observations + skill
+        #obs + skill
         self.aug_obs_dim = self.obs_dim + self.n_skills
         
         self.agent = Agent(self.aug_obs_dim, self.envs.single_action_space.n).to(self.device)
         self.discriminator = Discriminator(self.obs_dim, self.n_skills).to(self.device)
         
-        #rollout buffer for on-policy transitions that we just collected.
-        #self.disc_rollout = RolloutMemory()
         self.disc_memory = Memory(buffer_size=disc_replay_size)
 
     def create_optimizers(self):
@@ -371,7 +369,7 @@ class DIAYN:
                 next_obs_processed = process_obs(next_obs_dict)
                 next_obs_base = torch.FloatTensor(next_obs_processed).to(self.device)
 
-                # Create new augmented observation with skill
+                #create new augmented observation with skill
                 skills_onehot = torch.zeros(self.num_envs, self.n_skills, device=self.device)
                 for i, skill in enumerate(self.current_skills):
                     skills_onehot[i, skill] = 1.0
@@ -409,7 +407,7 @@ class DIAYN:
                 intrinsic_rewards[step] = intrinsic_r
                 next_done = torch.FloatTensor(done).to(self.device)
 
-                # If an env is done, resample skill
+                #if env is done, resample skill
                 for i in range(self.num_envs):
                     if done[i]:
                         new_skill = np.random.randint(self.n_skills)
@@ -423,9 +421,9 @@ class DIAYN:
                 last_save_step = global_step
                 wandb.log({"checkpoint_saved": True}, step=global_step)
 
-            # Compute advantages/returns using only intrinsic_rewards
+            #compute advantages/returns using only intrinsic_rewards
             with torch.no_grad():
-                # bootstrap
+                #bootstrap
                 next_value = self.agent.get_value(next_obs_aug).flatten()
                 advantages = self.compute_gae(next_value, intrinsic_rewards, dones, values, next_done)
                 returns = advantages + values.reshape(-1)
@@ -437,12 +435,12 @@ class DIAYN:
             b_returns = returns.reshape(-1)
             b_values = values.reshape(-1)
 
-            # Update PPO
+            #update PPO
             pg_loss, v_loss, entropy_loss = self.update_policy(
                 b_obs_aug, b_logprobs, b_actions, b_advantages, b_returns, b_values, policy_optimizer
             )
 
-            #train the discriminator with memory
+            #train discriminator with memory
             disc_loss = self.update_discriminator(disc_optimizer)
 
             if update % 10 == 0:
@@ -488,7 +486,7 @@ class DIAYN:
         total_value_loss = 0
         total_entropy = 0
 
-        # Normalize advantages
+        #normalize advantages
         b_advantages = (b_advantages - b_advantages.mean()) / (b_advantages.std() + 1e-8)
 
         value_clip_param = 0.2
@@ -543,7 +541,7 @@ class DIAYN:
         )
 
     def update_discriminator(self, optimizer):
-        """Train discriminator on the on-policy data from self.disc_rollout"""
+        """Train discriminator on sampled transitions"""
         batch = self.disc_memory.sample(self.minibatch_size)
         if len(batch) == 0:
             return 0.0
@@ -583,7 +581,7 @@ class DIAYN:
 
         num_batches = self.update_epochs * (dataset_size // self.minibatch_size)
         if num_batches == 0:
-            return float(total_disc_loss)  # in case dataset_size < minibatch_size
+            return float(total_disc_loss)  # for if dataset_size < minibatch_size
 
         return total_disc_loss / num_batches
 

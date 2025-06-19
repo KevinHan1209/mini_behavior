@@ -7,7 +7,8 @@ import torch
 import time
 import wandb
 from array2gif import write_gif
-from env_wrapper_no_position import CustomObservationWrapper
+#from env_wrapper_no_position import CustomObservationWrapper
+from env_wrapper import CustomObservationWrapper
 from mini_behavior.utils.states_base import RelativeObjectState
 from mini_behavior.register import register
 
@@ -203,7 +204,7 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
             "episode": episode
         })
 
-        gif_path = f"img/rnd_8x8_new_env_no_agent_pos/500000/episode_{episode + 1}.gif"
+        gif_path = f"img/rnd_8x8_new_env_no_agent_pos/{STEP}/episode_{episode + 1}.gif"
         #print(activity)
         if frames:
             write_gif(np.array(frames), gif_path, fps=1)
@@ -232,7 +233,7 @@ def main():
     TASK = 'MultiToy'
     ROOM_SIZE = 8
     MAX_STEPS = 1000
-    STEP = 500000
+    STEP = 1000000
     
     #env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v0"
     #env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
@@ -286,7 +287,6 @@ def main():
     )
     model.load(model_path)
     
-    # Test model.
     test_agent(test_env_name, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max_steps_per_episode=500)
 
 

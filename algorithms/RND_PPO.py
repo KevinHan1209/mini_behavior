@@ -8,8 +8,8 @@ from mini_behavior.utils.utils import RewardForwardFilter, RMS #added
 from networks.actor_critic import Agent
 import gym
 import wandb
-#from env_wrapper import CustomObservationWrapper
-from env_wrapper_no_position import CustomObservationWrapper #rnd without agent position
+from env_wrapper import CustomObservationWrapper
+#from env_wrapper_no_position import CustomObservationWrapper #rnd without agent position
 
 def make_env(env_id, seed, idx):
     def thunk():
@@ -336,8 +336,9 @@ class RND_PPO:
                 metrics["v_loss"].append(v_loss.item())
 
                 # RND loss.
-                normalized_obs = self.normalize_obs(b_obs[mb_inds])
-                predict_feature, target_feature = self.rnd_model(normalized_obs)
+                normalized_obs = self.normalize_obs(b_obs[mb_inds]) #added to remove agent position from rnd
+                masked_obs = self.mask_agent_position(normalized_obs) #added to remove agent position from rnd
+                predict_feature, target_feature = self.rnd_model(masked_obs)
                 rnd_loss = F.mse_loss(predict_feature, target_feature.detach())
                 metrics["rnd_loss"].append(rnd_loss.item())
 
@@ -359,12 +360,18 @@ class RND_PPO:
         # Average the collected metrics.
         avg_metrics = {k: np.mean(v) for k, v in metrics.items()}
         return avg_metrics
+    
+    def mask_agent_position(self, obs):
+        obs_masked = obs.clone()
+        obs_masked[:, 0:3] = 0.0  # Zero out agent_x, agent_y, agent_dir
+        return obs_masked
 
     def calculate_novelty(self, obs):
         with torch.no_grad():
             normalized_obs = self.normalize_obs(obs)
-            target_feature = self.rnd_model.target(normalized_obs)
-            predict_feature = self.rnd_model.predictor(normalized_obs)
+            masked_obs = self.mask_agent_position(normalized_obs) #added to remove agent position from rnd
+            target_feature = self.rnd_model.target(masked_obs) #added to remove agent position from rnd
+            predict_feature = self.rnd_model.predictor(masked_obs) #added to remove agent position from rnd
             novelty = ((target_feature - predict_feature) ** 2).sum(1) / 2 + 1e-8
             return novelty.clamp(0, 10)
 

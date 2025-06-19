@@ -4,7 +4,8 @@ import os
 import numpy as np
 from mini_behavior.register import register
 from algorithms.RND_PPO import RND_PPO
-from env_wrapper_no_position import CustomObservationWrapper
+#from env_wrapper_no_position import CustomObservationWrapper
+from env_wrapper import CustomObservationWrapper
 import torch
 import wandb
 wandb.login()
@@ -18,7 +19,7 @@ TOTAL_TIMESTEPS = 3e6
 NUM_ENVS = 8
 NUM_STEPS = 125
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-SAVE_FREQUENCY = 500000 
+SAVE_FREQUENCY = 100000 
 
 # ===== Helper Functions =====
 def make_env(env_id, seed, idx, env_kwargs):
