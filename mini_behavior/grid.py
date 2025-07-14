@@ -92,7 +92,12 @@ class BehaviorGrid(Grid):
         return items
 
     def is_empty(self, i, j):
-        return self.get(i, j) == [[None, None] for i in range(3)]
+        cell = self.get(i, j)
+        # Check if any dimension has an object (furniture or obj)
+        for dim in cell:
+            if dim[0] is not None or dim[1] is not None:  # furniture or obj is not None
+                return False
+        return True
 
     def remove(self, i, j, v):
         assert 0 <= i < self.width

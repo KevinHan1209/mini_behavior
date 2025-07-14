@@ -13,10 +13,13 @@ from mini_behavior.register import register
 # Size in pixels of a tile in the full-scale human view
 TILE_PIXELS = 32
 show_furniture = False
-
+ROOM_SIZE = 8
+MAX_STEPS = 1000
+env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
 register(
-    id='MiniGrid-MultiToy-16x16-N2-v0',
-    entry_point='mini_behavior.envs:MultiToyEnv'
+    id='MiniGrid-MultiToy-8x8-N2-v0',
+    entry_point='mini_behavior.envs:MultiToyEnv',
+    kwargs=env_kwargs
 )
 
 
@@ -258,7 +261,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--env",
     help="gym environment to load",
-    default='MiniGrid-MultiToy-16x16-N2-v0'
+    default='MiniGrid-MultiToy-8x8-N2-v0'
 )
 parser.add_argument(
     "--seed",

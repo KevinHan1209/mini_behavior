@@ -15,6 +15,7 @@ from mini_behavior.actions import Pickup, Drop, Toggle, Open, Close
 
 import numpy as np
 import torch
+import math
 
 # Size in pixels of a tile in the full-scale human view
 TILE_PIXELS = 32
@@ -287,6 +288,16 @@ class MiniBehaviorEnv(MiniGridEnv):
         # To keep the same grid for each episode, call env.seed() with
         # the same seed before calling env.reset()
         self._gen_grid(self.width, self.height)
+        
+
+        # Check if there's space for the agent before attempting to place it
+        if not self.check_grid_has_empty_space():
+            empty_positions = self.get_empty_positions()
+            raise RuntimeError(
+                f"Grid is completely full! No empty positions available for agent placement. "
+                f"Grid size: {self.width}x{self.height}, "
+                f"Empty positions found: {len(empty_positions)}"
+            )
 
         self.update_states()
         # generate furniture view
@@ -334,18 +345,50 @@ class MiniBehaviorEnv(MiniGridEnv):
     def _gen_grid(self, width, height):
         self._gen_objs()
         assert self._init_conditions(), "Does not satisfy initial conditions"
+        
+        # Check if there's space for the agent after placing all objects
+        if not self.check_grid_has_empty_space():
+            empty_positions = self.get_empty_positions()
+            raise RuntimeError(
+                f"Grid is completely full after placing objects! "
+                f"No empty positions available for agent placement. "
+                f"Grid size: {width}x{height}, Empty positions: {len(empty_positions)}"
+            )
+        
         self.place_agent()
 
     def _gen_objs(self):
         assert False, "_gen_objs needs to be implemented by each environment"
 
     def _init_conditions(self):
-        print('no init conditions')
         return True
 
     def _end_conditions(self):
-        print('no end conditions')
         return False
+
+    def check_grid_has_empty_space(self):
+        """
+        Check if there are any empty positions in the grid where the agent can be placed.
+        Returns True if there's at least one empty position, False otherwise.
+        """
+        for x in range(self.grid.width):
+            for y in range(self.grid.height):
+                if self.grid.is_empty(x, y):
+                    return True
+        return False
+
+    def get_empty_positions(self):
+        """
+        Get all empty positions in the grid where the agent can be placed.
+        Returns a list of (x, y) tuples.
+        """
+        empty_positions = []
+        for x in range(self.grid.width):
+            for y in range(self.grid.height):
+                if self.grid.is_empty(x, y):
+                    empty_positions.append((x, y))
+        return empty_positions
+
 
     def place_obj_pos(self,
                       obj,
@@ -388,19 +431,16 @@ class MiniBehaviorEnv(MiniGridEnv):
                 # Don't place the object on top of another object
                 if not self.grid.is_empty(x, y):
                     valid = False
-                    print('1')
                     break
 
                 # Don't place the object where the agent is
-                if np.array_equal((x, y), self.agent_pos):
+                if self.agent_pos is not None and np.array_equal((x, y), self.agent_pos):
                     valid = False
-                    print('2')
                     break
 
                 # Check if there is a filtering criterion
                 if reject_fn and reject_fn(self, (x, y)):
                     valid = False
-                    print('3')
                     break
 
         if not valid:
@@ -427,6 +467,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         :param size: size of the rectangle where to place
         :param reject_fn: function to filter out potential positions
         """
+        
 
         if top is None:
             top = (0, 0)
@@ -453,6 +494,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                 self._rand_int(top[0], min(top[0] + size[0], self.grid.width - width + 1)),
                 self._rand_int(top[1], min(top[1] + size[1], self.grid.height - height + 1))
             ))
+            
 
             valid = True
 
@@ -513,7 +555,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 break
 
                     # Don't place the object where the agent is
-                    if np.array_equal((x, y), self.agent_pos):
+                    if self.agent_pos is not None and np.array_equal((x, y), self.agent_pos):
                         valid = False
                         break
 
@@ -531,6 +573,7 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         if obj:
             self.put_obj(obj, *pos)
+            
 
         return pos
 
@@ -1009,4 +1052,19 @@ class MiniBehaviorEnv(MiniGridEnv):
         state_counts = {obj: dict(states) for obj, states in state_counts.items()}
 
         return state_counts
+
+    def place_agent(self, top=None, size=None, rand_dir=True, max_tries=math.inf):
+        """
+        Set the agent's starting point at an empty position in the grid
+        """
+        self.agent_pos = None
+        pos = self.place_obj(None, top, size, max_tries=max_tries)
+        self.agent_pos = pos
+
+        if rand_dir:
+            self.agent_dir = self._rand_int(0, 4)
+        else:
+            self.agent_dir = 0
+
+        return pos
 

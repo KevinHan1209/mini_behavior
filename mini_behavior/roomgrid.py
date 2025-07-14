@@ -471,12 +471,18 @@ class RoomGrid(MiniBehaviorEnv):
     def _gen_grid(self, width, height):
         if not self.init_dict:
             self._gen_rooms(width, height)
+            # If we have a custom agent position, temporarily set it so objects avoid it
+            if self.custom_agent_pos is not None:
+                self.agent_pos = self.custom_agent_pos
             self._gen_objs()
             self.place_agent()
             self.connect_all()
         else:
             self.grid = BehaviorGrid(width, height)
             self._gen_floorplan()
+            # If we have a custom agent position, temporarily set it so objects avoid it
+            if hasattr(self, 'initial_dict') and self.initial_dict.get('Grid', {}).get('agents', {}).get('pos') is not None:
+                self.agent_pos = self.initial_dict['Grid']['agents']['pos']
             self._gen_random_objs()
             self.place_agent_auto()
 
@@ -654,7 +660,6 @@ class RoomGrid(MiniBehaviorEnv):
         """
         Set the agent's starting point at an empty position in the grid
         """
-        
         if self.initial_dict['Grid']['agents']['pos'] is None:
             pos = self.place_obj(None, top, size, max_tries=max_tries)
             self.agent_pos = (pos[0], pos[1])
@@ -686,7 +691,8 @@ class RoomGrid(MiniBehaviorEnv):
             # Find a position that is not right in front of an object
             while True:
                 super().place_agent(room.top, room.size, rand_dir, max_tries=1000)
-                if self.grid.is_empty(*self.front_pos):
+                # Check both that the agent position is empty AND front position is empty
+                if self.grid.is_empty(*self.agent_pos) and self.grid.is_empty(*self.front_pos):
                     break
         else:
             self.agent_pos = self.custom_agent_pos

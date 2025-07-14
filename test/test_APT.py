@@ -37,9 +37,12 @@ def init_env(env_name: str, num_envs: int, seed: int, env_kwargs: dict):
     )
 
 if __name__ == "__main__":
+    register(
+        id='MiniGrid-MultiToy-8x8-N2-v0',
+        entry_point='mini_behavior.envs.multitoy:MultiToyEnv',
+    )
     # Instantiate a vectorized training environment.
     env = init_env(ENV_NAME, NUM_ENVS, SEED, ENV_KWARGS)
-    
     save_dir = "APT_PPO"
     os.makedirs(save_dir, exist_ok=True)
     
