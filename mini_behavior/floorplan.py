@@ -6,7 +6,18 @@ from mini_behavior.register import register
 from mini_behavior.objects import Wall
 from mini_behavior.utils.scene_to_grid import img_to_array
 
-FLOORPLANS_DIR = os.path.join(os.path.dirname(os.path.abspath(__name__)), "mini_behavior", "floorplans")
+# Get the directory of this file in a cross-platform way
+FLOORPLANS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "floorplans")
+
+# Ensure the directory exists
+if not os.path.exists(FLOORPLANS_DIR):
+    # Try alternative path (in case of installation issues)
+    import mini_behavior
+    package_dir = os.path.dirname(mini_behavior.__file__)
+    FLOORPLANS_DIR = os.path.join(package_dir, "floorplans")
+    
+    if not os.path.exists(FLOORPLANS_DIR):
+        raise RuntimeError(f"Floorplans directory not found. Expected at: {FLOORPLANS_DIR}")
 
 
 def get_floorplan(scene_id) :
