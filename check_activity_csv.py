@@ -1,28 +1,38 @@
 #!/usr/bin/env python3
-"""Quick script to check the activity CSV format"""
+"""Quick script to check the activity CSV files"""
 
 import os
+import glob
 import pandas as pd
 
-csv_path = "checkpoints/all_checkpoints_activity.csv"
+checkpoint_dir = "checkpoints"
+csv_pattern = os.path.join(checkpoint_dir, "checkpoint_*_activity.csv")
+csv_files = sorted(glob.glob(csv_pattern))
 
-if not os.path.exists(csv_path):
-    print(f"CSV file not found: {csv_path}")
-    print("Run training first to generate the CSV.")
+if not csv_files:
+    print(f"No CSV files found matching pattern: {csv_pattern}")
+    print("Run training first to generate checkpoint CSVs.")
 else:
-    df = pd.read_csv(csv_path)
-    print(f"\nCSV Shape: {df.shape}")
-    print(f"\nColumns ({len(df.columns)}):")
-    print(df.columns.tolist()[:10], "..." if len(df.columns) > 10 else "")
-    print(f"\nFirst few rows:")
-    print(df.head())
-    
-    # Show non-zero counts
-    print("\nNon-zero activity counts:")
-    for idx, row in df.iterrows():
-        checkpoint = row['checkpoint_id']
+    print(f"Found {len(csv_files)} checkpoint CSV files:")
+    for csv_path in csv_files:
+        print(f"\n{'='*60}")
+        print(f"File: {os.path.basename(csv_path)}")
+        
+        df = pd.read_csv(csv_path)
+        print(f"Shape: {df.shape}")
+        print(f"Columns: {len(df.columns)} total")
+        
+        # Show checkpoint ID
+        checkpoint_id = df['checkpoint_id'].iloc[0]
+        print(f"Checkpoint ID: {checkpoint_id}")
+        
+        # Show non-zero counts
+        row = df.iloc[0]
         non_zero = [(col, int(row[col])) for col in df.columns[1:] if row[col] > 0]
         if non_zero:
-            print(f"\nCheckpoint {checkpoint}:")
-            for col, count in sorted(non_zero, key=lambda x: x[1], reverse=True)[:5]:
+            print(f"\nTop 10 active states:")
+            for col, count in sorted(non_zero, key=lambda x: x[1], reverse=True)[:10]:
                 print(f"  {col}: {count}")
+            print(f"\nTotal active states: {len(non_zero)}")
+            total_activity = sum(count for _, count in non_zero)
+            print(f"Total activity count: {total_activity}")

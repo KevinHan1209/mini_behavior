@@ -103,7 +103,7 @@ class NovelD_PPO:
             self,
             env_id,
             device="cpu",
-            total_timesteps=2000000,
+            total_timesteps=2500000,
             learning_rate=3e-4,
             num_envs=8,
             num_steps=125,
@@ -365,7 +365,7 @@ class NovelD_PPO:
                 print(f"KL: {opt_metrics['approx_kl']:.4f} | ClipFrac: {opt_metrics['clipfrac']:.4f}")
                 print("-" * 50)
 
-            if global_step % 10000 < self.num_envs:
+            if global_step % 500000 < self.num_envs:
                 checkpoint_dir = "checkpoints"
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
@@ -376,11 +376,11 @@ class NovelD_PPO:
                 print(f"Saved checkpoint at {global_step} timesteps to {checkpoint_path}")
                 
                 # Test the agent with 10 episodes of 200 steps each
-                # Append results to a consolidated CSV file
-                consolidated_csv_path = os.path.join(checkpoint_dir, "all_checkpoints_activity.csv")
+                # Create a separate CSV file for this checkpoint
+                checkpoint_csv_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}_activity.csv")
                 self.test_agent(num_episodes=10, max_steps_per_episode=200, 
                                checkpoint_path=checkpoint_path, checkpoint_id=global_step, 
-                               save_episode=False, csv_path=consolidated_csv_path)
+                               save_episode=False, csv_path=checkpoint_csv_path)
 
         wandb.finish()
         self.envs.close()
@@ -598,18 +598,16 @@ class NovelD_PPO:
 
         # Write aggregated activity counts to CSV if path provided
         if csv_path is not None:
-            write_header = not os.path.exists(csv_path)
-            
-            with open(csv_path, mode='a', newline='') as file:
+            # Always write header for individual checkpoint CSVs
+            with open(csv_path, mode='w', newline='') as file:
                 writer = csv.writer(file)
                 
-                # Write header if this is the first write
-                if write_header:
-                    header = ['checkpoint_id']
-                    for mapping in flag_mapping:
-                        # Use format like "toy_0_is_enabled" 
-                        header.append(f"{mapping['object_type']}_{mapping['object_index']}_{mapping['state_name']}")
-                    writer.writerow(header)
+                # Write header
+                header = ['checkpoint_id']
+                for mapping in flag_mapping:
+                    # Use format like "toy_0_is_enabled" 
+                    header.append(f"{mapping['object_type']}_{mapping['object_index']}_{mapping['state_name']}")
+                writer.writerow(header)
                 
                 # Write the activity counts for this checkpoint
                 row = [checkpoint_id]

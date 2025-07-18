@@ -79,11 +79,11 @@ def generate_flag_mapping(env):
 
 def train_agent(env_id, device):
     print("\n=== Starting Agent Training ===")
-    print("Training for 20k steps with checkpoints every 10k steps")
+    print("Training for 2.5M steps with checkpoints every 500k steps")
     print("Each checkpoint will run 10 episodes of 200 steps")
+    print("Creating separate CSV file for each checkpoint")
     try:
-        # Use shorter training for testing - override the default
-        noveld_ppo = NovelD_PPO(env_id, device, total_timesteps=20000)
+        noveld_ppo = NovelD_PPO(env_id, device)
         noveld_ppo.train()
         return noveld_ppo
     except Exception as e:
@@ -215,41 +215,61 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
 
 
 def analyze_checkpoint_csv():
-    """Analyze the consolidated checkpoint CSV file"""
-    csv_path = "checkpoints/all_checkpoints_activity.csv"
-    if not os.path.exists(csv_path):
-        print(f"\nCSV file not found: {csv_path}")
+    """Analyze the checkpoint CSV files"""
+    import glob
+    import pandas as pd
+    
+    checkpoint_dir = "checkpoints"
+    csv_pattern = os.path.join(checkpoint_dir, "checkpoint_*_activity.csv")
+    csv_files = sorted(glob.glob(csv_pattern))
+    
+    if not csv_files:
+        print(f"\nNo CSV files found matching pattern: {csv_pattern}")
         return
     
-    import pandas as pd
-    df = pd.read_csv(csv_path)
     print(f"\n=== Checkpoint CSV Analysis ===")
-    print(f"CSV file: {csv_path}")
-    print(f"Total rows: {len(df)} (one per checkpoint)")
+    print(f"Found {len(csv_files)} checkpoint CSV files")
     
-    # Check unique checkpoints
-    print(f"Checkpoint IDs: {df['checkpoint_id'].tolist()}")
+    all_activities = {}
     
-    # Check activity columns
-    activity_columns = [col for col in df.columns if col != 'checkpoint_id']
-    print(f"\nActivity columns: {len(activity_columns)}")
-    print(f"First few columns: {activity_columns[:5]}...")
-    
-    # Show activity counts for each checkpoint
-    for _, row in df.iterrows():
-        checkpoint_id = row['checkpoint_id']
-        print(f"\nCheckpoint {checkpoint_id} activity summary:")
+    for csv_path in csv_files:
+        df = pd.read_csv(csv_path)
+        checkpoint_id = df['checkpoint_id'].iloc[0]
+        
+        print(f"\nCheckpoint {checkpoint_id}:")
+        print(f"  File: {os.path.basename(csv_path)}")
+        
+        # Get activity columns
+        activity_columns = [col for col in df.columns if col != 'checkpoint_id']
+        row = df.iloc[0]
+        
+        # Count active states
         active_states = [(col, int(row[col])) for col in activity_columns if row[col] > 0]
+        print(f"  Active states: {len(active_states)}")
+        
+        # Show top activities
         if active_states:
-            for col, count in sorted(active_states, key=lambda x: x[1], reverse=True)[:10]:
-                print(f"  {col}: {count}")
-        else:
-            print("  No active states recorded")
+            print(f"  Top 5 activities:")
+            for col, count in sorted(active_states, key=lambda x: x[1], reverse=True)[:5]:
+                print(f"    {col}: {count}")
+                # Track across checkpoints
+                if col not in all_activities:
+                    all_activities[col] = []
+                all_activities[col].append((checkpoint_id, count))
     
-    # Calculate total activity across all checkpoints
-    if activity_columns:
-        total_activity = df[activity_columns].sum().sum()
-        print(f"\nTotal activity across all checkpoints: {int(total_activity)}")
+    # Show progression of top activities across checkpoints
+    if all_activities and len(csv_files) > 1:
+        print(f"\n=== Activity Progression Across Checkpoints ===")
+        # Find activities that appear in multiple checkpoints
+        multi_checkpoint_activities = {k: v for k, v in all_activities.items() if len(v) > 1}
+        if multi_checkpoint_activities:
+            sorted_activities = sorted(multi_checkpoint_activities.items(), 
+                                     key=lambda x: sum(count for _, count in x[1]), 
+                                     reverse=True)[:5]
+            for activity, checkpoints in sorted_activities:
+                print(f"\n{activity}:")
+                for checkpoint_id, count in sorted(checkpoints):
+                    print(f"  Checkpoint {checkpoint_id}: {count}")
 
 
 def main():
