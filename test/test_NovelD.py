@@ -79,8 +79,11 @@ def generate_flag_mapping(env):
 
 def train_agent(env_id, device):
     print("\n=== Starting Agent Training ===")
+    print("Training for 20k steps with checkpoints every 10k steps")
+    print("Each checkpoint will run 10 episodes of 200 steps")
     try:
-        noveld_ppo = NovelD_PPO(env_id, device)
+        # Use shorter training for testing - override the default
+        noveld_ppo = NovelD_PPO(env_id, device, total_timesteps=20000)
         noveld_ppo.train()
         return noveld_ppo
     except Exception as e:
@@ -211,6 +214,44 @@ def test_agent(env_id, noveld_ppo, device, num_episodes=5, max_steps_per_episode
     wandb.finish()
 
 
+def analyze_checkpoint_csv():
+    """Analyze the consolidated checkpoint CSV file"""
+    csv_path = "checkpoints/all_checkpoints_activity.csv"
+    if not os.path.exists(csv_path):
+        print(f"\nCSV file not found: {csv_path}")
+        return
+    
+    import pandas as pd
+    df = pd.read_csv(csv_path)
+    print(f"\n=== Checkpoint CSV Analysis ===")
+    print(f"CSV file: {csv_path}")
+    print(f"Total rows: {len(df)} (one per checkpoint)")
+    
+    # Check unique checkpoints
+    print(f"Checkpoint IDs: {df['checkpoint_id'].tolist()}")
+    
+    # Check activity columns
+    activity_columns = [col for col in df.columns if col != 'checkpoint_id']
+    print(f"\nActivity columns: {len(activity_columns)}")
+    print(f"First few columns: {activity_columns[:5]}...")
+    
+    # Show activity counts for each checkpoint
+    for _, row in df.iterrows():
+        checkpoint_id = row['checkpoint_id']
+        print(f"\nCheckpoint {checkpoint_id} activity summary:")
+        active_states = [(col, int(row[col])) for col in activity_columns if row[col] > 0]
+        if active_states:
+            for col, count in sorted(active_states, key=lambda x: x[1], reverse=True)[:10]:
+                print(f"  {col}: {count}")
+        else:
+            print("  No active states recorded")
+    
+    # Calculate total activity across all checkpoints
+    if activity_columns:
+        total_activity = df[activity_columns].sum().sum()
+        print(f"\nTotal activity across all checkpoints: {int(total_activity)}")
+
+
 def main():
     env_id = 'MiniGrid-MultiToy-8x8-N2-v0'
     TASK = 'MultiToy'
@@ -224,10 +265,10 @@ def main():
         kwargs=env_kwargs
     )
     # Train model
-    noveld_ppo = train_agent(env_id, device)
+    train_agent(env_id, device)  # noqa: F841
     
-    # Test model
-    test_agent(env_id, noveld_ppo, device)
+    # Analyze checkpoint CSV
+    analyze_checkpoint_csv()
 
     # # Test checkpoints
     # noveld_ppo = NovelD_PPO(env_id, device)

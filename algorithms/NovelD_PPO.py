@@ -9,6 +9,9 @@ import wandb
 from networks.actor_critic import Agent
 from env_wrapper import CustomObservationWrapper
 import os
+import csv
+from array2gif import write_gif
+from mini_behavior.utils.states_base import RelativeObjectState
 
 def make_env(env_id, seed, idx):
     def thunk():
@@ -17,6 +20,80 @@ def make_env(env_id, seed, idx):
         env.seed(seed + idx)
         return env
     return thunk
+
+def count_binary_flags(env):
+    """
+    Count the total number of non-relative (binary) state flags in the environment.
+    """
+    num_flags = 0
+    for obj_list in env.objs.values():
+        for obj in obj_list:
+            for state_name, state in obj.states.items():
+                if not isinstance(state, RelativeObjectState):
+                    num_flags += 1
+    return num_flags
+
+def generate_flag_mapping(env):
+    """
+    Generate a mapping that tells which binary flag corresponds to which object's state.
+    Skip default states that are not included in observations.
+    """
+    default_states = [
+        'atsamelocation',
+        'infovofrobot', 
+        'inleftreachofrobot',
+        'inrightreachofrobot',
+        'inside',
+        'nextto',
+    ]
+    
+    mapping = []
+    for obj_type, obj_list in env.objs.items():
+        for idx, obj in enumerate(obj_list):
+            for state_name, state in obj.states.items():
+                if not isinstance(state, RelativeObjectState):
+                    if state_name not in default_states:
+                        mapping.append({
+                            "object_type": obj_type,
+                            "object_index": idx,
+                            "state_name": state_name
+                        })
+    return mapping
+
+def extract_binary_flags(obs, env):
+    """
+    Extract only the binary flags from an observation vector.
+    Skip position values and default states that are not included.
+    """
+    default_states = [
+        'atsamelocation',
+        'infovofrobot', 
+        'inleftreachofrobot',
+        'inrightreachofrobot',
+        'inside',
+        'nextto',
+    ]
+    
+    flags = []
+    index = 3  # skip agent state (x, y, direction)
+    
+    for obj_list in env.objs.values():
+        for obj in obj_list:
+            # Skip the object's position (2 values)
+            index += 2
+            
+            for state_name, state in obj.states.items():
+                if not isinstance(state, RelativeObjectState):
+                    if state_name not in default_states:
+                        # This is a binary state that should be in the observation
+                        if index < len(obs):
+                            flags.append(obs[index])
+                        else:
+                            flags.append(0)
+                        index += 1
+                    # Skip default states as they're not included in observation
+                    
+    return np.array(flags)
 
 class NovelD_PPO:
     """
@@ -288,7 +365,7 @@ class NovelD_PPO:
                 print(f"KL: {opt_metrics['approx_kl']:.4f} | ClipFrac: {opt_metrics['clipfrac']:.4f}")
                 print("-" * 50)
 
-            if global_step % 500000 < self.num_envs:
+            if global_step % 10000 < self.num_envs:
                 checkpoint_dir = "checkpoints"
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
@@ -297,6 +374,13 @@ class NovelD_PPO:
                     'rnd_predictor_state_dict': self.rnd_model.predictor.state_dict(),
                 }, checkpoint_path)
                 print(f"Saved checkpoint at {global_step} timesteps to {checkpoint_path}")
+                
+                # Test the agent with 10 episodes of 200 steps each
+                # Append results to a consolidated CSV file
+                consolidated_csv_path = os.path.join(checkpoint_dir, "all_checkpoints_activity.csv")
+                self.test_agent(num_episodes=10, max_steps_per_episode=200, 
+                               checkpoint_path=checkpoint_path, checkpoint_id=global_step, 
+                               save_episode=False, csv_path=consolidated_csv_path)
 
         wandb.finish()
         self.envs.close()
@@ -437,6 +521,95 @@ class NovelD_PPO:
             torch.FloatTensor([self.reward_rms.var]).to(self.device) + 1e-8
         )
         return normalized_rewards.clamp(-10, 10)
+
+    def test_agent(self, num_episodes=5, max_steps_per_episode=500, checkpoint_path=None, checkpoint_id=0, save_episode=False, csv_path=None):
+        """
+        Run test episodes using the current agent policy. If a checkpoint_path is provided, load it before testing.
+        If csv_path is provided, append activity counts to that CSV file.
+        """
+        if checkpoint_path is not None:
+            print(f"Loading checkpoint from {checkpoint_path} for testing.")
+            self.load_checkpoint(checkpoint_path)
+        
+        print(f"\n=== Testing Agent on Checkpoint {checkpoint_id}: {num_episodes} Episode(s) ===")
+        
+        # Create a single test environment
+        test_env = gym.make(self.env_id)
+        test_env = CustomObservationWrapper(test_env)
+
+        # Get the underlying environment for accessing object info
+        env_unwrapped = getattr(test_env, 'env', test_env)
+
+        # Compute the total number of binary flags and generate the mapping
+        num_binary_flags = count_binary_flags(env_unwrapped)
+        flag_mapping = generate_flag_mapping(env_unwrapped)
+
+        # Track activity counts across all episodes
+        total_activity_counts = np.zeros(num_binary_flags)
+        
+        for ep in range(num_episodes):
+            obs = test_env.reset()
+            done = False
+            steps = 0
+            frames = []
+
+            while not done and steps < max_steps_per_episode:
+                frame = test_env.render()
+                frames.append(np.moveaxis(frame, 2, 0))
+                
+                obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(self.device)
+                with torch.no_grad():
+                    action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
+                
+                obs, _, done, _ = test_env.step(action.cpu().numpy()[0])
+
+                # Extract binary flags and count active states
+                current_flags = extract_binary_flags(obs, env_unwrapped)
+                # Add to total count: 1 for each flag that is currently True
+                total_activity_counts += current_flags
+
+                try:
+                    # Action is a multi-discrete tensor with 3 elements
+                    action_np = action.cpu().numpy()[0] if len(action.shape) > 1 else action.cpu().numpy()
+                    action_name = f"Action {action_np}"
+                except Exception:
+                    action_name = "Unknown"
+                print(f"Episode {ep+1} Step {steps:3d} | {action_name}")
+                steps += 1
+
+            if save_episode:
+                gif_path = os.path.join('checkpoints', f"episode_{ep+1}_checkpoint_{checkpoint_id}.gif")
+                os.makedirs(os.path.dirname(gif_path), exist_ok=True)
+                write_gif(np.array(frames), gif_path, fps=10)
+
+        # Write aggregated activity counts to CSV if path provided
+        if csv_path is not None:
+            write_header = not os.path.exists(csv_path)
+            
+            with open(csv_path, mode='a', newline='') as file:
+                writer = csv.writer(file)
+                
+                # Write header if this is the first write
+                if write_header:
+                    header = ['checkpoint_id']
+                    for mapping in flag_mapping:
+                        # Use format like "toy_0_is_enabled" 
+                        header.append(f"{mapping['object_type']}_{mapping['object_index']}_{mapping['state_name']}")
+                    writer.writerow(header)
+                
+                # Write the activity counts for this checkpoint
+                row = [checkpoint_id]
+                row.extend(total_activity_counts.astype(int))
+                writer.writerow(row)
+                
+            print(f"\nActivity counts saved to {csv_path}")
+            print(f"Total states observed across {num_episodes} episodes:")
+            for idx, count in enumerate(total_activity_counts):
+                if count > 0:
+                    mapping = flag_mapping[idx]
+                    print(f"  {mapping['object_type']}_{mapping['object_index']}_{mapping['state_name']}: {int(count)}")
+
+        test_env.close()
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
