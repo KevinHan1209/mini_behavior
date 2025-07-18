@@ -545,13 +545,16 @@ class NovelD_PPO:
         flag_mapping = generate_flag_mapping(env_unwrapped)
 
         # Track activity counts across all episodes
-        total_activity_counts = np.zeros(num_binary_flags)
+        total_activity_counts = None
         
         for ep in range(num_episodes):
             obs = test_env.reset()
             done = False
             steps = 0
             frames = []
+            
+            # Re-check the environment structure after reset
+            env_unwrapped = getattr(test_env, 'env', test_env)
 
             while not done and steps < max_steps_per_episode:
                 frame = test_env.render()
@@ -565,6 +568,17 @@ class NovelD_PPO:
 
                 # Extract binary flags and count active states
                 current_flags = extract_binary_flags(obs, env_unwrapped)
+                
+                # Initialize or resize total_activity_counts if needed
+                if total_activity_counts is None:
+                    total_activity_counts = np.zeros(len(current_flags))
+                elif len(total_activity_counts) != len(current_flags):
+                    # Resize to match current flags
+                    new_counts = np.zeros(len(current_flags))
+                    min_len = min(len(total_activity_counts), len(current_flags))
+                    new_counts[:min_len] = total_activity_counts[:min_len]
+                    total_activity_counts = new_counts
+                
                 # Add to total count: 1 for each flag that is currently True
                 total_activity_counts += current_flags
 
