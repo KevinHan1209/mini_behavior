@@ -6,7 +6,8 @@ import glob
 import pandas as pd
 
 checkpoint_dir = "checkpoints"
-csv_pattern = os.path.join(checkpoint_dir, "checkpoint_*_activity.csv")
+csv_dir = os.path.join(checkpoint_dir, "activity_logs")
+csv_pattern = os.path.join(csv_dir, "checkpoint_*_activity.csv")
 csv_files = sorted(glob.glob(csv_pattern))
 
 if not csv_files:

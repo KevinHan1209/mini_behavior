@@ -376,8 +376,10 @@ class NovelD_PPO:
                 print(f"Saved checkpoint at {global_step} timesteps to {checkpoint_path}")
                 
                 # Test the agent with 10 episodes of 200 steps each
-                # Create a separate CSV file for this checkpoint
-                checkpoint_csv_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}_activity.csv")
+                # Create a separate CSV file for this checkpoint in a dedicated directory
+                csv_dir = os.path.join(checkpoint_dir, "activity_logs")
+                os.makedirs(csv_dir, exist_ok=True)
+                checkpoint_csv_path = os.path.join(csv_dir, f"checkpoint_{global_step}_activity.csv")
                 self.test_agent(num_episodes=10, max_steps_per_episode=200, 
                                checkpoint_path=checkpoint_path, checkpoint_id=global_step, 
                                save_episode=False, csv_path=checkpoint_csv_path)
