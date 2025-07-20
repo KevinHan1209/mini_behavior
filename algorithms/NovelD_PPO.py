@@ -40,7 +40,9 @@ def generate_flag_mapping(env):
     """
     default_states = [
         'atsamelocation',
-        'infovofrobot', 
+        'infovofrobot',
+        'inlefthandofrobot',
+        'inrighthandofrobot',
         'inleftreachofrobot',
         'inrightreachofrobot',
         'inside',
@@ -67,7 +69,9 @@ def extract_binary_flags(obs, env):
     """
     default_states = [
         'atsamelocation',
-        'infovofrobot', 
+        'infovofrobot',
+        'inlefthandofrobot',
+        'inrighthandofrobot',
         'inleftreachofrobot',
         'inrightreachofrobot',
         'inside',
@@ -94,6 +98,8 @@ def extract_binary_flags(obs, env):
                     # Skip default states as they're not included in observation
                     
     return np.array(flags)
+
+
 
 class NovelD_PPO:
     """
@@ -542,8 +548,7 @@ class NovelD_PPO:
         # Get the underlying environment for accessing object info
         env_unwrapped = getattr(test_env, 'env', test_env)
 
-        # Compute the total number of binary flags and generate the mapping
-        num_binary_flags = count_binary_flags(env_unwrapped)
+        # Generate the mapping of binary flags
         flag_mapping = generate_flag_mapping(env_unwrapped)
 
         # Track activity counts across all episodes
