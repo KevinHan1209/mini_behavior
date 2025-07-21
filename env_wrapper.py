@@ -24,8 +24,6 @@ class CustomObservationWrapper(gym.ObservationWrapper):
         default_states = [
             'atsamelocation',
             'infovofrobot',
-            'inlefthandofrobot',
-            'inrighthandofrobot',
             'inleftreachofrobot',
             'inrightreachofrobot',
             'inside',
@@ -64,8 +62,6 @@ class CustomObservationWrapper(gym.ObservationWrapper):
         default_states = [
             'atsamelocation',
             'infovofrobot',
-            'inlefthandofrobot',
-            'inrighthandofrobot',
             'inleftreachofrobot',
             'inrightreachofrobot',
             'inside',
@@ -104,8 +100,6 @@ class CustomObservationWrapper(gym.ObservationWrapper):
         default_states = [
             'atsamelocation',
             'infovofrobot',
-            'inlefthandofrobot',
-            'inrighthandofrobot',
             'inleftreachofrobot',
             'inrightreachofrobot',
             'inside',

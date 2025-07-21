@@ -41,8 +41,6 @@ def generate_flag_mapping(env):
     default_states = [
         'atsamelocation',
         'infovofrobot',
-        'inlefthandofrobot',
-        'inrighthandofrobot',
         'inleftreachofrobot',
         'inrightreachofrobot',
         'inside',
@@ -70,8 +68,6 @@ def extract_binary_flags(obs, env):
     default_states = [
         'atsamelocation',
         'infovofrobot',
-        'inlefthandofrobot',
-        'inrighthandofrobot',
         'inleftreachofrobot',
         'inrightreachofrobot',
         'inside',
@@ -99,6 +95,44 @@ def extract_binary_flags(obs, env):
                     
     return np.array(flags)
 
+
+def fix_hand_states(flags, env, flag_mapping):
+    """
+    Fix hand state flags to only be 1 for objects actually in the robot's hands.
+    """
+    # Get which objects are actually being carried
+    left_objs = env.carrying.get('left', set()) if hasattr(env, 'carrying') else set()
+    right_objs = env.carrying.get('right', set()) if hasattr(env, 'carrying') else set()
+    
+    # Create a corrected copy of flags
+    corrected_flags = flags.copy()
+    
+    # Build a mapping of object to its flag indices
+    obj_to_indices = {}
+    for idx, mapping in enumerate(flag_mapping):
+        obj_key = (mapping['object_type'], mapping['object_index'])
+        if obj_key not in obj_to_indices:
+            obj_to_indices[obj_key] = {}
+        obj_to_indices[obj_key][mapping['state_name']] = idx
+    
+    # Go through all objects and fix hand states
+    for obj_type, obj_list in env.objs.items():
+        for obj_idx, obj in enumerate(obj_list):
+            obj_key = (obj_type, obj_idx)
+            if obj_key in obj_to_indices:
+                # Fix left hand state
+                if 'inlefthandofrobot' in obj_to_indices[obj_key]:
+                    flag_idx = obj_to_indices[obj_key]['inlefthandofrobot']
+                    if flag_idx < len(corrected_flags):
+                        corrected_flags[flag_idx] = 1 if obj in left_objs else 0
+                
+                # Fix right hand state
+                if 'inrighthandofrobot' in obj_to_indices[obj_key]:
+                    flag_idx = obj_to_indices[obj_key]['inrighthandofrobot']
+                    if flag_idx < len(corrected_flags):
+                        corrected_flags[flag_idx] = 1 if obj in right_objs else 0
+    
+    return corrected_flags
 
 
 class NovelD_PPO:
@@ -575,6 +609,9 @@ class NovelD_PPO:
 
                 # Extract binary flags and count active states
                 current_flags = extract_binary_flags(obs, env_unwrapped)
+                
+                # Fix hand states to only show objects actually in hands
+                current_flags = fix_hand_states(current_flags, env_unwrapped, flag_mapping)
                 
                 # Initialize or resize total_activity_counts if needed
                 if total_activity_counts is None:
