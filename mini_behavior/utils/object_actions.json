@@ -164,7 +164,8 @@
         "drop",
         "dropin",
         "hitwithobject",
-        "hit"
+        "hit",
+        "throw"
     ],
     "stroller": [
         "push",

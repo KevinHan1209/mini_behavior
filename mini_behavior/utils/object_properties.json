@@ -61,7 +61,8 @@
         "gothit",
         "inside",
         "hitter",
-        "mouthed"
+        "mouthed",
+        "thrown"
     ],
     "cube_cabinet": [
         "gothit",
@@ -97,7 +98,6 @@
     ],
     "music_toy": [
         "noise",
-        "thrown",
         "inside",
         "gothit"
     ],
@@ -142,7 +142,8 @@
     "shape_sorter": [
         "gothit",
         "contains",
-        "hitter"
+        "hitter",
+        "thrown"
     ],
     "stroller": [
         "gothit",
