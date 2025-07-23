@@ -28,6 +28,8 @@ class CustomObservationWrapper(gym.ObservationWrapper):
             'inrightreachofrobot',
             'inside',
             'nextto',
+            'inlefthandofrobot',
+            'inrighthandofrobot',
         ]
         # Modified gen_obs for single environment
         obj_states = []
@@ -66,6 +68,8 @@ class CustomObservationWrapper(gym.ObservationWrapper):
             'inrightreachofrobot',
             'inside',
             'nextto',
+            'inlefthandofrobot',
+            'inrighthandofrobot',
         ]
         # Count non-relative object states and add agent position (x,y,dir)
         obj_states = []
@@ -104,6 +108,8 @@ class CustomObservationWrapper(gym.ObservationWrapper):
             'inrightreachofrobot',
             'inside',
             'nextto',
+            'inlefthandofrobot',
+            'inrighthandofrobot',
         ]
         obj_states = []
         for obj_type in self.env.objs.values():
