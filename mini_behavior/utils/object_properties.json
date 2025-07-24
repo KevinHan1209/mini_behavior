@@ -143,7 +143,8 @@
         "gothit",
         "contains",
         "hitter",
-        "thrown"
+        "thrown",
+        "mouthed"
     ],
     "stroller": [
         "gothit",

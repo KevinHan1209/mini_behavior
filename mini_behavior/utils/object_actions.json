@@ -165,7 +165,8 @@
         "dropin",
         "hitwithobject",
         "hit",
-        "throw"
+        "throw",
+        "mouthing"
     ],
     "stroller": [
         "push",
