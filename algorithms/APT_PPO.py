@@ -52,7 +52,7 @@ class APT_PPO:
         self.env_id = env_id
         self.env_kwargs = env_kwargs
         self.save_dir = save_dir
-        self.device = device
+        self.device = torch.device(device)
         self.save_freq = save_freq
         self.test_steps = test_steps
         self.total_timesteps = total_timesteps
@@ -391,7 +391,7 @@ class APT_PPO:
             while not done and steps < max_steps_per_episode:
                 frame = test_env.render()
                 frames.append(np.moveaxis(frame, 2, 0))
-                obs_tensor = torch.FloatTensor(obs).unsqueeze(0)
+                obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(self.device)
                 with torch.no_grad():
                     action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
                 obs, _, done, _ = test_env.step(action.cpu().numpy()[0])

@@ -3,6 +3,7 @@ import sys
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import torch
 import gym
 from algorithms.APT_PPO import APT_PPO
 from mini_behavior.register import register
@@ -41,6 +42,10 @@ def init_env(env_name: str, num_envs: int, seed: int, env_kwargs: dict):
     )
 
 if __name__ == "__main__":
+    # Detect CUDA availability
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    
     register(
         id='MiniGrid-MultiToy-8x8-N2-v0',
         entry_point='mini_behavior.envs.multitoy:MultiToyEnv',
@@ -62,6 +67,7 @@ if __name__ == "__main__":
         env_id=ENV_NAME,
         env_kwargs=ENV_KWARGS,
         save_dir=save_dir,
+        device=str(device),
         num_envs=NUM_ENVS,
         num_eps=NUM_EPS,
         total_timesteps=TOTAL_TIMESTEPS,
