@@ -1,15 +1,19 @@
 import os
+import sys
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import gym
 from algorithms.APT_PPO import APT_PPO
 from mini_behavior.register import register
 from env_wrapper import CustomObservationWrapper
 
 # ===== Parameters =====
-TOTAL_TIMESTEPS = int(1e4)
+TOTAL_TIMESTEPS = int(2.5e6)  # 2.5M like NovelD
 NUM_ENVS = 8
-NUM_EPS = 1
-SAVE_FREQUENCY = 500
-TEST_STEPS = 100
+NUM_EPS = 10  # 10 episodes for testing like NovelD
+SAVE_FREQUENCY = 500000  # Save every 500k steps like NovelD
+TEST_STEPS = 200  # 200 steps per episode like NovelD
 
 ENV_NAME = 'MiniGrid-MultiToy-8x8-N2-v0'
 ENV_KWARGS = {"room_size": 8, "max_steps": 10000}

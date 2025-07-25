@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import gym
-import wandb
+# import wandb
 from array2gif import write_gif
 import csv
 
@@ -48,6 +48,7 @@ class APT_PPO:
                  k=50,
                  c=1):
         self.env = env
+        self.envs = env  # Alias for compatibility
         self.env_id = env_id
         self.env_kwargs = env_kwargs
         self.save_dir = save_dir
@@ -95,46 +96,38 @@ class APT_PPO:
 
     def train(self):
         """Train the agent using PPO."""
-        print("TRAINING PARAMETERS")
-        print("-------------------")
-        print(f"Total timesteps: {self.total_timesteps}")
-        print(f"Learning rate: {self.learning_rate}")
-        print(f"Total updates: {self.total_timesteps // self.batch_size}")
-        print(f"Parallel envs: {self.num_envs}")
-        print(f"Steps per rollout: {self.num_steps}")
-        print(f"Batch size: {self.batch_size}")
-        print(f"PPO epochs: {self.update_epochs}")
-        print(f"Minibatch size: {self.minibatch_size}")
-        print(f"k parameter: {self.k}")
-        print("-------------------")
+        print("\n=== Training Configuration ===")
+        print(f"Env: {self.env_id} | Device: {self.device}")
+        print(f"Total Steps: {self.total_timesteps:,} | Batch Size: {self.batch_size} | Minibatch Size: {self.minibatch_size}")
+        print(f"Learning Rate: {self.learning_rate} | k parameter: {self.k}\n")
         assert self.total_timesteps % self.batch_size == 0
 
         
-        wandb.init(project="APT_PPO", config={
-            "env_id": self.env_id,
-            "Total timesteps": self.total_timesteps,
-            "Learning rate": self.learning_rate,
-            "Total updates": self.total_timesteps // self.batch_size,
-            "Parallel envs": self.num_envs,
-            "Steps per rollout": self.num_steps,
-            "Batch size": self.batch_size,
-            "PPO epochs": self.update_epochs,
-            "Minibatch size": self.minibatch_size,
-            "k parameter": self.k,
-            "Save frequency": self.save_freq
-        })
+        # wandb.init(project="APT_PPO", config={
+        #     "env_id": self.env_id,
+        #     "Total timesteps": self.total_timesteps,
+        #     "Learning rate": self.learning_rate,
+        #     "Total updates": self.total_timesteps // self.batch_size,
+        #     "Parallel envs": self.num_envs,
+        #     "Steps per rollout": self.num_steps,
+        #     "Batch size": self.batch_size,
+        #     "PPO epochs": self.update_epochs,
+        #     "Minibatch size": self.minibatch_size,
+        #     "k parameter": self.k,
+        #     "Save frequency": self.save_freq
+        # })
 
         # Use the single environment observation space if available.
         obs_shape = getattr(self.env, "single_observation_space", self.env.observation_space).shape
         self.agent = Agent(self.envs.single_action_space.nvec, obs_shape[0]).to(self.device)
         self.optimizer = optim.Adam(self.agent.parameters(), lr=self.learning_rate, eps=1e-5)
-        wandb.watch(self.agent, self.optimizer)
+        # wandb.watch(self.agent, self.optimizer)
 
         reward_rms = RunningMeanStd()
         discounted_reward = RewardForwardFilter(self.int_gamma)
 
         # Rollout storage
-        actions = torch.zeros((self.num_steps, self.num_envs) + self.env.action_space[0].shape, device=self.device)
+        actions = torch.zeros((self.num_steps, self.num_envs) + self.envs.single_action_space.shape, device=self.device)
         obs = torch.zeros((self.num_steps, self.num_envs) + obs_shape, device=self.device)
         logprobs = torch.zeros((self.num_steps, self.num_envs), device=self.device)
         rewards = torch.zeros((self.num_steps, self.num_envs), device=self.device)
@@ -150,17 +143,7 @@ class APT_PPO:
 
         # Training loop over updates
         for update in range(1, num_updates + 1):
-            print(f"UPDATE {update}/{num_updates}")
-            if update % self.save_freq == 0:
-                checkpoint_path = os.path.join(self.save_dir, f"model_{global_step}.pt")
-                print("Saving model checkpoint:", checkpoint_path)
-                torch.save({
-                    'agent_state_dict': self.agent.state_dict(),
-                    'optimizer_state_dict': self.optimizer.state_dict()
-                }, checkpoint_path)
-                self.test_agent(num_episodes=self.num_eps, max_steps_per_episode=self.test_steps,
-                                checkpoint_path=checkpoint_path, checkpoint_id=global_step, save_episode=True)
-
+            
             if self.anneal_lr:
                 frac = 1.0 - (update - 1) / num_updates
                 self.optimizer.param_groups[0]["lr"] = frac * self.learning_rate
@@ -186,6 +169,26 @@ class APT_PPO:
 
             self.total_actions.append(actions.clone())
             self.total_obs.append(obs.clone())
+            
+            # Check if we should save a checkpoint (every 500k steps)
+            if global_step % 500000 < self.num_envs:
+                checkpoint_dir = "checkpoints"
+                os.makedirs(checkpoint_dir, exist_ok=True)
+                checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
+                print(f"Saving checkpoint at {global_step} timesteps to {checkpoint_path}")
+                torch.save({
+                    'agent_state_dict': self.agent.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict()
+                }, checkpoint_path)
+                
+                # Test the agent with 10 episodes of 200 steps each
+                # Create a separate CSV file for this checkpoint in a dedicated directory
+                csv_dir = os.path.join(checkpoint_dir, "activity_logs")
+                os.makedirs(csv_dir, exist_ok=True)
+                checkpoint_csv_path = os.path.join(csv_dir, f"checkpoint_{global_step}_activity.csv")
+                self.test_agent(num_episodes=self.num_eps, max_steps_per_episode=self.test_steps,
+                                checkpoint_path=checkpoint_path, checkpoint_id=global_step, 
+                                save_episode=False, csv_path=checkpoint_csv_path)
 
             # Compute intrinsic (curiosity) rewards via kNN on state representations
             sim_matrix = self._compute_similarity_matrix(obs)
@@ -199,15 +202,14 @@ class APT_PPO:
 
             avg_intrinsic = curiosity_rewards.mean().item()
             std_intrinsic = curiosity_rewards.std().item()
-            print("Average intrinsic reward:", avg_intrinsic)
             self.total_avg_curiosity_rewards.append(avg_intrinsic)
-            wandb.log({
-                "update": update,
-                "global_step": global_step,
-                "avg_intrinsic_reward": avg_intrinsic,
-                "std_intrinsic_reward": std_intrinsic,
-                "learning_rate": self.optimizer.param_groups[0]["lr"]
-            })
+            # wandb.log({
+            #     "update": update,
+            #     "global_step": global_step,
+            #     "avg_intrinsic_reward": avg_intrinsic,
+            #     "std_intrinsic_reward": std_intrinsic,
+            #     "learning_rate": self.optimizer.param_groups[0]["lr"]
+            # })
 
             # Compute advantages and returns
             ext_advantages = torch.zeros_like(rewards)
@@ -251,16 +253,16 @@ class APT_PPO:
 
             # PPO update loop
             indices = np.arange(self.batch_size)
-            total_pg_loss = 0.0
-            total_v_loss = 0.0
-            total_entropy = 0.0
+            total_pg_loss = []
+            total_v_loss = []
+            total_entropy = []
+            total_approx_kl = []
+            total_clipfrac = []
             for epoch in range(self.update_epochs):
                 np.random.shuffle(indices)
                 for start in range(0, self.batch_size, self.minibatch_size):
                     end = start + self.minibatch_size
                     mb_inds = indices[start:end]
-                    print('epoch:', epoch)
-                    print('b_actions:', b_actions.shape)
                     _, new_logprob, entropy, new_ext_values, new_int_values = self.agent.get_action_and_value(
                         b_obs[mb_inds], b_actions.long()[mb_inds]
                     )
@@ -268,6 +270,9 @@ class APT_PPO:
                     ratio = logratio.exp()
                     with torch.no_grad():
                         approx_kl = ((ratio - 1) - logratio).mean()
+                        clipfrac = ((ratio - 1.0).abs() > self.clip_coef).float().mean()
+                    total_approx_kl.append(approx_kl.item())
+                    total_clipfrac.append(clipfrac.item())
                     mb_advantages = b_advantages[mb_inds]
                     if self.norm_adv:
                         mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
@@ -294,24 +299,28 @@ class APT_PPO:
                     grad_norm = nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
                     self.optimizer.step()
 
-                    total_pg_loss += pg_loss.item()
-                    total_v_loss += v_loss.item()
-                    total_entropy += entropy.mean().item()
+                    total_pg_loss.append(pg_loss.item())
+                    total_v_loss.append(v_loss.item())
+                    total_entropy.append(entropy.mean().item())
 
                 if self.target_kl is not None and approx_kl > self.target_kl:
                     break
+            
+            # Log update-level training metrics every 10 updates
+            if update % 10 == 0:
+                avg_pg_loss = np.mean(total_pg_loss)
+                avg_v_loss = np.mean(total_v_loss)
+                avg_entropy = np.mean(total_entropy)
+                avg_approx_kl = np.mean(total_approx_kl)
+                avg_clipfrac = np.mean(total_clipfrac)
+                
+                print(f"\n[Update {update}/{num_updates}] Step: {global_step:,}")
+                print(f"Intrinsic Reward: {avg_intrinsic:.4f} | Std: {std_intrinsic:.4f}")
+                print(f"Policy Loss: {avg_pg_loss:.4f} | Value Loss: {avg_v_loss:.4f} | Entropy: {avg_entropy:.4f}")
+                print(f"KL: {avg_approx_kl:.4f} | ClipFrac: {avg_clipfrac:.4f}")
+                print("-" * 50)
 
-            wandb.log({
-                "update": update,
-                "global_step": global_step,
-                "policy_loss": total_pg_loss / self.update_epochs,
-                "value_loss": total_v_loss / self.update_epochs,
-                "entropy": total_entropy / self.update_epochs,
-                "approx_kl": approx_kl.item(),
-                "learning_rate": self.optimizer.param_groups[0]["lr"],
-            })
-
-    def test_agent(self, num_episodes, max_steps_per_episode, checkpoint_path, checkpoint_id, save_episode=False):
+    def test_agent(self, num_episodes, max_steps_per_episode, checkpoint_path, checkpoint_id, save_episode=False, csv_path=None):
         """
         Run test episodes using the current agent policy. If a checkpoint_path is provided, load it before testing.
         Save CSV logs for each episode in a folder named after the checkpoint and log that folder to wandb.
@@ -326,9 +335,10 @@ class APT_PPO:
         test_env = gym.make(self.env_id, **self.env_kwargs)
         test_env = CustomObservationWrapper(test_env)
 
-        # Create a dedicated folder for this checkpoint's activity logs.
-        activity_dir = os.path.join('item_interaction', f"checkpoint_{checkpoint_id}")
-        os.makedirs(activity_dir, exist_ok=True)
+        # Create a dedicated folder for this checkpoint's activity logs if csv_path not provided
+        if csv_path is None:
+            activity_dir = os.path.join('item_interaction', f"checkpoint_{checkpoint_id}")
+            os.makedirs(activity_dir, exist_ok=True)
 
         def count_binary_flags(env):
             num_flags = 0
@@ -366,6 +376,9 @@ class APT_PPO:
 
         num_binary_flags = count_binary_flags(test_env.env if hasattr(test_env, 'env') else test_env)
         flag_mapping = generate_flag_mapping(test_env.env if hasattr(test_env, 'env') else test_env)
+        
+        # Track aggregated activity counts across all episodes
+        total_activity_counts = np.zeros(num_binary_flags)
 
         for ep in range(num_episodes):
             obs = test_env.reset()
@@ -387,6 +400,8 @@ class APT_PPO:
                 if prev_flags is not None:
                     differences = (current_flags != prev_flags).astype(int)
                     activity = [a + d for a, d in zip(activity, differences)]
+                    # Also add to total activity counts
+                    total_activity_counts += differences
                 prev_flags = current_flags
 
                 action_name = test_env.actions(action.item()).name
@@ -394,23 +409,43 @@ class APT_PPO:
                 print(f"Step {steps:3d} | Action: {action_name}")
                 steps += 1
 
-            csv_path = os.path.join(activity_dir, f'episode_{ep+1}.csv')
-            with open(csv_path, mode='w', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow(['flag_id', 'object_type', 'object_index', 'state_name', 'activity_count'])
-                for idx, count in enumerate(activity):
-                    mapping = flag_mapping[idx]
-                    writer.writerow([idx, mapping['object_type'], mapping['object_index'], mapping['state_name'], count])
+            # Only write individual episode CSVs if no csv_path provided
+            if csv_path is None:
+                csv_file = os.path.join(activity_dir, f'episode_{ep+1}.csv')
+                with open(csv_file, mode='w', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow(['flag_id', 'object_type', 'object_index', 'state_name', 'activity_count'])
+                    for idx, count in enumerate(activity):
+                        mapping = flag_mapping[idx]
+                        writer.writerow([idx, mapping['object_type'], mapping['object_index'], mapping['state_name'], count])
 
             if save_episode:
                 gif_path = os.path.join(self.save_dir, f"episode_{ep+1}_checkpoint_{checkpoint_id}.gif")
                 os.makedirs(os.path.dirname(gif_path), exist_ok=True)
                 write_gif(np.array(frames), gif_path, fps=10)
-                wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
 
-        artifact = wandb.Artifact(f"checkpoint_{checkpoint_id}", type="dataset")
-        artifact.add_dir(activity_dir)
-        wandb.log_artifact(artifact)
+        # Write aggregated activity counts to CSV if path provided
+        if csv_path is not None:
+            with open(csv_path, mode='w', newline='') as file:
+                writer = csv.writer(file)
+                
+                # Write header
+                header = ['checkpoint_id']
+                for mapping in flag_mapping:
+                    header.append(f"{mapping['object_type']}_{mapping['object_index']}_{mapping['state_name']}")
+                writer.writerow(header)
+                
+                # Write the activity counts for this checkpoint
+                row = [checkpoint_id]
+                row.extend(total_activity_counts.astype(int))
+                writer.writerow(row)
+                
+            print(f"\nActivity counts saved to {csv_path}")
+            print(f"Total state changes observed across {num_episodes} episodes:")
+            for idx, count in enumerate(total_activity_counts):
+                if count > 0:
+                    mapping = flag_mapping[idx]
+                    print(f"  {mapping['object_type']}_{mapping['object_index']}_{mapping['state_name']}: {int(count)}")
 
         test_env.close()
         self.test_actions.append(action_log)
@@ -422,7 +457,10 @@ class APT_PPO:
         test_env = gym.make(self.env_id, **self.env_kwargs)
         test_env = CustomObservationWrapper(test_env)
         pattern = []
-        for obj_type in test_env.objs.values():
+        
+        # Access the unwrapped environment's objs
+        unwrapped_env = test_env.env if hasattr(test_env, 'env') else test_env
+        for obj_type in unwrapped_env.objs.values():
             for obj in obj_type:
                 num_states = sum(1 for state in obj.states if not isinstance(obj.states[state], RelativeObjectState))
                 pattern.append(num_states - 3)
@@ -453,9 +491,14 @@ class APT_PPO:
         for env in range(num_envs):
             env_dist = sim_matrix[:, :, env].clone()
             env_dist.fill_diagonal_(float('inf'))
-            k_nearest, _ = torch.topk(env_dist, k=self.k, largest=False)
-            avg_distance = k_nearest.mean(dim=1)
-            rewards[:, env] = torch.log(self.c + avg_distance)
+            # Use min(k, num_steps-1) to avoid out of range error
+            k_use = min(self.k, num_steps - 1)
+            if k_use > 0:
+                k_nearest, _ = torch.topk(env_dist, k=k_use, largest=False)
+                avg_distance = k_nearest.mean(dim=1)
+                rewards[:, env] = torch.log(self.c + avg_distance)
+            else:
+                rewards[:, env] = 0.0
         return rewards
 
     def _compute_similarity_matrix(self, obs):
