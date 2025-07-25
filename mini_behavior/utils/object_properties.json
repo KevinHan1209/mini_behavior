@@ -21,6 +21,7 @@
     ],
     "broom": [
         "thrown",
+        "inside",
         "gothit",
         "hitter",
         "mouthed",
@@ -105,6 +106,7 @@
         "noise",
         "open",
         "thrown",
+        "inside",
         "contains",
         "gothit",
         "hitter",
@@ -141,6 +143,7 @@
     ],
     "shape_sorter": [
         "gothit",
+        "inside",
         "contains",
         "hitter",
         "thrown",

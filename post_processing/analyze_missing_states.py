@@ -2,7 +2,7 @@ import pandas as pd
 import pickle
 from calculate_js_pipeline_new import load_agent_distributions, calculate_csv_distributions_new_format
 
-def analyze_missing_states(csv_path, pkl_path="averaged_state_distributions.pkl"):
+def analyze_missing_states(csv_path, pkl_path="post_processing/averaged_state_distributions.pkl"):
     """Analyze which states are present in only one distribution"""
     
     # Load both distributions
@@ -80,6 +80,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         csv_path = sys.argv[1]
     else:
-        csv_path = "../test/activity_logs/checkpoint_1000000_activity.csv"
+        csv_path = "test/activity_logs/checkpoint_1500000_activity.csv"
     
     analyze_missing_states(csv_path)

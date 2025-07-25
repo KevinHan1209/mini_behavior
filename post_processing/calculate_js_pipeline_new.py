@@ -231,25 +231,30 @@ def calculate_js_divergence_pipeline(csv_path, pkl_path="post_processing/average
         for obj in csv_objects:
             print(f"  - {obj}")
     
-    # Get only keys that exist in both distributions
+    # Get different key sets
     common_keys = set(agent_dist.keys()) & set(csv_dist.keys())
+    agent_only = set(agent_dist.keys()) - set(csv_dist.keys())
+    csv_only = set(csv_dist.keys()) - set(agent_dist.keys())
+    
+    # For calculation, use all CSV keys (common + csv_only)
+    # Ignore agent-only keys
+    keys_to_calculate = common_keys | csv_only
     
     if verbose:
         print(f"\nNumber of common object-state pairs: {len(common_keys)}")
-        
-        # Show missing keys
-        agent_only = set(agent_dist.keys()) - set(csv_dist.keys())
-        csv_only = set(csv_dist.keys()) - set(agent_dist.keys())
+        print(f"Number of CSV-only pairs (will use 100% false for agent): {len(csv_only)}")
+        print(f"Number of agent-only pairs (will be ignored): {len(agent_only)}")
+        print(f"Total pairs for calculation: {len(keys_to_calculate)}")
         
         if agent_only:
-            print(f"\nKeys only in agent distribution ({len(agent_only)}):")
+            print(f"\nKeys only in agent distribution (IGNORED) ({len(agent_only)}):")
             for key in sorted(agent_only)[:10]:
                 print(f"  - {key}")
             if len(agent_only) > 10:
                 print(f"  ... and {len(agent_only) - 10} more")
         
         if csv_only:
-            print(f"\nKeys only in CSV distribution ({len(csv_only)}):")
+            print(f"\nKeys only in CSV distribution (agent set to 100% false) ({len(csv_only)}):")
             for key in sorted(csv_only)[:10]:
                 print(f"  - {key}")
             if len(csv_only) > 10:
@@ -257,9 +262,12 @@ def calculate_js_divergence_pipeline(csv_path, pkl_path="post_processing/average
     
     # Calculate JS divergence for each object-state pair
     js_divergences = {}
-    for key in sorted(common_keys):
+    for key in sorted(keys_to_calculate):
+        # Get agent value (100 if not in agent dist, meaning 100% false)
+        agent_false_pct = agent_dist.get(key, 100)
+        
         # Create binary distributions for this state
-        agent_value = np.array([agent_dist[key], 100 - agent_dist[key]])
+        agent_value = np.array([agent_false_pct, 100 - agent_false_pct])
         csv_value = np.array([csv_dist[key], 100 - csv_dist[key]])
         
         # Calculate JS divergence for this state
