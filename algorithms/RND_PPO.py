@@ -357,19 +357,20 @@ class RND_PPO:
                     torch.nn.utils.clip_grad_norm_(list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()), self.max_grad_norm)
                 optimizer.step()
 
-        # Average the collected metrics.
         avg_metrics = {k: np.mean(v) for k, v in metrics.items()}
         return avg_metrics
     
     def mask_agent_position(self, obs):
         obs_masked = obs.clone()
-        obs_masked[:, 0:3] = 0.0  # Zero out agent_x, agent_y, agent_dir
+        obs_masked[:, 0:3] = 0.0  #zero out agent_x agent_y agent_dir
         return obs_masked
 
     def calculate_novelty(self, obs):
         with torch.no_grad():
             normalized_obs = self.normalize_obs(obs)
             masked_obs = self.mask_agent_position(normalized_obs) #added to remove agent position from rnd
+            #target_feature = self.rnd_model.target(masked_obs) #added to remove agent position from rnd
+            #predict_feature = self.rnd_model.predictor(masked_obs) #added to remove agent position from rnd
             target_feature = self.rnd_model.target(masked_obs) #added to remove agent position from rnd
             predict_feature = self.rnd_model.predictor(masked_obs) #added to remove agent position from rnd
             novelty = ((target_feature - predict_feature) ** 2).sum(1) / 2 + 1e-8
