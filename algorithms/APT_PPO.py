@@ -119,7 +119,8 @@ class APT_PPO:
 
         # Use the single environment observation space if available.
         obs_shape = getattr(self.env, "single_observation_space", self.env.observation_space).shape
-        self.agent = Agent(action_dims=self.envs.single_action_space.nvec, obs_dim=obs_shape[0]).to(self.device)
+        # Agent expects (action_dims, obs_dim) as positional arguments
+        self.agent = Agent(self.envs.single_action_space.nvec, obs_shape[0]).to(self.device)
         self.optimizer = optim.Adam(self.agent.parameters(), lr=self.learning_rate, eps=1e-5)
         # wandb.watch(self.agent, self.optimizer)
 
