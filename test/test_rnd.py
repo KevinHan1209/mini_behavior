@@ -93,7 +93,7 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
     
     # Initialize wandb for testing
     wandb.init(project="rnd-ppo-test",
-               name=f"RND_PPO_{TASK}_{ROOM_SIZE}x{ROOM_SIZE}_STEP{STEP}",
+               name=f"RND_PPO_{TASK}_{ROOM_SIZE}x{ROOM_SIZE}_NEW_ENV_NO_POS_STEP{STEP}",
                config={"env_id": env_id,
                        "mode": "testing",
                        "num_episodes": num_episodes,
@@ -155,7 +155,7 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
             #obs, reward, done, _ = test_env.step(action.cpu().numpy()[0])
             #obs, reward, done, _ = test_env.step(action.cpu().item())
             obs, reward, done, _ = test_env.step(action_np)  
-            print(f"obs length = {len(obs)} at step {steps}")
+            #print(f"obs length = {len(obs)} at step {steps}")
             total_reward += reward
             steps += 1
 
@@ -206,7 +206,7 @@ def test_agent(env_id, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max
 
         gif_path = f"img/rnd_8x8_new_env_no_agent_pos/{STEP}/episode_{episode + 1}.gif"
         #print(activity)
-        if frames:
+        if frames and episode==4:
             write_gif(np.array(frames), gif_path, fps=1)
             wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
         
@@ -233,7 +233,7 @@ def main():
     TASK = 'MultiToy'
     ROOM_SIZE = 8
     MAX_STEPS = 1000
-    STEP = 1000000
+    STEP = 100000
     
     #env_name = f"MiniGrid-{TASK}-{ROOM_SIZE}x{ROOM_SIZE}-N2-LP-v0"
     #env_kwargs = {"room_size": ROOM_SIZE, "max_steps": MAX_STEPS}
@@ -258,7 +258,7 @@ def main():
         kwargs=test_env_kwargs
     )
 
-    model_dir = "models/RND_PPO_MultiToy_Run7_8x8_new_env_no_agent_pos"
+    model_dir = "models/RND_PPO_MultiToy_Run9_8x8_new_env"
     model_path = f"{model_dir}/model_step_{STEP}.pt"
 
     if not os.path.exists(model_path):
@@ -285,9 +285,9 @@ def main():
         device=device,
         seed=1
     )
-    model.load(model_path)
+    #model.load(model_path)
     
-    test_agent(test_env_name, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max_steps_per_episode=500)
+    test_agent(test_env_name, model, device, TASK, ROOM_SIZE, STEP, num_episodes=5, max_steps_per_episode=200)
 
 
 if __name__ == "__main__":
