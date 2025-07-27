@@ -341,37 +341,92 @@ class APT_PPO:
             os.makedirs(activity_dir, exist_ok=True)
 
         def count_binary_flags(env):
+            """
+            Count the total number of non-relative (binary) state flags in the environment.
+            """
+            default_states = [
+                'atsamelocation',
+                'infovofrobot',
+                'inleftreachofrobot',
+                'inrightreachofrobot',
+                'inside',
+                'nextto',
+                'inlefthandofrobot',
+                'inrighthandofrobot',
+            ]
+            
             num_flags = 0
             for obj_list in env.objs.values():
                 for obj in obj_list:
                     for state_name, state in obj.states.items():
                         if not isinstance(state, RelativeObjectState):
-                            num_flags += 1
+                            if state_name not in default_states:
+                                num_flags += 1
             return num_flags
 
         def generate_flag_mapping(env):
+            """
+            Generate a mapping that tells which binary flag corresponds to which object's state.
+            Skip default states that are not included in observations.
+            """
+            default_states = [
+                'atsamelocation',
+                'infovofrobot',
+                'inleftreachofrobot',
+                'inrightreachofrobot',
+                'inside',
+                'nextto',
+                'inlefthandofrobot',
+                'inrighthandofrobot',
+            ]
+            
             mapping = []
             for obj_type, obj_list in env.objs.items():
                 for idx, obj in enumerate(obj_list):
                     for state_name, state in obj.states.items():
                         if not isinstance(state, RelativeObjectState):
-                            mapping.append({
-                                "object_type": obj_type,
-                                "object_index": idx,
-                                "state_name": state_name
-                            })
+                            if state_name not in default_states:
+                                mapping.append({
+                                    "object_type": obj_type,
+                                    "object_index": idx,
+                                    "state_name": state_name
+                                })
             return mapping
 
         def extract_binary_flags(obs, env):
+            """
+            Extract only the binary flags from an observation vector.
+            Skip position values and default states that are not included.
+            """
+            default_states = [
+                'atsamelocation',
+                'infovofrobot',
+                'inleftreachofrobot',
+                'inrightreachofrobot',
+                'inside',
+                'nextto',
+                'inlefthandofrobot',
+                'inrighthandofrobot',
+            ]
+            
             flags = []
-            index = 3
+            index = 3  # skip agent state (x, y, direction)
+            
             for obj_list in env.objs.values():
                 for obj in obj_list:
+                    # Skip the object's position (2 values)
                     index += 2
+                    
                     for state_name, state in obj.states.items():
                         if not isinstance(state, RelativeObjectState):
-                            flags.append(obs[index])
-                            index += 1
+                            if state_name not in default_states:
+                                # This is a binary state that should be in the observation
+                                if index < len(obs):
+                                    flags.append(obs[index])
+                                else:
+                                    flags.append(0)
+                                index += 1
+                            # Skip default states as they're not included in observation
             return np.array(flags)
 
         num_binary_flags = count_binary_flags(test_env.env if hasattr(test_env, 'env') else test_env)
