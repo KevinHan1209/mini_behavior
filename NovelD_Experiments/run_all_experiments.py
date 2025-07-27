@@ -125,22 +125,36 @@ def main():
     
     # Step 2: Run experiments
     if not args.skip_experiments:
-        config_files = [f"configs/{c['name']}.json" for c in all_configs]
+        # Filter out completed experiments
+        completed_experiments = []
+        for c in all_configs:
+            result_dir = f"results/{c['name']}"
+            success_file = os.path.join(result_dir, "SUCCESS")
+            if os.path.exists(success_file):
+                completed_experiments.append(c['name'])
+                print(f"Skipping completed experiment: {c['name']}")
         
-        print(f"\n{'='*60}")
-        print(f"Step 2: Running {len(config_files)} experiments")
-        print(f"{'='*60}")
+        # Filter configs to only include non-completed experiments
+        remaining_configs = [c for c in all_configs if c['name'] not in completed_experiments]
+        config_files = [f"configs/{c['name']}.json" for c in remaining_configs]
         
-        completed, failed = run_experiment_batch(config_files)
-        
-        print(f"\n{'='*60}")
-        print(f"Experiments Summary:")
-        print(f"  Completed: {completed}")
-        print(f"  Failed: {failed}")
-        print(f"{'='*60}")
-        
-        if failed > 0:
-            print("\nWarning: Some experiments failed. Check logs for details.")
+        if not config_files:
+            print("\nAll experiments have been completed!")
+        else:
+            print(f"\n{'='*60}")
+            print(f"Step 2: Running {len(config_files)} experiments ({len(completed_experiments)} already completed)")
+            print(f"{'='*60}")
+            
+            completed, failed = run_experiment_batch(config_files)
+            
+            print(f"\n{'='*60}")
+            print(f"Experiments Summary:")
+            print(f"  Completed: {completed}")
+            print(f"  Failed: {failed}")
+            print(f"{'='*60}")
+            
+            if failed > 0:
+                print("\nWarning: Some experiments failed. Check logs for details.")
     
     # Step 3: Analyze results
     print("\nWaiting 10 seconds for files to sync...")

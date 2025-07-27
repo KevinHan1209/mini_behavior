@@ -163,7 +163,13 @@ class APT_PPO:
                 actions[step] = action
                 logprobs[step] = logprob
 
-                next_obs_np, reward, done, _ = self.env.step(action.cpu().numpy())
+                try:
+                    next_obs_np, reward, done, _ = self.env.step(action.cpu().numpy())
+                except Exception as e:
+                    print(f"\n[ERROR] Environment step failed at global_step {global_step}, step {step}")
+                    print(f"Action that caused error: {action.cpu().numpy()}")
+                    print(f"Error: {e}")
+                    raise
                 rewards[step] = torch.tensor(reward, device=self.device).view(-1)
                 next_obs = torch.Tensor(next_obs_np).to(self.device)
                 next_done = torch.Tensor(done).to(self.device)
