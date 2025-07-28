@@ -149,6 +149,10 @@ class Disassemble(BaseAction):
         detached_object = obj.states["contains"].remove_obj()
         detached_object.states["attached"].set_value(False)
         self.env.carrying[other_arm].add(detached_object)
+        
+        # If container has no more objects, set its attached state to false
+        if obj.states["contains"].get_num_objs() == 0:
+            obj.states["attached"].set_value(False)
 
 
 class Close(BaseAction):
