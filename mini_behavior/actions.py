@@ -135,15 +135,6 @@ class Disassemble(BaseAction):
         return not self.env.carrying[opp_arm]
 
     def do(self, obj, arm):
-        print(f"\n[DEBUG Disassemble] Attempting to disassemble:")
-        print(f"  Object: {obj.name if hasattr(obj, 'name') else obj}")
-        print(f"  Arm: {arm}")
-        print(f"  Contains state exists: {'contains' in obj.states if hasattr(obj, 'states') else 'No states'}")
-        if hasattr(obj, 'states') and 'contains' in obj.states:
-            contained = obj.states['contains'].get_contained_objs()
-            print(f"  Contained objects: {[o.name for o in contained] if contained else 'empty'}")
-            print(f"  Number of contained objects: {obj.states['contains'].get_num_objs()}")
-        
         super().do(obj, arm)
         other_arm = "left" if arm == "right" else "right"
         detached_object = obj.states["contains"].remove_obj()
