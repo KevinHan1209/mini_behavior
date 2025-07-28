@@ -168,42 +168,62 @@ class APT_PPO:
                 except Exception as e:
                     print(f"\n[ERROR] Environment step failed at global_step {global_step}, step {step}")
                     print(f"Error type: {type(e).__name__}: {e}")
-                    print(f"Action values: {action.cpu().numpy()}")
                     
-                    # Print detailed state information for each environment
+                    # First, try to identify which environment caused the error by stepping through them individually
+                    failed_env_idx = None
                     for env_idx in range(self.num_envs):
-                        print(f"\n--- Environment {env_idx} ---")
-                        env = self.env.envs[env_idx]
+                        try:
+                            # Try to step each environment individually
+                            single_action = action[env_idx].cpu().numpy()
+                            test_obs, test_reward, test_done, test_info = self.env.envs[env_idx].step(single_action)
+                        except Exception as test_e:
+                            failed_env_idx = env_idx
+                            print(f"\n!!! FOUND: Error occurred in environment {env_idx} !!!")
+                            break
+                    
+                    if failed_env_idx is not None:
+                        # Print detailed info only for the failing environment
+                        env = self.env.envs[failed_env_idx]
                         actual_env = env.env if hasattr(env, 'env') else env
+                        action_vals = action[failed_env_idx].cpu().numpy()
                         
-                        # Print action details
-                        action_vals = action[env_idx].cpu().numpy()
+                        print(f"\n--- Detailed info for failing Environment {failed_env_idx} ---")
+                        print(f"Action values: {action_vals}")
                         print(f"Action: left_arm={action_vals[0]}, right_arm={action_vals[1]}, locomotion={action_vals[2]}")
                         
                         # Map action indices to names
                         if action_vals[0] < len(actual_env.manipulation_actions):
                             left_action = actual_env.manipulation_actions(action_vals[0])
-                            print(f"Left arm action: {left_action.name}")
+                            print(f"Left arm action: {left_action.name} (index {action_vals[0]})")
                         if action_vals[1] < len(actual_env.manipulation_actions):
                             right_action = actual_env.manipulation_actions(action_vals[1])
-                            print(f"Right arm action: {right_action.name}")
+                            print(f"Right arm action: {right_action.name} (index {action_vals[1]})")
                         if action_vals[2] < len(actual_env.locomotion_actions):
                             loco_action = actual_env.locomotion_actions(action_vals[2])
-                            print(f"Locomotion action: {loco_action.name}")
+                            print(f"Locomotion action: {loco_action.name} (index {action_vals[2]})")
                         
                         # Print what agent is carrying
-                        print(f"Carrying: left={actual_env.carrying['left']}, right={actual_env.carrying['right']}")
-                        
-                        # Print agent position
-                        print(f"Agent position: {actual_env.agent_pos}")
+                        print(f"\nAgent state:")
+                        print(f"  Carrying left: {actual_env.carrying['left']}")
+                        print(f"  Carrying right: {actual_env.carrying['right']}")
+                        print(f"  Position: {actual_env.agent_pos}")
+                        print(f"  Direction: {actual_env.agent_dir}")
                         
                         # Print nearby objects
                         front_pos = actual_env.front_pos
-                        print(f"Front position: {front_pos}")
+                        print(f"\nFront position: {front_pos}")
                         if 0 <= front_pos[0] < actual_env.width and 0 <= front_pos[1] < actual_env.height:
                             cell = actual_env.grid.get(*front_pos)
                             if cell:
-                                print(f"Objects at front position: {[obj.name if hasattr(obj, 'name') else str(obj) for obj in cell]}")
+                                print(f"Objects at front position:")
+                                for obj in cell:
+                                    if hasattr(obj, 'name'):
+                                        print(f"  - {obj.name} (type: {type(obj).__name__})")
+                                        if hasattr(obj, 'states'):
+                                            print(f"    States: {list(obj.states.keys())}")
+                    else:
+                        print("Could not identify which specific environment caused the error")
+                        print(f"All action values: {action.cpu().numpy()}")
                     
                     raise
                 rewards[step] = torch.tensor(reward, device=self.device).view(-1)
