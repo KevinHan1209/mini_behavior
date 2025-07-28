@@ -20,6 +20,6 @@
     "max_grad_norm": 0.5,
     "int_coef": 1.0,
     "ext_coef": 0.0,
-    "total_timesteps": 100000
+    "total_timesteps": 2500000
   }
 }
