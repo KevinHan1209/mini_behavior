@@ -163,7 +163,49 @@ class APT_PPO:
                 actions[step] = action
                 logprobs[step] = logprob
 
-                next_obs_np, reward, done, _ = self.env.step(action.cpu().numpy())
+                try:
+                    next_obs_np, reward, done, _ = self.env.step(action.cpu().numpy())
+                except Exception as e:
+                    print(f"\n[ERROR] Environment step failed at global_step {global_step}, step {step}")
+                    print(f"Error type: {type(e).__name__}: {e}")
+                    print(f"Action values: {action.cpu().numpy()}")
+                    
+                    # Print detailed state information for each environment
+                    for env_idx in range(self.num_envs):
+                        print(f"\n--- Environment {env_idx} ---")
+                        env = self.env.envs[env_idx]
+                        actual_env = env.env if hasattr(env, 'env') else env
+                        
+                        # Print action details
+                        action_vals = action[env_idx].cpu().numpy()
+                        print(f"Action: left_arm={action_vals[0]}, right_arm={action_vals[1]}, locomotion={action_vals[2]}")
+                        
+                        # Map action indices to names
+                        if action_vals[0] < len(actual_env.manipulation_actions):
+                            left_action = actual_env.manipulation_actions(action_vals[0])
+                            print(f"Left arm action: {left_action.name}")
+                        if action_vals[1] < len(actual_env.manipulation_actions):
+                            right_action = actual_env.manipulation_actions(action_vals[1])
+                            print(f"Right arm action: {right_action.name}")
+                        if action_vals[2] < len(actual_env.locomotion_actions):
+                            loco_action = actual_env.locomotion_actions(action_vals[2])
+                            print(f"Locomotion action: {loco_action.name}")
+                        
+                        # Print what agent is carrying
+                        print(f"Carrying: left={actual_env.carrying['left']}, right={actual_env.carrying['right']}")
+                        
+                        # Print agent position
+                        print(f"Agent position: {actual_env.agent_pos}")
+                        
+                        # Print nearby objects
+                        front_pos = actual_env.front_pos
+                        print(f"Front position: {front_pos}")
+                        if 0 <= front_pos[0] < actual_env.width and 0 <= front_pos[1] < actual_env.height:
+                            cell = actual_env.grid.get(*front_pos)
+                            if cell:
+                                print(f"Objects at front position: {[obj.name if hasattr(obj, 'name') else str(obj) for obj in cell]}")
+                    
+                    raise
                 rewards[step] = torch.tensor(reward, device=self.device).view(-1)
                 next_obs = torch.Tensor(next_obs_np).to(self.device)
                 next_done = torch.Tensor(done).to(self.device)
