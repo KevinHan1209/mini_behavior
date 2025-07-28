@@ -209,18 +209,51 @@ class APT_PPO:
                         print(f"  Position: {actual_env.agent_pos}")
                         print(f"  Direction: {actual_env.agent_dir}")
                         
-                        # Print nearby objects
+                        # Print nearby objects following the action sequence
+                        print(f"\nChecking surrounding cells:")
+                        
+                        # Define the sequences for left and right arms
                         front_pos = actual_env.front_pos
-                        print(f"\nFront position: {front_pos}")
-                        if 0 <= front_pos[0] < actual_env.width and 0 <= front_pos[1] < actual_env.height:
-                            cell = actual_env.grid.get(*front_pos)
-                            if cell:
-                                print(f"Objects at front position:")
-                                for obj in cell:
-                                    if hasattr(obj, 'name'):
-                                        print(f"  - {obj.name} (type: {type(obj).__name__})")
-                                        if hasattr(obj, 'states'):
-                                            print(f"    States: {list(obj.states.keys())}")
+                        upper_left_pos = front_pos + np.array([-1, 0])
+                        upper_right_pos = front_pos + np.array([1, 0])
+                        left_pos = actual_env.agent_pos + np.array([-1, 0])
+                        right_pos = actual_env.agent_pos + np.array([1, 0])
+                        
+                        left_seq_positions = [("front", front_pos), ("upper-left", upper_left_pos), ("left", left_pos)]
+                        right_seq_positions = [("front", front_pos), ("upper-right", upper_right_pos), ("right", right_pos)]
+                        
+                        # Check cells for the failing arm
+                        if action_vals[0] == 9:  # Left arm assemble
+                            print("Left arm sequence:")
+                            for name, pos in left_seq_positions:
+                                if 0 <= pos[0] < actual_env.width and 0 <= pos[1] < actual_env.height:
+                                    cell = actual_env.grid.get_all_items(*pos)
+                                    print(f"  {name} position {pos}: {cell}")
+                                    for dim, item in enumerate(cell):
+                                        if item is not None and hasattr(item, 'name'):
+                                            print(f"    Dim {dim}: {item.name}")
+                                            if hasattr(item, 'states'):
+                                                if 'attached' in item.states:
+                                                    print(f"      attached: {item.states['attached'].get_value(actual_env)}")
+                                                if 'contains' in item.states:
+                                                    contained = item.states['contains'].get_contained_objs()
+                                                    print(f"      contains: {[o.name for o in contained] if contained else 'empty'}")
+                        
+                        if action_vals[1] == 10:  # Right arm disassemble
+                            print("Right arm sequence:")
+                            for name, pos in right_seq_positions:
+                                if 0 <= pos[0] < actual_env.width and 0 <= pos[1] < actual_env.height:
+                                    cell = actual_env.grid.get_all_items(*pos)
+                                    print(f"  {name} position {pos}: {cell}")
+                                    for dim, item in enumerate(cell):
+                                        if item is not None and hasattr(item, 'name'):
+                                            print(f"    Dim {dim}: {item.name}")
+                                            if hasattr(item, 'states'):
+                                                if 'attached' in item.states:
+                                                    print(f"      attached: {item.states['attached'].get_value(actual_env)}")
+                                                if 'contains' in item.states:
+                                                    contained = item.states['contains'].get_contained_objs()
+                                                    print(f"      contains: {[o.name for o in contained] if contained else 'empty'}")
                     else:
                         print("Could not identify which specific environment caused the error")
                         print(f"All action values: {action.cpu().numpy()}")
