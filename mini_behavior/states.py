@@ -130,6 +130,12 @@ class Contains(AbilityState):
     
     def get_contained_objs(self):
         return self.contained_objects
+    
+    def set_value(self, value):
+        '''Override to clear contained objects when reset'''
+        super().set_value(value)
+        if value is False:
+            self.contained_objects = []
 
 class Flipped(AbilityState):
     def __init__(self, obj, key):
