@@ -268,8 +268,8 @@ class APT_PPO:
             # self.total_actions.append(actions.clone())
             # self.total_obs.append(obs.clone())
             
-            # Check if we should save a checkpoint (every 500k steps)
-            if global_step % 500000 < self.num_envs:
+            # Check if we should save a checkpoint (every 10 updates for testing)
+            if update % 10 == 0:
                 checkpoint_dir = "checkpoints"
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
@@ -547,7 +547,12 @@ class APT_PPO:
                 obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(self.device)
                 with torch.no_grad():
                     action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
-                action_value = action.cpu().numpy()[0]
+                action_numpy = action.cpu().numpy()[0]
+                # Ensure action is a scalar integer
+                if isinstance(action_numpy, np.ndarray):
+                    action_value = int(action_numpy.item())
+                else:
+                    action_value = int(action_numpy)
                 obs, _, done, _ = test_env.step(action_value)
 
                 current_flags = extract_binary_flags(obs, test_env.env if hasattr(test_env, 'env') else test_env)
