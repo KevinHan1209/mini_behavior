@@ -83,8 +83,9 @@ class APT_PPO:
         self.num_iterations = self.total_timesteps // self.batch_size
 
         self.rms = RMS(self.device)
-        self.total_actions = []
-        self.total_obs = []
+        # Removed unused lists that were causing memory issues
+        # self.total_actions = []
+        # self.total_obs = []
         self.total_avg_curiosity_rewards = []
         self.model_saves = []
         self.exploration_percentages = []
@@ -263,8 +264,9 @@ class APT_PPO:
                 next_obs = torch.Tensor(next_obs_np).to(self.device)
                 next_done = torch.Tensor(done).to(self.device)
 
-            self.total_actions.append(actions.clone())
-            self.total_obs.append(obs.clone())
+            # Removed memory-consuming operations that were not being used
+            # self.total_actions.append(actions.clone())
+            # self.total_obs.append(obs.clone())
             
             # Check if we should save a checkpoint (every 500k steps)
             if global_step % 500000 < self.num_envs:
