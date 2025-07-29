@@ -545,7 +545,8 @@ class APT_PPO:
                 obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(self.device)
                 with torch.no_grad():
                     action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
-                obs, _, done, _ = test_env.step(action.cpu().numpy()[0])
+                action_value = action.cpu().numpy()[0]
+                obs, _, done, _ = test_env.step(action_value)
 
                 current_flags = extract_binary_flags(obs, test_env.env if hasattr(test_env, 'env') else test_env)
                 if prev_flags is not None:
@@ -555,7 +556,7 @@ class APT_PPO:
                     total_activity_counts += differences
                 prev_flags = current_flags
 
-                action_name = test_env.actions(action.item()).name
+                action_name = test_env.actions(action_value).name
                 action_log.append(action_name)
                 print(f"Step {steps:3d} | Action: {action_name}")
                 steps += 1

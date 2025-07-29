@@ -1,0 +1,25 @@
+{
+  "id": 8,
+  "name": "exp_008_int_gamma_0_95",
+  "ablated_param": "int_gamma",
+  "ablated_value": 0.95,
+  "hyperparameters": {
+    "alpha": 0.5,
+    "update_proportion": 0.25,
+    "int_gamma": 0.95,
+    "ent_coef": 0.01,
+    "learning_rate": 0.0003,
+    "num_envs": 8,
+    "num_steps": 125,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "num_minibatches": 4,
+    "update_epochs": 4,
+    "clip_coef": 0.2,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "int_coef": 1.0,
+    "ext_coef": 0.0,
+    "total_timesteps": 2500000
+  }
+}
