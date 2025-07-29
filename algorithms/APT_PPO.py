@@ -83,8 +83,9 @@ class APT_PPO:
         self.num_iterations = self.total_timesteps // self.batch_size
 
         self.rms = RMS(self.device)
-        self.total_actions = []
-        self.total_obs = []
+        # Removed unused lists that were causing memory issues
+        # self.total_actions = []
+        # self.total_obs = []
         self.total_avg_curiosity_rewards = []
         self.model_saves = []
         self.exploration_percentages = []
@@ -167,15 +168,105 @@ class APT_PPO:
                     next_obs_np, reward, done, _ = self.env.step(action.cpu().numpy())
                 except Exception as e:
                     print(f"\n[ERROR] Environment step failed at global_step {global_step}, step {step}")
-                    print(f"Action that caused error: {action.cpu().numpy()}")
-                    print(f"Error: {e}")
+                    print(f"Error type: {type(e).__name__}: {e}")
+                    
+                    # First, try to identify which environment caused the error by stepping through them individually
+                    failed_env_idx = None
+                    for env_idx in range(self.num_envs):
+                        try:
+                            # Try to step each environment individually
+                            single_action = action[env_idx].cpu().numpy()
+                            test_obs, test_reward, test_done, test_info = self.env.envs[env_idx].step(single_action)
+                        except Exception as test_e:
+                            failed_env_idx = env_idx
+                            print(f"\n!!! FOUND: Error occurred in environment {env_idx} !!!")
+                            break
+                    
+                    if failed_env_idx is not None:
+                        # Print detailed info only for the failing environment
+                        env = self.env.envs[failed_env_idx]
+                        actual_env = env.env if hasattr(env, 'env') else env
+                        action_vals = action[failed_env_idx].cpu().numpy()
+                        
+                        print(f"\n--- Detailed info for failing Environment {failed_env_idx} ---")
+                        print(f"Action values: {action_vals}")
+                        print(f"Action: left_arm={action_vals[0]}, right_arm={action_vals[1]}, locomotion={action_vals[2]}")
+                        
+                        # Map action indices to names
+                        if action_vals[0] < len(actual_env.manipulation_actions):
+                            left_action = actual_env.manipulation_actions(action_vals[0])
+                            print(f"Left arm action: {left_action.name} (index {action_vals[0]})")
+                        if action_vals[1] < len(actual_env.manipulation_actions):
+                            right_action = actual_env.manipulation_actions(action_vals[1])
+                            print(f"Right arm action: {right_action.name} (index {action_vals[1]})")
+                        if action_vals[2] < len(actual_env.locomotion_actions):
+                            loco_action = actual_env.locomotion_actions(action_vals[2])
+                            print(f"Locomotion action: {loco_action.name} (index {action_vals[2]})")
+                        
+                        # Print what agent is carrying
+                        print(f"\nAgent state:")
+                        print(f"  Carrying left: {actual_env.carrying['left']}")
+                        print(f"  Carrying right: {actual_env.carrying['right']}")
+                        print(f"  Position: {actual_env.agent_pos}")
+                        print(f"  Direction: {actual_env.agent_dir}")
+                        
+                        # Print nearby objects following the action sequence
+                        print(f"\nChecking surrounding cells:")
+                        
+                        # Define the sequences for left and right arms
+                        front_pos = actual_env.front_pos
+                        upper_left_pos = front_pos + np.array([-1, 0])
+                        upper_right_pos = front_pos + np.array([1, 0])
+                        left_pos = actual_env.agent_pos + np.array([-1, 0])
+                        right_pos = actual_env.agent_pos + np.array([1, 0])
+                        
+                        left_seq_positions = [("front", front_pos), ("upper-left", upper_left_pos), ("left", left_pos)]
+                        right_seq_positions = [("front", front_pos), ("upper-right", upper_right_pos), ("right", right_pos)]
+                        
+                        # Check cells for the failing arm
+                        if action_vals[0] == 9:  # Left arm assemble
+                            print("Left arm sequence:")
+                            for name, pos in left_seq_positions:
+                                if 0 <= pos[0] < actual_env.width and 0 <= pos[1] < actual_env.height:
+                                    cell = actual_env.grid.get_all_items(*pos)
+                                    print(f"  {name} position {pos}: {cell}")
+                                    for dim, item in enumerate(cell):
+                                        if item is not None and hasattr(item, 'name'):
+                                            print(f"    Dim {dim}: {item.name}")
+                                            if hasattr(item, 'states'):
+                                                if 'attached' in item.states:
+                                                    print(f"      attached: {item.states['attached'].get_value(actual_env)}")
+                                                if 'contains' in item.states:
+                                                    contained = item.states['contains'].get_contained_objs()
+                                                    print(f"      contains: {[o.name for o in contained] if contained else 'empty'}")
+                        
+                        if action_vals[1] == 10:  # Right arm disassemble
+                            print("Right arm sequence:")
+                            for name, pos in right_seq_positions:
+                                if 0 <= pos[0] < actual_env.width and 0 <= pos[1] < actual_env.height:
+                                    cell = actual_env.grid.get_all_items(*pos)
+                                    print(f"  {name} position {pos}: {cell}")
+                                    for dim, item in enumerate(cell):
+                                        if item is not None and hasattr(item, 'name'):
+                                            print(f"    Dim {dim}: {item.name}")
+                                            if hasattr(item, 'states'):
+                                                if 'attached' in item.states:
+                                                    print(f"      attached: {item.states['attached'].get_value(actual_env)}")
+                                                if 'contains' in item.states:
+                                                    contained = item.states['contains'].get_contained_objs()
+                                                    print(f"      contains: {[o.name for o in contained] if contained else 'empty'}")
+                    else:
+                        print("Could not identify which specific environment caused the error")
+                        print(f"All action values: {action.cpu().numpy()}")
+                    
                     raise
                 rewards[step] = torch.tensor(reward, device=self.device).view(-1)
                 next_obs = torch.Tensor(next_obs_np).to(self.device)
                 next_done = torch.Tensor(done).to(self.device)
 
-            self.total_actions.append(actions.clone())
-            self.total_obs.append(obs.clone())
+            # Removed memory-consuming operations that were not being used
+            # self.total_actions.append(actions.clone())
+            # self.total_obs.append(obs.clone())
             
             # Check if we should save a checkpoint (every 500k steps)
             if global_step % 500000 < self.num_envs:
@@ -456,7 +547,16 @@ class APT_PPO:
                 obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(self.device)
                 with torch.no_grad():
                     action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
-                obs, _, done, _ = test_env.step(action.cpu().numpy()[0])
+                # Get the action as a numpy array 
+                action_cpu = action.cpu().numpy()
+                if len(action_cpu.shape) > 1:
+                    # If action has batch dimension, take first element
+                    action_value = action_cpu[0]
+                else:
+                    action_value = action_cpu
+                
+                # The environment expects 3D action array
+                obs, _, done, _ = test_env.step(action_value)
 
                 current_flags = extract_binary_flags(obs, test_env.env if hasattr(test_env, 'env') else test_env)
                 if prev_flags is not None:
@@ -466,9 +566,11 @@ class APT_PPO:
                     total_activity_counts += differences
                 prev_flags = current_flags
 
-                action_name = test_env.actions(action.item()).name
-                action_log.append(action_name)
-                print(f"Step {steps:3d} | Action: {action_name}")
+                # Convert action array to readable format for logging
+                # action_value has shape [left_hand, right_hand, locomotion]
+                action_names = f"L:{action_value[0]}, R:{action_value[1]}, Loco:{action_value[2]}"
+                action_log.append(action_names)
+                print(f"Step {steps:3d} | Action: {action_names}")
                 steps += 1
 
             # Only write individual episode CSVs if no csv_path provided

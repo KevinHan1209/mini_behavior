@@ -62,6 +62,12 @@ def run_experiment(config_path, output_dir='results'):
     checkpoint_backup = None
     if os.path.exists(original_checkpoint_dir):
         checkpoint_backup = f"{original_checkpoint_dir}_backup"
+        # Remove any existing backup first
+        if os.path.exists(checkpoint_backup):
+            if os.path.islink(checkpoint_backup):
+                os.unlink(checkpoint_backup)
+            else:
+                shutil.rmtree(checkpoint_backup)
         os.rename(original_checkpoint_dir, checkpoint_backup)
     
     try:
