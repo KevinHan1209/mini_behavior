@@ -25,7 +25,7 @@ def create_env():
     env = gym.make('MiniGrid-MultiToy-8x8-N2-v0', room_size=8, max_steps=1000)
     return env
 
-def run_experiment_inline(config, output_dir):
+def run_experiment_inline(config, output_dir, exp_metadata=None):
     """Run a single experiment inline (not as subprocess)."""
     
     # Create output directory
@@ -33,8 +33,14 @@ def run_experiment_inline(config, output_dir):
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Save config to output directory
+    save_config = config.copy()
+    if exp_metadata:
+        save_config['experiment_id'] = exp_metadata.get('name', 'unknown')
+        save_config['ablated_param'] = exp_metadata.get('ablated_param', 'unknown')
+        save_config['ablated_value'] = exp_metadata.get('ablated_value', 'unknown')
+    
     with open(output_dir / "experiment_config.json", 'w') as f:
-        json.dump(config, f, indent=2)
+        json.dump(save_config, f, indent=2)
     
     # Create checkpoint directory for this experiment
     checkpoint_dir = output_dir / "checkpoints"
@@ -73,23 +79,21 @@ def run_experiment_inline(config, output_dir):
             update_proportion=config['update_proportion'],
             int_gamma=config['int_gamma'],
             learning_rate=config['learning_rate'],
-            n_steps=config['n_steps'],
-            batch_size=config['batch_size'],
-            n_epochs=config['n_epochs'],
+            n_steps=config.get('num_steps', 125),
+            batch_size=config.get('batch_size', 1000),
+            n_epochs=config.get('update_epochs', 4),
             gamma=config['gamma'],
             gae_lambda=config['gae_lambda'],
-            clip_range=config['clip_range'],
+            clip_range=config.get('clip_coef', 0.2),
             ent_coef=config['ent_coef'],
             vf_coef=config['vf_coef'],
-            max_grad_norm=config['max_grad_norm'],
+            max_grad_norm=config.get('max_grad_norm', 0.5),
             target_kl=None,
             verbose=1
         )
         
         # Print experiment info
-        print(f"\nStarting experiment: {config['experiment_id']}")
-        print(f"Ablated parameter: {config['ablated_param']} = {config['ablated_value']}")
-        print(f"Total timesteps: {config['total_timesteps']}")
+        print(f"\nTotal timesteps: {config['total_timesteps']}")
         
         # Train the agent
         agent.learn(total_timesteps=config['total_timesteps'])
@@ -156,25 +160,31 @@ def run_experiments(subset=None, quick_test=False):
     
     # Filter experiments if subset specified
     if subset:
-        filtered_configs = {
-            exp_id: config for exp_id, config in all_configs.items()
+        filtered_configs = [
+            config for config in all_configs
             if config['ablated_param'] == subset
-        }
+        ]
         print(f"\nRunning subset: {subset} ({len(filtered_configs)} experiments)")
         all_configs = filtered_configs
     
     # Quick test mode - reduce timesteps
     if quick_test:
         print("\nQUICK TEST MODE: Reducing timesteps to 100,000")
-        for config in all_configs.values():
-            config['total_timesteps'] = 100000
+        for config in all_configs:
+            config['hyperparameters']['total_timesteps'] = 100000
+    else:
+        # Set default timesteps if not specified
+        for config in all_configs:
+            if 'total_timesteps' not in config['hyperparameters']:
+                config['hyperparameters']['total_timesteps'] = 2500000
     
     total = len(all_configs)
     completed = 0
     skipped = 0
     failed = 0
     
-    for i, (exp_id, config) in enumerate(all_configs.items(), 1):
+    for i, config in enumerate(all_configs, 1):
+        exp_id = config['name']
         print(f"\n{'='*60}")
         print(f"Experiment {i}/{total}: {exp_id}")
         print(f"Ablating: {config['ablated_param']} = {config['ablated_value']}")
@@ -189,7 +199,7 @@ def run_experiments(subset=None, quick_test=False):
         
         # Run experiment inline
         start_time = datetime.now()
-        success = run_experiment_inline(config, output_dir)
+        success = run_experiment_inline(config['hyperparameters'], output_dir, config)
         
         if success:
             completed += 1
