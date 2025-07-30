@@ -275,7 +275,7 @@ class APT_PPO:
             
             # Check if we should save a checkpoint (every 500k steps)
             if global_step % 500000 < self.num_envs:
-                checkpoint_dir = "checkpoints"
+                checkpoint_dir = "APT_checkpoints"
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
                 print(f"Saving checkpoint at {global_step} timesteps to {checkpoint_path}")
@@ -635,12 +635,27 @@ class APT_PPO:
         test_env = CustomObservationWrapper(test_env)
         pattern = []
         
+        # Default states that are excluded from observations
+        default_states = [
+            'atsamelocation',
+            'infovofrobot',
+            'inleftreachofrobot',
+            'inrightreachofrobot',
+            'inside',
+            'nextto',
+            'inlefthandofrobot',
+            'inrighthandofrobot',
+        ]
+        
         # Access the unwrapped environment's objs
         unwrapped_env = test_env.env if hasattr(test_env, 'env') else test_env
         for obj_type in unwrapped_env.objs.values():
             for obj in obj_type:
-                num_states = sum(1 for state in obj.states if not isinstance(obj.states[state], RelativeObjectState))
-                pattern.append(num_states - 3)
+                # Count only non-relative states that are NOT in default_states
+                num_states = sum(1 for state_name, state in obj.states.items() 
+                               if not isinstance(state, RelativeObjectState) 
+                               and state_name not in default_states)
+                pattern.append(num_states)
         test_env.close()
         return pattern
 
@@ -650,13 +665,23 @@ class APT_PPO:
         """
         num_steps = env_obs.shape[0]
         total_distance = torch.zeros((num_steps, num_steps), device=env_obs.device)
-        start_idx = 3
-        for obj_len in self.objstate_pattern:
-            state_start = start_idx + 5
-            slice_obs = env_obs[:, state_start: state_start + obj_len]
+        start_idx = 3  # Skip agent state (x, y, direction)
+        
+        for obj_state_count in self.objstate_pattern:
+            # Skip object position (2 values)
+            state_start = start_idx + 2
+            state_end = state_start + obj_state_count
+            
+            # Extract state slice for this object
+            slice_obs = env_obs[:, state_start:state_end]
+            
+            # Compute pairwise differences
             diff = (slice_obs.unsqueeze(1) != slice_obs.unsqueeze(0)).float()
             total_distance += diff.sum(dim=-1)
-            start_idx += obj_len + 5
+            
+            # Move to next object: position (2) + states (obj_state_count)
+            start_idx += 2 + obj_state_count
+            
         return total_distance
 
     def compute_reward(self, sim_matrix):

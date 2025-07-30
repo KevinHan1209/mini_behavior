@@ -336,8 +336,8 @@ class NovelD_PPO:
             b_int_advantages = int_advantages.reshape(-1)
             b_ext_returns = (b_ext_advantages + ext_values.reshape(-1))
             b_int_returns = (b_int_advantages + int_values.reshape(-1))
-            # Combine advantages using the intrinsic coefficient.
-            b_advantages = b_int_advantages * self.int_coef
+            # Combine advantages using the intrinsic and extrinsic coefficients.
+            b_advantages = b_int_advantages * self.int_coef + b_ext_advantages * self.ext_coef
 
             '''
             # Log the histogram of actions taken in this batch.
@@ -371,7 +371,7 @@ class NovelD_PPO:
                 print("-" * 50)
 
             if global_step % 500000 < self.num_envs:
-                checkpoint_dir = "checkpoints"
+                checkpoint_dir = "NovelD_checkpoints"
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
                 torch.save({
