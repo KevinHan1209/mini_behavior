@@ -1,0 +1,105 @@
+CHECKPOINT ACTIVITY ANALYSIS REPORT
+======================================================================
+
+Number of checkpoints analyzed: 5
+Checkpoints: [500000, 1000000, 1500000, 2000000, 2500000]
+
+Total activities across all checkpoints: 147,634
+
+PER-CHECKPOINT ANALYSIS
+----------------------------------------------------------------------
+
+Checkpoint 500,000:
+  Total activity: 28,357
+  Active pairs: 45/190
+  Max activity count: 2000
+  Mean activity: 149.25
+  Std activity: 473.50
+  Top 5 most active pairs:
+    - gear_0 / attached: 2000
+    - gear_1 / attached: 2000
+    - gear_2 / attached: 2000
+    - gear_3 / attached: 2000
+    - gear_4 / attached: 2000
+
+Checkpoint 1,000,000:
+  Total activity: 28,933
+  Active pairs: 51/190
+  Max activity count: 2000
+  Mean activity: 152.28
+  Std activity: 470.55
+  Top 5 most active pairs:
+    - gear_0 / attached: 2000
+    - gear_1 / attached: 2000
+    - gear_2 / attached: 2000
+    - gear_3 / attached: 2000
+    - gear_4 / attached: 2000
+
+Checkpoint 1,500,000:
+  Total activity: 29,931
+  Active pairs: 42/190
+  Max activity count: 2000
+  Mean activity: 157.53
+  Std activity: 476.83
+  Top 5 most active pairs:
+    - gear_1 / attached: 2000
+    - gear_2 / attached: 2000
+    - gear_3 / attached: 2000
+    - gear_4 / attached: 2000
+    - gear_5 / attached: 2000
+
+Checkpoint 2,000,000:
+  Total activity: 28,975
+  Active pairs: 45/190
+  Max activity count: 2000
+  Mean activity: 152.50
+  Std activity: 474.19
+  Top 5 most active pairs:
+    - gear_0 / attached: 2000
+    - gear_1 / attached: 2000
+    - gear_2 / attached: 2000
+    - gear_3 / attached: 2000
+    - gear_4 / attached: 2000
+
+Checkpoint 2,500,000:
+  Total activity: 31,438
+  Active pairs: 58/190
+  Max activity count: 2000
+  Mean activity: 165.46
+  Std activity: 472.67
+  Top 5 most active pairs:
+    - gear_0 / attached: 2000
+    - gear_1 / attached: 2000
+    - gear_2 / attached: 2000
+    - gear_3 / attached: 2000
+    - gear_4 / attached: 2000
+
+
+EXPLORATION COVERAGE
+----------------------------------------------------------------------
+Total possible object-state pairs: 190
+Pairs explored at least once: 81
+Exploration coverage: 42.6%
+
+Never explored pairs (109):
+  - broom_0 / hitter
+  - broom_set_0 / attached
+  - broom_set_0 / contains
+  - coin_0 / gothit
+  - coin_0 / hitter
+  - coin_0 / mouthed
+  - coin_0 / thrown
+  - coin_1 / gothit
+  - coin_1 / hitter
+  - coin_1 / mouthed
+  - coin_1 / thrown
+  - coin_2 / gothit
+  - coin_2 / hitter
+  - coin_2 / mouthed
+  - coin_2 / thrown
+  - coin_3 / gothit
+  - coin_3 / hitter
+  - coin_3 / mouthed
+  - coin_3 / thrown
+  - coin_4 / gothit
+  ... and 89 more

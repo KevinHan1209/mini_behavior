@@ -91,6 +91,11 @@ class APT_PPO:
         self.exploration_percentages = []
         self.test_actions = []
         self.exploration_state_occurrences = []
+        
+        # Create CSV file for intrinsic reward logging
+        self.intrinsic_rewards_csv = "intrinsic_rewards_log.csv"
+        with open(self.intrinsic_rewards_csv, 'w') as f:
+            f.write("global_step,update,avg_intrinsic_reward,std_intrinsic_reward\n")
 
         # Precompute object-state pattern for distance calculations
         self.objstate_pattern = self.get_object_state_pattern()
@@ -276,7 +281,11 @@ class APT_PPO:
                 print(f"Saving checkpoint at {global_step} timesteps to {checkpoint_path}")
                 torch.save({
                     'agent_state_dict': self.agent.state_dict(),
-                    'optimizer_state_dict': self.optimizer.state_dict()
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'global_step': global_step,
+                    'intrinsic_rewards_history': self.total_avg_curiosity_rewards.copy(),
+                    'last_intrinsic_reward': avg_intrinsic,
+                    'last_intrinsic_std': std_intrinsic
                 }, checkpoint_path)
                 
                 # Test the agent with 10 episodes of 200 steps each
@@ -301,6 +310,10 @@ class APT_PPO:
             avg_intrinsic = curiosity_rewards.mean().item()
             std_intrinsic = curiosity_rewards.std().item()
             self.total_avg_curiosity_rewards.append(avg_intrinsic)
+            
+            # Log intrinsic rewards to CSV
+            with open(self.intrinsic_rewards_csv, 'a') as f:
+                f.write(f"{global_step},{update},{avg_intrinsic},{std_intrinsic}\n")
             # wandb.log({
             #     "update": update,
             #     "global_step": global_step,
