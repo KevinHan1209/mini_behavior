@@ -371,7 +371,7 @@ class NovelD_PPO:
                 print("-" * 50)
 
             if global_step % 500000 < self.num_envs:
-                checkpoint_dir = "NovelD_checkpoints"
+                checkpoint_dir = "checkpoints"
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
                 torch.save({
@@ -558,6 +558,7 @@ class NovelD_PPO:
             done = False
             steps = 0
             frames = []
+            prev_flags = None
             
             # Re-check the environment structure after reset
             env_unwrapped = getattr(test_env, 'env', test_env)
@@ -585,8 +586,11 @@ class NovelD_PPO:
                     new_counts[:min_len] = total_activity_counts[:min_len]
                     total_activity_counts = new_counts
                 
-                # Add to total count: 1 for each flag that is currently True
-                total_activity_counts += current_flags
+                # Track state changes, not current values
+                if prev_flags is not None:
+                    differences = (current_flags != prev_flags).astype(int)
+                    total_activity_counts += differences
+                prev_flags = current_flags.copy()
 
                 try:
                     # Action is a multi-discrete tensor with 3 elements

@@ -334,7 +334,7 @@ class APT_PPO:
             
             # Check if we should save a checkpoint (every 500k steps)
             if global_step % 500000 < self.num_envs:
-                checkpoint_dir = "APT_checkpoints"
+                checkpoint_dir = "checkpoints"
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
                 print(f"Saving checkpoint at {global_step} timesteps to {checkpoint_path}")
@@ -350,7 +350,7 @@ class APT_PPO:
                 csv_dir = os.path.join(checkpoint_dir, "activity_logs")
                 os.makedirs(csv_dir, exist_ok=True)
                 checkpoint_csv_path = os.path.join(csv_dir, f"checkpoint_{global_step}_activity.csv")
-                self.test_agent(num_episodes=self.num_eps, max_steps_per_episode=self.test_steps,
+                self.test_agent(num_episodes=10, max_steps_per_episode=200,
                                 checkpoint_path=checkpoint_path, checkpoint_id=global_step, 
                                 save_episode=False, csv_path=checkpoint_csv_path)
 
