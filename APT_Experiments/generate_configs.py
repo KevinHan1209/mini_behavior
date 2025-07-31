@@ -7,14 +7,19 @@ import json
 import os
 from pathlib import Path
 
-# Default hyperparameters (as per hyperparameters.py)
+# Import from hyperparameters.py
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from hyperparameters import APT_HYPERPARAMETERS
+
+# Default hyperparameters (from hyperparameters.py)
 DEFAULTS = {
     # APT-specific
-    "k": 50,
-    "int_gamma": 0.99,
+    "k": APT_HYPERPARAMETERS["default"]["k"],
+    "int_gamma": APT_HYPERPARAMETERS["default"]["int_gamma"],
     
     # PPO core
-    "ent_coef": 0.01,
+    "ent_coef": APT_HYPERPARAMETERS["default"]["ent_coef"],
     
     # Other fixed parameters
     "learning_rate": 0.0001,
@@ -30,12 +35,8 @@ DEFAULTS = {
     "total_timesteps": 2500000
 }
 
-# Parameters to ablate and their test values
-ABLATIONS = {
-    "k": [10, 20, 50, 100, 200, 500],
-    "int_gamma": [0.9, 0.95, 0.98, 0.99],
-    "ent_coef": [0, 0.01, 0.02, 0.05, 0.1, 0.2]
-}
+# Parameters to ablate and their test values (from hyperparameters.py)
+ABLATIONS = APT_HYPERPARAMETERS["ablations"]
 
 def generate_experiment_configs():
     """Generate individual experiment configurations for each hyperparameter ablation."""

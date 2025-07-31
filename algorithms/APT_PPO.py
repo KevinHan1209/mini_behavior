@@ -4,7 +4,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import gym
-# import wandb
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    print("Warning: wandb not installed. Logging disabled.")
 from array2gif import write_gif
 import csv
 
@@ -89,7 +94,11 @@ class APT_PPO:
                  k=12,
                  c=1,
                  replay_buffer_size=1000000,
-                 batch_size=1024):
+                 batch_size=1024,
+                 wandb_project="APT_PPO",
+                 wandb_entity=None,
+                 wandb_run_name=None,
+                 use_wandb=True):
         self.env = env
         self.envs = env  # Alias for compatibility
         self.env_id = env_id
@@ -122,6 +131,10 @@ class APT_PPO:
         self.c = c
         self.replay_buffer_size = replay_buffer_size
         self.apt_batch_size = batch_size
+        self.wandb_project = wandb_project
+        self.wandb_entity = wandb_entity
+        self.wandb_run_name = wandb_run_name
+        self.use_wandb = use_wandb and WANDB_AVAILABLE
 
         self.batch_size = self.num_envs * self.num_steps
         self.minibatch_size = self.batch_size // self.num_minibatches
@@ -154,26 +167,46 @@ class APT_PPO:
         assert self.total_timesteps % self.batch_size == 0
 
         
-        # wandb.init(project="APT_PPO", config={
-        #     "env_id": self.env_id,
-        #     "Total timesteps": self.total_timesteps,
-        #     "Learning rate": self.learning_rate,
-        #     "Total updates": self.total_timesteps // self.batch_size,
-        #     "Parallel envs": self.num_envs,
-        #     "Steps per rollout": self.num_steps,
-        #     "Batch size": self.batch_size,
-        #     "PPO epochs": self.update_epochs,
-        #     "Minibatch size": self.minibatch_size,
-        #     "k parameter": self.k,
-        #     "Save frequency": self.save_freq
-        # })
+        # Initialize wandb if enabled
+        if self.use_wandb:
+            wandb.init(
+                project=self.wandb_project,
+                entity=self.wandb_entity,
+                name=self.wandb_run_name,
+                config={
+                    "algorithm": "APT_PPO",
+                    "env_id": self.env_id,
+                    "env_kwargs": self.env_kwargs,
+                    "total_timesteps": self.total_timesteps,
+                    "learning_rate": self.learning_rate,
+                    "num_envs": self.num_envs,
+                    "num_steps": self.num_steps,
+                    "batch_size": self.batch_size,
+                    "num_minibatches": self.num_minibatches,
+                    "update_epochs": self.update_epochs,
+                    "gamma": self.gamma,
+                    "gae_lambda": self.gae_lambda,
+                    "clip_coef": self.clip_coef,
+                    "ent_coef": self.ent_coef,
+                    "vf_coef": self.vf_coef,
+                    "max_grad_norm": self.max_grad_norm,
+                    "int_coef": self.int_coef,
+                    "ext_coef": self.ext_coef,
+                    "int_gamma": self.int_gamma,
+                    "k": self.k,
+                    "c": self.c,
+                    "replay_buffer_size": self.replay_buffer_size,
+                    "apt_batch_size": self.apt_batch_size
+                }
+            )
 
         # Use the single environment observation space if available.
         obs_shape = getattr(self.env, "single_observation_space", self.env.observation_space).shape
         # Agent expects (action_dims, obs_dim) as positional arguments
         self.agent = Agent(self.envs.single_action_space.nvec, obs_shape[0]).to(self.device)
         self.optimizer = optim.Adam(self.agent.parameters(), lr=self.learning_rate, eps=1e-5)
-        # wandb.watch(self.agent, self.optimizer)
+        if self.use_wandb:
+            wandb.watch(self.agent, log="all", log_freq=100)
 
         reward_rms = RunningMeanStd()
         
@@ -345,14 +378,22 @@ class APT_PPO:
                     'intrinsic_rewards_history': self.total_avg_curiosity_rewards.copy()
                 }, checkpoint_path)
                 
+                # Log checkpoint save to wandb
+                if self.use_wandb:
+                    wandb.log({
+                        "checkpoint_saved": 1,
+                        "checkpoint_step": global_step
+                    }, step=global_step)
+                
                 # Test the agent with 10 episodes of 200 steps each
                 # Create a separate CSV file for this checkpoint in a dedicated directory
                 csv_dir = os.path.join(checkpoint_dir, "activity_logs")
                 os.makedirs(csv_dir, exist_ok=True)
                 checkpoint_csv_path = os.path.join(csv_dir, f"checkpoint_{global_step}_activity.csv")
+                # Save gif at every checkpoint (every 500k steps)
                 self.test_agent(num_episodes=10, max_steps_per_episode=200,
                                 checkpoint_path=checkpoint_path, checkpoint_id=global_step, 
-                                save_episode=False, csv_path=checkpoint_csv_path)
+                                save_episode=True, csv_path=checkpoint_csv_path)
 
             # Compute intrinsic (curiosity) rewards via kNN on sampled batches
             curiosity_rewards = self.compute_batch_intrinsic_rewards(obs)
@@ -370,13 +411,31 @@ class APT_PPO:
             # Log intrinsic rewards to CSV
             with open(self.intrinsic_rewards_csv, 'a') as f:
                 f.write(f"{global_step},{update},{avg_intrinsic},{std_intrinsic}\n")
-            # wandb.log({
-            #     "update": update,
-            #     "global_step": global_step,
-            #     "avg_intrinsic_reward": avg_intrinsic,
-            #     "std_intrinsic_reward": std_intrinsic,
-            #     "learning_rate": self.optimizer.param_groups[0]["lr"]
-            # })
+            # Calculate action distribution statistics
+            action_probs = {}
+            for i in range(len(self.envs.single_action_space.nvec)):
+                action_counts = torch.bincount(actions[:, :, i].flatten().long(), minlength=self.envs.single_action_space.nvec[i])
+                action_probs[f"action_dist/dim_{i}"] = action_counts.float() / action_counts.sum()
+            
+            # Log main metrics
+            log_dict = {
+                "update": update,
+                "global_step": global_step,
+                "avg_intrinsic_reward": avg_intrinsic,
+                "std_intrinsic_reward": std_intrinsic,
+                "learning_rate": self.optimizer.param_groups[0]["lr"],
+                "extrinsic_reward": rewards.mean().item(),
+                "total_reward": (rewards.mean().item() * self.ext_coef + avg_intrinsic * self.int_coef),
+                "buffer_size": np.mean([buf['size'] for buf in self.replay_buffer.buffers])
+            }
+            
+            # Add action distribution to log dict
+            for key, probs in action_probs.items():
+                for action_idx, prob in enumerate(probs):
+                    log_dict[f"{key}/action_{action_idx}"] = prob.item()
+            
+            if self.use_wandb:
+                wandb.log(log_dict)
 
             # Compute advantages and returns
             ext_advantages = torch.zeros_like(rewards)
@@ -486,6 +545,24 @@ class APT_PPO:
                 print(f"Policy Loss: {avg_pg_loss:.4f} | Value Loss: {avg_v_loss:.4f} | Entropy: {avg_entropy:.4f}")
                 print(f"KL: {avg_approx_kl:.4f} | ClipFrac: {avg_clipfrac:.4f}")
                 print("-" * 50)
+                
+                # Log training metrics to wandb
+                if self.use_wandb:
+                    wandb.log({
+                        "policy_loss": avg_pg_loss,
+                        "value_loss": avg_v_loss,
+                        "entropy": avg_entropy,
+                        "approx_kl": avg_approx_kl,
+                        "clipfrac": avg_clipfrac,
+                        "grad_norm": grad_norm.item() if 'grad_norm' in locals() else 0.0,
+                        "ext_value_loss": ext_v_loss.item() if 'ext_v_loss' in locals() else 0.0,
+                        "int_value_loss": int_v_loss.item() if 'int_v_loss' in locals() else 0.0
+                    }, step=global_step)
+        
+        # Finish wandb run
+        if self.use_wandb:
+            wandb.finish()
+        print("\nTraining completed!")
 
     def test_agent(self, num_episodes, max_steps_per_episode, checkpoint_path, checkpoint_id, save_episode=False, csv_path=None):
         """
@@ -656,6 +733,12 @@ class APT_PPO:
                 gif_path = os.path.join(self.save_dir, f"episode_{ep+1}_checkpoint_{checkpoint_id}.gif")
                 os.makedirs(os.path.dirname(gif_path), exist_ok=True)
                 write_gif(np.array(frames), gif_path, fps=10)
+                
+                # Log gif to wandb
+                if self.use_wandb:
+                    wandb.log({
+                        f"test/episode_{ep+1}_gif": wandb.Video(gif_path, fps=10, format="gif")
+                    }, step=checkpoint_id)
 
         # Write aggregated activity counts to CSV if path provided
         if csv_path is not None:
@@ -675,10 +758,31 @@ class APT_PPO:
                 
             print(f"\nActivity counts saved to {csv_path}")
             print(f"Total state changes observed across {num_episodes} episodes:")
+            
+            # Log test results to wandb
+            test_metrics = {
+                "test/total_state_changes": int(total_activity_counts.sum()),
+                "test/unique_states_activated": int((total_activity_counts > 0).sum()),
+                "test/checkpoint_id": checkpoint_id
+            }
+            
             for idx, count in enumerate(total_activity_counts):
                 if count > 0:
                     mapping = flag_mapping[idx]
-                    print(f"  {mapping['object_type']}_{mapping['object_index']}_{mapping['state_name']}: {int(count)}")
+                    state_name = f"{mapping['object_type']}_{mapping['object_index']}_{mapping['state_name']}"
+                    print(f"  {state_name}: {int(count)}")
+                    test_metrics[f"test/state_changes/{state_name}"] = int(count)
+            
+            # Calculate exploration percentage
+            total_possible_states = len(total_activity_counts)
+            exploration_percentage = (total_activity_counts > 0).sum() / total_possible_states * 100
+            test_metrics["test/exploration_percentage"] = exploration_percentage
+            
+            # Log all test metrics
+            if self.use_wandb:
+                wandb.log(test_metrics, step=checkpoint_id)
+            
+            print(f"\nExploration percentage: {exploration_percentage:.1f}% ({(total_activity_counts > 0).sum()}/{total_possible_states} states)")
 
         test_env.close()
         self.test_actions.append(action_log)

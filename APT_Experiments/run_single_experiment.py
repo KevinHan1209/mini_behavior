@@ -94,7 +94,8 @@ def run_experiment(config, output_dir):
             k=config['k'],
             int_gamma=config['int_gamma'],
             int_coef=config.get('int_coef', 1.0),
-            ext_coef=config.get('ext_coef', 0.0)
+            ext_coef=config.get('ext_coef', 0.0),
+            use_wandb=False  # Disable wandb for experiment runs
         )
         
         # Print experiment info

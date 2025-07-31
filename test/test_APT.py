@@ -72,7 +72,8 @@ if __name__ == "__main__":
         num_eps=NUM_EPS,
         total_timesteps=TOTAL_TIMESTEPS,
         save_freq=SAVE_FREQUENCY,
-        test_steps=TEST_STEPS
+        test_steps=TEST_STEPS,
+        use_wandb=True  # Enable wandb logging for test runs
     )
     
     # Train the agent.
