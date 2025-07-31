@@ -14,6 +14,47 @@ from mini_behavior.utils.utils import RewardForwardFilter, RMS
 from env_wrapper import CustomObservationWrapper
 from gym.wrappers.normalize import RunningMeanStd
 from mini_behavior.utils.states_base import RelativeObjectState
+import random
+
+
+class ReplayBuffer:
+    """Replay buffer for storing observations per environment."""
+    def __init__(self, capacity, obs_dim, num_envs, device):
+        self.capacity = capacity
+        self.obs_dim = obs_dim
+        self.num_envs = num_envs
+        self.device = device
+        
+        # Separate buffer for each environment
+        self.buffers = [{
+            'obs': torch.zeros((capacity, obs_dim), device=device),
+            'position': 0,
+            'size': 0
+        } for _ in range(num_envs)]
+    
+    def add(self, obs, env_idx):
+        """Add observation to the buffer for a specific environment."""
+        buffer = self.buffers[env_idx]
+        buffer['obs'][buffer['position']] = obs
+        buffer['position'] = (buffer['position'] + 1) % self.capacity
+        buffer['size'] = min(buffer['size'] + 1, self.capacity)
+    
+    def sample(self, batch_size, env_idx):
+        """Sample a batch of observations from a specific environment's buffer."""
+        buffer = self.buffers[env_idx]
+        if buffer['size'] < batch_size:
+            # If buffer has fewer samples than batch_size, return all samples
+            return buffer['obs'][:buffer['size']]
+        
+        # Random sampling without replacement
+        indices = random.sample(range(buffer['size']), batch_size)
+        return buffer['obs'][indices]
+    
+    def reset_env(self, env_idx):
+        """Reset buffer for a specific environment (e.g., on episode reset)."""
+        buffer = self.buffers[env_idx]
+        buffer['position'] = 0
+        buffer['size'] = 0
 
 
 class APT_PPO:
@@ -45,8 +86,10 @@ class APT_PPO:
                  int_coef=1.0,
                  ext_coef=0.0,
                  int_gamma=0.99,
-                 k=50,
-                 c=1):
+                 k=12,
+                 c=1,
+                 replay_buffer_size=1000000,
+                 batch_size=1024):
         self.env = env
         self.envs = env  # Alias for compatibility
         self.env_id = env_id
@@ -77,6 +120,8 @@ class APT_PPO:
         self.int_gamma = int_gamma
         self.k = k
         self.c = c
+        self.replay_buffer_size = replay_buffer_size
+        self.apt_batch_size = batch_size
 
         self.batch_size = self.num_envs * self.num_steps
         self.minibatch_size = self.batch_size // self.num_minibatches
@@ -131,6 +176,14 @@ class APT_PPO:
         # wandb.watch(self.agent, self.optimizer)
 
         reward_rms = RunningMeanStd()
+        
+        # Initialize replay buffer
+        self.replay_buffer = ReplayBuffer(
+            capacity=self.replay_buffer_size,
+            obs_dim=obs_shape[0],
+            num_envs=self.num_envs,
+            device=self.device
+        )
 
         # Rollout storage
         actions = torch.zeros((self.num_steps, self.num_envs) + self.envs.single_action_space.shape, device=self.device)
@@ -267,6 +320,13 @@ class APT_PPO:
                 rewards[step] = torch.tensor(reward, device=self.device).view(-1)
                 next_obs = torch.Tensor(next_obs_np).to(self.device)
                 next_done = torch.Tensor(done).to(self.device)
+                
+                # Add observations to replay buffer and handle resets
+                for env_idx in range(self.num_envs):
+                    self.replay_buffer.add(next_obs[env_idx], env_idx)
+                    if done[env_idx]:
+                        # Optional: could reset buffer on episode end, but URLB likely doesn't
+                        pass
 
             # Removed memory-consuming operations that were not being used
             # self.total_actions.append(actions.clone())
@@ -294,9 +354,8 @@ class APT_PPO:
                                 checkpoint_path=checkpoint_path, checkpoint_id=global_step, 
                                 save_episode=False, csv_path=checkpoint_csv_path)
 
-            # Compute intrinsic (curiosity) rewards via kNN on state representations
-            sim_matrix = self._compute_similarity_matrix(obs)
-            curiosity_rewards = self.compute_reward(sim_matrix)
+            # Compute intrinsic (curiosity) rewards via kNN on sampled batches
+            curiosity_rewards = self.compute_batch_intrinsic_rewards(obs)
 
             # Normalize intrinsic rewards using running mean and std (computed from variance)
             reward_rms.update(curiosity_rewards.cpu().numpy())
@@ -628,8 +687,13 @@ class APT_PPO:
         """
         Precompute the object state pattern for distance calculations.
         """
-        test_env = gym.make(self.env_id, **self.env_kwargs)
-        test_env = CustomObservationWrapper(test_env)
+        if hasattr(self.env, 'envs') and len(self.env.envs) > 0:
+            # Use existing environment from vectorized env
+            test_env = self.env.envs[0]
+        else:
+            # Fallback to creating new env
+            test_env = gym.make(self.env_id, **self.env_kwargs)
+            test_env = CustomObservationWrapper(test_env)
         pattern = []
         
         # Default states that are excluded from observations
@@ -653,7 +717,10 @@ class APT_PPO:
                                if not isinstance(state, RelativeObjectState) 
                                and state_name not in default_states)
                 pattern.append(num_states)
-        test_env.close()
+        
+        # Only close if we created a new env
+        if not (hasattr(self.env, 'envs') and len(self.env.envs) > 0):
+            test_env.close()
         return pattern
 
     def compute_distance_matrix(self, env_obs):
@@ -699,6 +766,80 @@ class APT_PPO:
             else:
                 rewards[:, env] = 0.0
         return rewards
+    
+    def compute_batch_intrinsic_rewards(self, rollout_obs):
+        """
+        Compute intrinsic rewards using k-NN on batches sampled from replay buffer.
+        For each observation in the rollout, sample a batch from replay buffer and compute k-NN distance.
+        """
+        num_steps, num_envs, _ = rollout_obs.shape
+        curiosity_rewards = torch.zeros((num_steps, num_envs), device=self.device)
+        
+        for env_idx in range(num_envs):
+            env_rollout_obs = rollout_obs[:, env_idx, :]  # [num_steps, obs_dim]
+            
+            # Sample batch from replay buffer for this environment
+            batch_obs = self.replay_buffer.sample(self.apt_batch_size, env_idx)
+            
+            if batch_obs.shape[0] < self.k + 1:
+                # Not enough samples in buffer yet, use zero rewards
+                curiosity_rewards[:, env_idx] = 0.0
+                continue
+            
+            # Compute distances between each rollout observation and the batch
+            for step in range(num_steps):
+                query_obs = env_rollout_obs[step].unsqueeze(0)  # [1, obs_dim]
+                
+                # Compute distances to all batch observations
+                distances = self.compute_obs_distance(query_obs, batch_obs)  # [batch_size]
+                
+                # Find k nearest neighbors (excluding exact matches if any)
+                k_use = min(self.k, batch_obs.shape[0])
+                k_nearest, _ = torch.topk(distances, k=k_use, largest=False)
+                avg_distance = k_nearest.mean()
+                
+                # Intrinsic reward is log(c + avg_distance)
+                curiosity_rewards[step, env_idx] = torch.log(self.c + avg_distance)
+        
+        return curiosity_rewards
+    
+    def compute_obs_distance(self, query_obs, batch_obs):
+        """
+        Compute Hamming-like distance between query observation and batch observations.
+        Only considers object states, not positions.
+        """
+        # Skip agent state (first 3 values) and object positions
+        query_states = self.extract_object_states(query_obs)
+        batch_states = self.extract_object_states(batch_obs)
+        
+        # Compute Hamming distance
+        distances = (query_states != batch_states).float().sum(dim=-1)
+        return distances
+    
+    def extract_object_states(self, obs):
+        """
+        Extract only the object state flags from observations, skipping positions.
+        """
+        if obs.dim() == 1:
+            obs = obs.unsqueeze(0)
+        
+        states = []
+        start_idx = 3  # Skip agent state
+        
+        for obj_state_count in self.objstate_pattern:
+            # Skip object position (2 values)
+            state_start = start_idx + 2
+            state_end = state_start + obj_state_count
+            
+            if state_end <= obs.shape[1]:
+                states.append(obs[:, state_start:state_end])
+            
+            start_idx += 2 + obj_state_count
+        
+        if states:
+            return torch.cat(states, dim=1)
+        else:
+            return torch.zeros((obs.shape[0], 0), device=obs.device)
 
     def _compute_similarity_matrix(self, obs):
         """
