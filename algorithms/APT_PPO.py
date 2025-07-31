@@ -131,7 +131,6 @@ class APT_PPO:
         # wandb.watch(self.agent, self.optimizer)
 
         reward_rms = RunningMeanStd()
-        discounted_reward = RewardForwardFilter(self.int_gamma)
 
         # Rollout storage
         actions = torch.zeros((self.num_steps, self.num_envs) + self.envs.single_action_space.shape, device=self.device)
@@ -283,9 +282,7 @@ class APT_PPO:
                     'agent_state_dict': self.agent.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     'global_step': global_step,
-                    'intrinsic_rewards_history': self.total_avg_curiosity_rewards.copy(),
-                    'last_intrinsic_reward': avg_intrinsic,
-                    'last_intrinsic_std': std_intrinsic
+                    'intrinsic_rewards_history': self.total_avg_curiosity_rewards.copy()
                 }, checkpoint_path)
                 
                 # Test the agent with 10 episodes of 200 steps each
