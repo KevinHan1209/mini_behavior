@@ -16,11 +16,20 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch
 import gym
 from algorithms.APT_PPO import APT_PPO
+from stable_baselines3.common.vec_env import DummyVecEnv
+from env_wrapper import CustomObservationWrapper
+from mini_behavior.envs.multitoy import MultiToyEnv
 
 def create_env():
-    """Create the MiniGrid environment."""
-    env = gym.make('MiniGrid-MultiToy-8x8-N2-v0', room_size=8, max_steps=1000)
-    return env
+    """Create the MultiToy environment with proper wrapper."""
+    def make_env():
+        env = MultiToyEnv(room_size=8)
+        env = CustomObservationWrapper(env)
+        return env
+    
+    # Create vectorized environment for APT
+    vec_env = DummyVecEnv([make_env for _ in range(8)])  # 8 parallel environments
+    return vec_env
 
 def run_experiment(config, output_dir):
     """Run a single experiment with the given configuration."""
@@ -65,33 +74,38 @@ def run_experiment(config, output_dir):
         
         # Create APT_PPO agent with experiment hyperparameters
         agent = APT_PPO(
-            env,
-            k=config['k'],
-            int_gamma=config['int_gamma'],
+            env=env,
+            env_id="MultiToyEnv",
+            env_kwargs={"room_size": 8},
+            save_dir=str(exp_dir),
+            device="cuda" if torch.cuda.is_available() else "cpu",
+            total_timesteps=config.get('total_timesteps', 2500000),
             learning_rate=config['learning_rate'],
-            n_steps=config['n_steps'],
-            batch_size=config['batch_size'],
-            n_epochs=config['n_epochs'],
+            num_envs=8,
+            num_steps=config.get('n_steps', 125),
             gamma=config['gamma'],
             gae_lambda=config['gae_lambda'],
-            clip_range=config['clip_range'],
+            num_minibatches=4,
+            update_epochs=config.get('n_epochs', 4),
+            clip_coef=config.get('clip_range', 0.2),
             ent_coef=config['ent_coef'],
             vf_coef=config['vf_coef'],
             max_grad_norm=config['max_grad_norm'],
-            target_kl=None,
-            verbose=1
+            k=config['k'],
+            int_gamma=config['int_gamma'],
+            int_coef=config.get('int_coef', 1.0),
+            ext_coef=config.get('ext_coef', 0.0)
         )
         
         # Print experiment info
         print(f"\\nStarting experiment: {config['experiment_id']}")
         print(f"Ablated parameter: {config['ablated_param']} = {config['ablated_value']}")
-        print(f"Total timesteps: {config['total_timesteps']}")
+        print(f"Total timesteps: {config.get('total_timesteps', 2500000)}")
         
         # Train the agent
-        agent.learn(total_timesteps=config['total_timesteps'])
+        agent.train()
         
-        # Save final model
-        agent.save(str(output_dir / "final_model"))
+        # Note: APT_PPO saves checkpoints automatically during training
         
         # Create success marker
         with open(output_dir / "SUCCESS", 'w') as f:
