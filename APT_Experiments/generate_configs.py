@@ -45,8 +45,16 @@ def generate_experiment_configs():
     configs = []
     exp_id = 0
     
-    # For each parameter to ablate
-    for param_name, test_values in ABLATIONS.items():
+    # Priority order: k, aggregation_method, apt_batch_size first
+    priority_params = ['k', 'aggregation_method', 'apt_batch_size']
+    other_params = [p for p in ABLATIONS.keys() if p not in priority_params]
+    
+    # Generate configs in priority order
+    for param_name in priority_params + other_params:
+        if param_name not in ABLATIONS:
+            continue
+            
+        test_values = ABLATIONS[param_name]
         # For each test value of this parameter
         for value in test_values:
             # Create config with defaults
