@@ -25,7 +25,7 @@ DEFAULTS = {
     
     # Other fixed parameters
     "learning_rate": 0.0001,
-    "n_steps": 128,
+    "n_steps": 125,  # PPO rollout length
     "batch_size": 256,
     "n_epochs": 4,
     "gamma": 0.99,
@@ -33,8 +33,8 @@ DEFAULTS = {
     "clip_range": 0.2,
     "vf_coef": 0.5,
     "max_grad_norm": 0.5,
-    "num_envs": 16,
-    "total_timesteps": 2500000
+    "num_envs": 8,  # Must match run_single_experiment.py
+    "total_timesteps": 2500000  # Will be divisible by batch_size (8 envs * 125 steps = 1000)
 }
 
 # Parameters to ablate and their test values (from hyperparameters.py)
