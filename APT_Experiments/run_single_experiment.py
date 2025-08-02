@@ -75,10 +75,21 @@ def run_experiment(config, output_dir):
         # Create environment
         env = create_env()
         
+        # Register the environment if needed
+        from mini_behavior.register import register
+        env_id = 'MiniGrid-MultiToy-8x8-N2-v0'
+        try:
+            gym.make(env_id)
+        except:
+            register(
+                id=env_id,
+                entry_point='mini_behavior.envs.multitoy:MultiToyEnv',
+            )
+        
         # Create APT_PPO agent with experiment hyperparameters
         agent = APT_PPO(
             env=env,
-            env_id="MultiToyEnv",
+            env_id=env_id,
             env_kwargs={"room_size": 8},
             save_dir=str(output_dir),
             device="cuda" if torch.cuda.is_available() else "cpu",
