@@ -17,6 +17,8 @@ DEFAULTS = {
     # APT-specific
     "k": APT_HYPERPARAMETERS["default"]["k"],
     "int_gamma": APT_HYPERPARAMETERS["default"]["int_gamma"],
+    "aggregation_method": APT_HYPERPARAMETERS["default"]["aggregation_method"],
+    "apt_batch_size": APT_HYPERPARAMETERS["default"]["apt_batch_size"],
     
     # PPO core
     "ent_coef": APT_HYPERPARAMETERS["default"]["ent_coef"],

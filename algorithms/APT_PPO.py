@@ -98,7 +98,8 @@ class APT_PPO:
                  wandb_project="APT_PPO",
                  wandb_entity=None,
                  wandb_run_name=None,
-                 use_wandb=True):
+                 use_wandb=True,
+                 aggregation_method='mean'):
         self.env = env
         self.envs = env  # Alias for compatibility
         self.env_id = env_id
@@ -135,6 +136,7 @@ class APT_PPO:
         self.wandb_entity = wandb_entity
         self.wandb_run_name = wandb_run_name
         self.use_wandb = use_wandb and WANDB_AVAILABLE
+        self.aggregation_method = aggregation_method
 
         self.batch_size = self.num_envs * self.num_steps
         self.minibatch_size = self.batch_size // self.num_minibatches
@@ -196,7 +198,8 @@ class APT_PPO:
                     "k": self.k,
                     "c": self.c,
                     "replay_buffer_size": self.replay_buffer_size,
-                    "apt_batch_size": self.apt_batch_size
+                    "apt_batch_size": self.apt_batch_size,
+                    "aggregation_method": self.aggregation_method
                 }
             )
 
@@ -854,7 +857,9 @@ class APT_PPO:
 
     def compute_reward(self, sim_matrix):
         """
-        Compute intrinsic rewards as log(c + average kNN distance).
+        Compute intrinsic rewards using either mean or sum aggregation:
+        - mean: log(c + average kNN distance)
+        - sum: sum(log(c + kNN distances))
         """
         num_steps, _, num_envs = sim_matrix.shape
         rewards = torch.zeros((num_steps, num_envs), device=sim_matrix.device)
@@ -865,8 +870,17 @@ class APT_PPO:
             k_use = min(self.k, num_steps - 1)
             if k_use > 0:
                 k_nearest, _ = torch.topk(env_dist, k=k_use, largest=False)
-                avg_distance = k_nearest.mean(dim=1)
-                rewards[:, env] = torch.log(self.c + avg_distance)
+                
+                if self.aggregation_method == 'mean':
+                    # Original method: log(c + mean(distances))
+                    avg_distance = k_nearest.mean(dim=1)
+                    rewards[:, env] = torch.log(self.c + avg_distance)
+                elif self.aggregation_method == 'sum':
+                    # New method: sum(log(c + distances))
+                    log_distances = torch.log(self.c + k_nearest)
+                    rewards[:, env] = log_distances.sum(dim=1)
+                else:
+                    raise ValueError(f"Unknown aggregation method: {self.aggregation_method}")
             else:
                 rewards[:, env] = 0.0
         return rewards

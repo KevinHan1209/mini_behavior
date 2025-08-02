@@ -77,7 +77,7 @@ def run_experiment(config, output_dir):
             env=env,
             env_id="MultiToyEnv",
             env_kwargs={"room_size": 8},
-            save_dir=str(exp_dir),
+            save_dir=str(output_dir),
             device="cuda" if torch.cuda.is_available() else "cpu",
             total_timesteps=config.get('total_timesteps', 2500000),
             learning_rate=config['learning_rate'],
@@ -95,6 +95,8 @@ def run_experiment(config, output_dir):
             int_gamma=config['int_gamma'],
             int_coef=config.get('int_coef', 1.0),
             ext_coef=config.get('ext_coef', 0.0),
+            aggregation_method=config.get('aggregation_method', 'mean'),
+            batch_size=config.get('apt_batch_size', 1024),  # APT batch size for k-NN
             use_wandb=False  # Disable wandb for experiment runs
         )
         
