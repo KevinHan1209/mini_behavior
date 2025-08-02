@@ -73,6 +73,7 @@ if __name__ == "__main__":
         total_timesteps=TOTAL_TIMESTEPS,
         save_freq=SAVE_FREQUENCY,
         test_steps=TEST_STEPS,
+        wandb_run_name="APT_test_run",  # Descriptive name for test runs
         use_wandb=True  # Enable wandb logging for test runs
     )
     

@@ -97,6 +97,7 @@ def run_experiment(config, output_dir):
             ext_coef=config.get('ext_coef', 0.0),
             aggregation_method=config.get('aggregation_method', 'mean'),
             batch_size=config.get('apt_batch_size', 1024),  # APT batch size for k-NN
+            wandb_run_name=config['experiment_id'],  # Use experiment ID as wandb run name
             use_wandb=False  # Disable wandb for experiment runs
         )
         
