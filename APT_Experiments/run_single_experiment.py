@@ -16,19 +16,22 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch
 import gym
 from algorithms.APT_PPO import APT_PPO
-from stable_baselines3.common.vec_env import DummyVecEnv
 from env_wrapper import CustomObservationWrapper
 from mini_behavior.envs.multitoy import MultiToyEnv
 
-def create_env():
-    """Create the MultiToy environment with proper wrapper."""
-    def make_env():
+def make_env(idx):
+    """Create a single environment instance."""
+    def thunk():
         env = MultiToyEnv(room_size=8)
         env = CustomObservationWrapper(env)
+        env.seed(1 + idx)  # Seed each environment differently
         return env
-    
-    # Create vectorized environment for APT
-    vec_env = DummyVecEnv([make_env for _ in range(8)])  # 8 parallel environments
+    return thunk
+
+def create_env():
+    """Create the MultiToy environment with proper wrapper."""
+    # Use SyncVectorEnv like test_APT.py does
+    vec_env = gym.vector.SyncVectorEnv([make_env(i) for i in range(8)])  # 8 parallel environments
     return vec_env
 
 def run_experiment(config, output_dir):
