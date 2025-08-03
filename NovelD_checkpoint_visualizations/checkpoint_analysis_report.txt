@@ -4,87 +4,90 @@ CHECKPOINT ACTIVITY ANALYSIS REPORT
 Number of checkpoints analyzed: 5
 Checkpoints: [500000, 1000000, 1500000, 2000000, 2500000]
 
-Total activities across all checkpoints: 147,634
+Total activities across all checkpoints: 547
 
 PER-CHECKPOINT ANALYSIS
 ----------------------------------------------------------------------
 
 Checkpoint 500,000:
-  Total activity: 28,357
-  Active pairs: 45/190
-  Max activity count: 2000
-  Mean activity: 149.25
-  Std activity: 473.50
+  Total activity: 99
+  Active pairs: 46/190
+  Max activity count: 20
+  Mean activity: 0.52
+  Std activity: 1.95
   Top 5 most active pairs:
-    - gear_0 / attached: 2000
-    - gear_1 / attached: 2000
-    - gear_2 / attached: 2000
-    - gear_3 / attached: 2000
-    - gear_4 / attached: 2000
+    - rattle_0 / noise: 20
+    - bucket_toy_0 / noise: 16
+    - music_toy_0 / noise: 4
+    - rattle_0 / gothit: 3
+    - rattle_0 / mouthed: 3
 
 Checkpoint 1,000,000:
-  Total activity: 28,933
-  Active pairs: 51/190
-  Max activity count: 2000
-  Mean activity: 152.28
-  Std activity: 470.55
+  Total activity: 140
+  Active pairs: 38/190
+  Max activity count: 56
+  Mean activity: 0.74
+  Std activity: 4.30
   Top 5 most active pairs:
-    - gear_0 / attached: 2000
-    - gear_1 / attached: 2000
-    - gear_2 / attached: 2000
-    - gear_3 / attached: 2000
-    - gear_4 / attached: 2000
+    - rattle_0 / noise: 56
+    - music_toy_0 / noise: 16
+    - rattle_0 / gothit: 6
+    - farm_toy_0 / popup: 6
+    - rattle_0 / mouthed: 5
 
 Checkpoint 1,500,000:
-  Total activity: 29,931
-  Active pairs: 42/190
-  Max activity count: 2000
-  Mean activity: 157.53
-  Std activity: 476.83
+  Total activity: 94
+  Active pairs: 32/190
+  Max activity count: 16
+  Mean activity: 0.49
+  Std activity: 1.71
   Top 5 most active pairs:
-    - gear_1 / attached: 2000
-    - gear_2 / attached: 2000
-    - gear_3 / attached: 2000
-    - gear_4 / attached: 2000
-    - gear_5 / attached: 2000
+    - rattle_0 / noise: 16
+    - bucket_toy_0 / noise: 10
+    - farm_toy_0 / popup: 8
+    - rattle_0 / gothit: 6
+    - music_toy_0 / noise: 6
 
 Checkpoint 2,000,000:
-  Total activity: 28,975
-  Active pairs: 45/190
-  Max activity count: 2000
-  Mean activity: 152.50
-  Std activity: 474.19
+  Total activity: 103
+  Active pairs: 31/190
+  Max activity count: 32
+  Mean activity: 0.54
+  Std activity: 2.60
   Top 5 most active pairs:
-    - gear_0 / attached: 2000
-    - gear_1 / attached: 2000
-    - gear_2 / attached: 2000
-    - gear_3 / attached: 2000
-    - gear_4 / attached: 2000
+    - rattle_0 / noise: 32
+    - music_toy_0 / noise: 8
+    - farm_toy_0 / popup: 7
+    - ring_toy_0 / gothit: 7
+    - rattle_0 / gothit: 6
 
 Checkpoint 2,500,000:
-  Total activity: 31,438
-  Active pairs: 58/190
-  Max activity count: 2000
-  Mean activity: 165.46
-  Std activity: 472.67
+  Total activity: 111
+  Active pairs: 37/190
+  Max activity count: 38
+  Mean activity: 0.58
+  Std activity: 2.92
   Top 5 most active pairs:
-    - gear_0 / attached: 2000
-    - gear_1 / attached: 2000
-    - gear_2 / attached: 2000
-    - gear_3 / attached: 2000
-    - gear_4 / attached: 2000
+    - rattle_0 / noise: 38
+    - rattle_0 / gothit: 6
+    - ring_toy_0 / gothit: 6
+    - bucket_toy_0 / noise: 6
+    - rattle_0 / thrown: 5
 
 
 EXPLORATION COVERAGE
 ----------------------------------------------------------------------
 Total possible object-state pairs: 190
-Pairs explored at least once: 81
-Exploration coverage: 42.6%
+Pairs explored at least once: 68
+Exploration coverage: 35.8%
 
-Never explored pairs (109):
+Never explored pairs (122):
+  - alligator_busy_box_0 / gothit
+  - alligator_busy_box_0 / toggled
+  - beach_ball_0 / hitter
   - broom_0 / hitter
-  - broom_set_0 / attached
-  - broom_set_0 / contains
+  - bucket_toy_0 / contains
+  - bucket_toy_0 / hitter
   - coin_0 / gothit
   - coin_0 / hitter
   - coin_0 / mouthed
@@ -99,7 +102,4 @@ Never explored pairs (109):
   - coin_2 / thrown
   - coin_3 / gothit
   - coin_3 / hitter
-  - coin_3 / mouthed
-  - coin_3 / thrown
-  - coin_4 / gothit
-  ... and 89 more
+  ... and 102 more

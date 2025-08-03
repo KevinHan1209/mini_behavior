@@ -99,7 +99,7 @@ class RoomGrid(MiniBehaviorEnv):
         agent_view_size=7,
         highlight=True,
         init_dict=None,
-        dense_reward=False,
+        extrinsic_rewards=None,
         agent_pos=None
     ):
         if init_dict:
@@ -139,7 +139,7 @@ class RoomGrid(MiniBehaviorEnv):
             seed=seed,
             agent_view_size=agent_view_size,
             highlight=highlight,
-            dense_reward=dense_reward,
+            extrinsic_rewards=extrinsic_rewards,
         )
     
     def add_walls(self, width, height):

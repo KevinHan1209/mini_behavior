@@ -1,0 +1,19 @@
+{
+  "k": 50,
+  "int_gamma": 0.99,
+  "ent_coef": 0.01,
+  "learning_rate": 0.0001,
+  "n_steps": 128,
+  "batch_size": 256,
+  "n_epochs": 4,
+  "gamma": 0.99,
+  "gae_lambda": 0.95,
+  "clip_range": 0.2,
+  "vf_coef": 0.5,
+  "max_grad_norm": 0.5,
+  "num_envs": 16,
+  "total_timesteps": 2500000,
+  "experiment_id": "exp_009_int_gamma_0_99",
+  "ablated_param": "int_gamma",
+  "ablated_value": 0.99
+}

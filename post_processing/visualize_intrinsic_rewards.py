@@ -59,6 +59,8 @@ def analyze_intrinsic_rewards(df=None, checkpoint_df=None):
     print("\n" + "="*70)
     print("INTRINSIC REWARD ANALYSIS")
     print("="*70)
+    print("\nNOTE: Rewards are normalized (mean-centered) for training stability.")
+    print("Negative values indicate below-average novelty, not 'bad' performance.")
     
     if df is not None and not df.empty:
         print("\nFrom CSV Log:")
@@ -97,12 +99,16 @@ def analyze_intrinsic_rewards(df=None, checkpoint_df=None):
         print("\n\nFrom Checkpoints:")
         print(f"Total checkpoints: {len(checkpoint_df)}")
         
-        print("\nCheckpoint Summary:")
-        print(f"{'Checkpoint':<25} {'Step':<10} {'Last Reward':<12} {'History Mean':<12}")
-        print("-"*70)
+        # Sort by global step for proper ordering
+        checkpoint_df = checkpoint_df.sort_values('global_step')
+        
+        # Calculate additional metrics
+        print("\nDetailed Checkpoint Analysis:")
+        print(f"{'Checkpoint':<20} {'Step':<10} {'Last Reward':<12} {'History Mean':<12} {'History Std':<12} {'Min':<10} {'Max':<10}")
+        print("-"*104)
         
         for _, row in checkpoint_df.iterrows():
-            print(f"{row['checkpoint']:<25} {row['global_step']:<10,} ", end="")
+            print(f"{row['checkpoint']:<20} {row['global_step']:<10,} ", end="")
             
             if pd.notna(row['last_intrinsic_reward']):
                 print(f"{row['last_intrinsic_reward']:<12.4f} ", end="")
@@ -110,9 +116,60 @@ def analyze_intrinsic_rewards(df=None, checkpoint_df=None):
                 print(f"{'N/A':<12} ", end="")
                 
             if pd.notna(row['history_mean']):
-                print(f"{row['history_mean']:<12.4f}")
+                print(f"{row['history_mean']:<12.4f} ", end="")
+            else:
+                print(f"{'N/A':<12} ", end="")
+                
+            if pd.notna(row['history_std']):
+                print(f"{row['history_std']:<12.4f} ", end="")
+            else:
+                print(f"{'N/A':<12} ", end="")
+                
+            if pd.notna(row['history_min']):
+                print(f"{row['history_min']:<10.4f} ", end="")
+            else:
+                print(f"{'N/A':<10} ", end="")
+                
+            if pd.notna(row['history_max']):
+                print(f"{row['history_max']:<10.4f}")
             else:
                 print("N/A")
+        
+        # Trend analysis
+        print("\nTrend Analysis Across Checkpoints:")
+        last_rewards = checkpoint_df['last_intrinsic_reward'].dropna()
+        history_means = checkpoint_df['history_mean'].dropna()
+        
+        if len(last_rewards) > 1:
+            # Calculate trend
+            first_last = last_rewards.iloc[0]
+            final_last = last_rewards.iloc[-1]
+            print(f"Last reward trend: {first_last:.4f} → {final_last:.4f} (Δ = {final_last - first_last:+.4f})")
+            
+            # Check if rewards are recovering
+            mid_point = len(last_rewards) // 2
+            mid_last = last_rewards.iloc[mid_point]
+            
+            if first_last > mid_last and final_last > mid_last:
+                print("Pattern: Initial exploration → Exploitation → Recovery (U-shaped curve)")
+            elif first_last > mid_last > final_last:
+                print("Pattern: Declining exploration (agent may be converging)")
+            elif first_last < mid_last < final_last:
+                print("Pattern: Increasing exploration (agent discovering new areas)")
+            else:
+                print("Pattern: Irregular (non-monotonic exploration)")
+        
+        if len(history_means) > 1:
+            first_mean = history_means.iloc[0]
+            final_mean = history_means.iloc[-1]
+            print(f"History mean trend: {first_mean:.4f} → {final_mean:.4f} (Δ = {final_mean - first_mean:+.4f})")
+        
+        # Visualize trend
+        if len(last_rewards) > 0:
+            print("\nIntrinsic Reward Trend (Last Rewards):")
+            values = last_rewards.values
+            steps = checkpoint_df.loc[last_rewards.index, 'global_step'].values
+            plot_ascii_trend_with_labels(values, steps)
 
 def plot_ascii_trend(values, width=70, height=20):
     """Create a simple ASCII plot of the trend."""
@@ -147,6 +204,48 @@ def plot_ascii_trend(values, width=70, height=20):
     print(f"  {min_val:.4f} |" + "─" * len(values))
     print(f"         0" + " " * (len(values) - 10) + f"{len(values)}")
     print("           Update Number →")
+
+def plot_ascii_trend_with_labels(values, labels, width=70, height=20):
+    """Create an ASCII plot with step labels."""
+    if len(values) == 0:
+        return
+    
+    # Ensure we have the same number of values and labels
+    if len(values) != len(labels):
+        return plot_ascii_trend(values, width, height)
+    
+    min_val = np.min(values)
+    max_val = np.max(values)
+    range_val = max_val - min_val
+    
+    if range_val == 0:
+        range_val = 1
+    
+    # Normalize to height
+    normalized = ((values - min_val) / range_val * (height - 1)).astype(int)
+    
+    # Create plot
+    plot = [[' ' for _ in range(len(values))] for _ in range(height)]
+    
+    for i, val in enumerate(normalized):
+        plot[height - 1 - val][i] = '█'
+    
+    # Add axis with values
+    print(f"  {max_val:>8.4f} |")
+    for row in plot:
+        print("            |" + '  '.join(row))
+    print(f"  {min_val:>8.4f} |" + "─" * (len(values) * 2))
+    
+    # Add step labels
+    print("            ", end="")
+    for i, label in enumerate(labels):
+        if i == 0:
+            print(f"{label/1000:.0f}k", end="")
+        elif i == len(labels) - 1:
+            print(f"{' ' * (2 * (len(labels) - i - 1))}{label/1000:.0f}k", end="")
+        else:
+            continue
+    print("\n            Steps (in thousands) →")
 
 def main():
     parser = argparse.ArgumentParser(description='Analyze intrinsic rewards from APT training')

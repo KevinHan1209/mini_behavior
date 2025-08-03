@@ -91,7 +91,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         agent_view_size=7,
         highlight=True,
         tile_size=TILE_PIXELS,
-        dense_reward=False,
+        extrinsic_rewards=None,
         kick_length = 1
     ):
         self.test_env = test_env
@@ -106,7 +106,7 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         self.highlight = highlight
         self.tile_size = tile_size
-        self.dense_reward = dense_reward
+        self.extrinsic_rewards = extrinsic_rewards if extrinsic_rewards is not None else {}
         self.kick_length = kick_length
 
         # Initialize the RNG
@@ -181,6 +181,9 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         self.carrying = {key: set() for key in ['left', 'right']}
         self.currently_climbing = False
+        
+        # Track rewards accumulated in current step
+        self.step_reward = 0
 
     @property
     def left_vec(self):
@@ -283,6 +286,7 @@ class MiniBehaviorEnv(MiniGridEnv):
             obj.reset()
 
         self.reward = 0
+        self.step_reward = 0
 
         # Generate a new random grid at the start of each episode
         # To keep the same grid for each episode, call env.seed() with
@@ -312,9 +316,6 @@ class MiniBehaviorEnv(MiniGridEnv):
         # Step count since episode start
         self.step_count = 0
         self.episode += 1
-
-        # For keeping track of dense reward
-        self.previous_progress = self.get_progress()
 
         # Return first observation
         if self.use_full_obs:
@@ -621,7 +622,9 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.last_action = action
         self.step_count += 1
         self.action_done = True
-
+        
+        # Track noise states before actions
+        prev_noise_states = self.get_noise_states()
 
         # Parse action components
         manip_action_left, manip_action_right, locomotion_action = action
@@ -663,6 +666,7 @@ class MiniBehaviorEnv(MiniGridEnv):
 
                 action_class = ACTION_FUNC_MAPPING[action_name]
                 self.action_done = False
+                prev_action_done = False  # Track if action succeeds
 
                 # Pickup object
                 if action_name == "pickup":
@@ -673,6 +677,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                             if is_obj(obj) and action_class(self).can(obj, arm):
                                 action_class(self).do(obj, arm)
                                 self.action_done = True
+                                self.award_action_reward(action_name)
                                 break
                         if self.action_done:
                             break
@@ -686,6 +691,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 if int(0) in drop_dim:
                                     action_class(self).do(obj, int(0), arm, pos)
                                     self.action_done = True
+                                    self.award_action_reward(action_name)
                                     was_dropped = True
                                     break
                         if self.action_done:
@@ -696,6 +702,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                         if action_class(self).can(obj, arm, fwd_pos):
                             action_class(self).do(obj, int(0), arm, fwd_pos)
                             self.action_done = True
+                            self.award_action_reward(action_name)
                             break
                 elif action_name in ["takeout", "dropin"]:
                     for cell in seq:
@@ -706,6 +713,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 if is_obj(obj) and action_class(self).can(obj, arm):
                                     action_class(self).do(obj, arm)
                                     self.action_done = True
+                                    self.award_action_reward(action_name)
                                     break
                             if self.action_done:
                                 break
@@ -720,6 +728,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                             if is_obj(obj) and action_class(self).can(obj, arm):
                                 action_class(self).do(obj, arm)
                                 self.action_done = True
+                                self.award_action_reward(action_name)
                                 null_loco = True
                                 break
                         if self.action_done:
@@ -734,6 +743,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 if is_obj(obj) and action_class(self).can(obj, arm):
                                     action_class(self).do(obj, arm)
                                     self.action_done = True
+                                    self.award_action_reward(action_name)
                                     break
                             if self.action_done:
                                 break
@@ -744,6 +754,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                         if action_class(self).can(list(self.carrying[arm])[0], arm):
                             action_class(self).do(list(self.carrying[arm])[0], arm)
                             self.action_done = True
+                            self.award_action_reward(action_name)
                 # If the agent is not holding an object, then it will perform the action on surrounding objects
                 else:
                     for cell in seq:
@@ -754,6 +765,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 if is_obj(obj) and action_class(self).can(obj, arm):
                                     action_class(self).do(obj, arm)
                                     self.action_done = True
+                                    self.award_action_reward(action_name)
                                     break
                             if self.action_done:
                                 break
@@ -788,7 +800,11 @@ class MiniBehaviorEnv(MiniGridEnv):
                             can_overlap = False
                             break
                 if can_overlap and not was_dropped:
+                    prev_pos = np.array(self.agent_pos)
                     self.agent_pos = fwd_pos
+                    # Award reward if walking with object (actually moved position)
+                    if (self.carrying['left'] or self.carrying['right']) and not np.array_equal(prev_pos, self.agent_pos):
+                        self.award_action_reward('walk_with_object')
                 else:
                     self.action_done = False
             elif locomotion_action == self.locomotion_actions.kick:
@@ -806,6 +822,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                             obj.update_pos(new_pos)
                             self.grid.set(*new_pos, obj, dim)
                             obj.states['kicked'].set_value(True)
+                            self.award_action_reward('kick')
                             break
             elif locomotion_action == self.locomotion_actions.climb:
                 for obj in fwd_cell[int(0)]:
@@ -822,6 +839,15 @@ class MiniBehaviorEnv(MiniGridEnv):
 
 
         self.update_states()
+        
+        # Check for noise state changes and award rewards
+        if 'noise' in self.extrinsic_rewards:
+            current_noise_states = self.get_noise_states()
+            for obj_name, current_state in current_noise_states.items():
+                if obj_name in prev_noise_states and current_state and not prev_noise_states[obj_name]:
+                    # Noise state changed from False to True
+                    self.step_reward += self.extrinsic_rewards['noise']
+        
         reward = self._reward()
         done = self._end_conditions() or self.step_count >= self.max_steps
         if self.use_full_obs:
@@ -881,17 +907,47 @@ class MiniBehaviorEnv(MiniGridEnv):
                             for state_name in obj.states:
                                 if state_name == "noise":
                                     obj.states[state_name].set_value(False)
+    
+    def get_noise_states(self):
+        '''
+        Get current noise states for all objects
+        '''
+        noise_states = {}
+        for obj_type in self.objs.values():
+            for obj in obj_type:
+                if 'noise' in obj.states:
+                    noise_states[obj.name] = obj.states['noise'].get_value(self)
+        return noise_states
+    
+    def award_action_reward(self, action_name):
+        '''
+        Award reward for successful action based on extrinsic_rewards dictionary
+        '''
+        # Map action names to reward categories based on the planning document
+        # Object interaction actions (from planning doc)
+        interaction_actions = ['dropin', 'takeout', 'putin', 'brush', 'assemble', 'disassemble', 
+                              'toggle', 'noise_toggle', 'mouthing']
+        # Location change actions (from planning doc)
+        location_actions = ['kick', 'push', 'pull', 'pickup', 'drop', 'throw']
+        
+        if action_name in interaction_actions and 'interaction' in self.extrinsic_rewards:
+            self.step_reward += self.extrinsic_rewards['interaction']
+        elif action_name in location_actions and 'location_change' in self.extrinsic_rewards:
+            self.step_reward += self.extrinsic_rewards['location_change']
+        
+        # Also check for specific action rewards
+        if action_name in self.extrinsic_rewards:
+            self.step_reward += self.extrinsic_rewards[action_name]
 
 
     def _reward(self):
         if self._end_conditions():
             return 1
         else:
-            # Dense rewards are implemented only for washing_pots_and_pans and putting_away_dishes
-            if self.dense_reward:
-                cur_progress = self.get_progress()
-                reward = cur_progress - self.previous_progress
-                self.previous_progress = cur_progress
+            # If extrinsic rewards are enabled, return accumulated step rewards
+            if self.extrinsic_rewards:
+                reward = self.step_reward
+                self.step_reward = 0  # Reset for next step
                 return reward
             else:
                 return 0

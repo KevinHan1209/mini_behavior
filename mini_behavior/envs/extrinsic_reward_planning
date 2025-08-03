@@ -1,0 +1,12 @@
+We want to test out adding extrinsic rewards to the environment for the following occurences:
+
+Special state change rewards:
+1. Any sound that is produced in the environment
+
+Special action successes:
+1. Reward all actions that cause object interactions
+- this includes put_in, take_out, brush, assemble, disassemble, open, close, toggle, or noise_toggle
+2. Reward actions that caused a location change to the object:
+- this includes kick, push (pullshed), walk with object, pickup, drop, or throw
+
+To implement these, we want to make these hyperparameters we can pass to the environment initialization in @mini_behavior/minibehavior.py. Let's accomplish this by passing a dictionary structure named extrinsic rewards. This will include the interaction type as the key and the reward as the value. There is currently a dense_reward parameter which determines whether or not to implement extrinsic environment rewards. Let's get rid of this and then in the logic of the _reward() function, replace dense reward with just checking if our extrinsic reward dictionary is empty or not. Then, I will analyze myself how to best implement the logic to actually check for these reward signals in the environment. 

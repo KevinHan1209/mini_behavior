@@ -20,6 +20,7 @@ class MultiToyEnv(RoomGrid):
             num_cols=1,
             max_steps=1e5,
             agent_pos=(15, 11),
+            extrinsic_rewards=None,
             object_positions={
                 'gear_toy': (21, 3),
                 'stroller': (21, 6),
@@ -69,7 +70,8 @@ class MultiToyEnv(RoomGrid):
                          max_steps=max_steps,
                          room_width=room_width,
                          room_height=room_height,
-                         agent_pos=agent_pos
+                         agent_pos=agent_pos,
+                         extrinsic_rewards=extrinsic_rewards
                          )
 
         self.locomotion_actions = MiniBehaviorEnv.LocoActions
