@@ -184,6 +184,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         
         # Track rewards accumulated in current step
         self.step_reward = 0
+        self.reward_breakdown = {'noise': 0, 'interaction': 0, 'location_change': 0}
 
     @property
     def left_vec(self):
@@ -287,6 +288,7 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         self.reward = 0
         self.step_reward = 0
+        self.reward_breakdown = {'noise': 0, 'interaction': 0, 'location_change': 0}
 
         # Generate a new random grid at the start of each episode
         # To keep the same grid for each episode, call env.seed() with
@@ -846,7 +848,9 @@ class MiniBehaviorEnv(MiniGridEnv):
             for obj_name, current_state in current_noise_states.items():
                 if obj_name in prev_noise_states and current_state and not prev_noise_states[obj_name]:
                     # Noise state changed from False to True
-                    self.step_reward += self.extrinsic_rewards['noise']
+                    noise_reward = self.extrinsic_rewards['noise']
+                    self.step_reward += noise_reward
+                    self.reward_breakdown['noise'] += noise_reward
         
         reward = self._reward()
         done = self._end_conditions() or self.step_count >= self.max_steps
@@ -857,8 +861,15 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         if self.test_env:
             self.update_exploration_metrics()
-        #print("PIGGIE BANK:", self.objs['piggie_bank'][0].check_abs_state(self, 'toggled'))
-        return obs, reward, done, {}
+        
+        # Prepare info dict with reward breakdown
+        info = {}
+        if self.extrinsic_rewards:
+            info['reward_breakdown'] = self.reward_breakdown.copy()
+            # Reset breakdown for next step
+            self.reward_breakdown = {'noise': 0, 'interaction': 0, 'location_change': 0}
+        
+        return obs, reward, done, info
     
     def drop_dims(self, pos):
         dims = []
@@ -931,13 +942,24 @@ class MiniBehaviorEnv(MiniGridEnv):
         location_actions = ['kick', 'push', 'pull', 'pickup', 'drop', 'throw']
         
         if action_name in interaction_actions and 'interaction' in self.extrinsic_rewards:
-            self.step_reward += self.extrinsic_rewards['interaction']
+            interaction_reward = self.extrinsic_rewards['interaction']
+            self.step_reward += interaction_reward
+            self.reward_breakdown['interaction'] += interaction_reward
         elif action_name in location_actions and 'location_change' in self.extrinsic_rewards:
-            self.step_reward += self.extrinsic_rewards['location_change']
+            location_reward = self.extrinsic_rewards['location_change']
+            self.step_reward += location_reward
+            self.reward_breakdown['location_change'] += location_reward
         
         # Also check for specific action rewards
         if action_name in self.extrinsic_rewards:
-            self.step_reward += self.extrinsic_rewards[action_name]
+            # For specific actions, categorize them appropriately
+            specific_reward = self.extrinsic_rewards[action_name]
+            self.step_reward += specific_reward
+            # Categorize based on action type
+            if action_name in interaction_actions:
+                self.reward_breakdown['interaction'] += specific_reward
+            elif action_name in location_actions:
+                self.reward_breakdown['location_change'] += specific_reward
 
 
     def _reward(self):

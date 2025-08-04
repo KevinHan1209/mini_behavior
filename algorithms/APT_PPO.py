@@ -258,7 +258,7 @@ class APT_PPO:
                 logprobs[step] = logprob
 
                 try:
-                    next_obs_np, reward, done, _ = self.env.step(action.cpu().numpy())
+                    next_obs_np, reward, done, info = self.env.step(action.cpu().numpy())
                 except Exception as e:
                     print(f"\n[ERROR] Environment step failed at global_step {global_step}, step {step}")
                     print(f"Error type: {type(e).__name__}: {e}")
@@ -357,6 +357,18 @@ class APT_PPO:
                 next_obs = torch.Tensor(next_obs_np).to(self.device)
                 next_done = torch.Tensor(done).to(self.device)
                 
+                # Track extrinsic rewards if available from info dict
+                if hasattr(self, 'extrinsic_reward_trackers') or (info and any('reward_breakdown' in i for i in info)):
+                    if not hasattr(self, 'extrinsic_reward_trackers'):
+                        self.extrinsic_reward_trackers = {'noise': [], 'interaction': [], 'location_change': []}
+                    
+                    # Aggregate reward breakdowns from all environments
+                    for env_idx, env_info in enumerate(info):
+                        if 'reward_breakdown' in env_info:
+                            for reward_type, value in env_info['reward_breakdown'].items():
+                                if reward_type in self.extrinsic_reward_trackers and value > 0:
+                                    self.extrinsic_reward_trackers[reward_type].append(value)
+                
                 # Add observations to replay buffer and handle resets
                 for env_idx in range(self.num_envs):
                     self.replay_buffer.add(next_obs[env_idx], env_idx)
@@ -436,6 +448,15 @@ class APT_PPO:
             for key, probs in action_probs.items():
                 for action_idx, prob in enumerate(probs):
                     log_dict[f"{key}/action_{action_idx}"] = prob.item()
+            
+            # Add extrinsic reward logging if available
+            if hasattr(self, 'extrinsic_reward_trackers'):
+                for reward_type, values in self.extrinsic_reward_trackers.items():
+                    if values:
+                        log_dict[f"extrinsic_reward/{reward_type}_mean"] = np.mean(values)
+                        log_dict[f"extrinsic_reward/{reward_type}_total"] = np.sum(values)
+                        # Clear tracker for next logging period
+                        self.extrinsic_reward_trackers[reward_type] = []
             
             if self.use_wandb:
                 wandb.log(log_dict)

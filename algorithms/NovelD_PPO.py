@@ -5,7 +5,12 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import gym
-import wandb
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    print("Warning: wandb not installed. Logging disabled.")
 from networks.actor_critic import Agent
 from env_wrapper import CustomObservationWrapper
 import os
@@ -126,7 +131,11 @@ class NovelD_PPO:
             int_gamma=0.99,
             alpha=0.5,
             update_proportion=0.25,
-            seed=1
+            seed=1,
+            wandb_project="NovelD_PPO",
+            wandb_entity=None,
+            wandb_run_name=None,
+            use_wandb=True
             ):
         
         self.envs = gym.vector.SyncVectorEnv(
@@ -205,6 +214,10 @@ class NovelD_PPO:
         self.int_gamma = int_gamma
         self.alpha = alpha
         self.update_proportion = update_proportion
+        self.wandb_project = wandb_project
+        self.wandb_entity = wandb_entity
+        self.wandb_run_name = wandb_run_name
+        self.use_wandb = use_wandb and WANDB_AVAILABLE
         self.anneal_lr = True
 
         # Calculate batch sizes
@@ -238,32 +251,38 @@ class NovelD_PPO:
         self.int_reward_scale = 1.0
 
     def train(self):
-        '''
-        wandb.init(
-            project="noveld-ppo-train",
-            config={
-                "env_id": self.env_id,
-                "total_timesteps": self.total_timesteps,
-                "learning_rate": self.learning_rate,
-                "num_envs": self.num_envs,
-                "num_steps": self.num_steps,
-                "gamma": self.gamma,
-                "gae_lambda": self.gae_lambda,
-                "num_minibatches": self.num_minibatches,
-                "update_epochs": self.update_epochs,
-                "clip_coef": self.clip_coef,
-                "ent_coef": self.ent_coef,
-                "vf_coef": self.vf_coef,
-                "int_coef": self.int_coef,
-                "ext_coef": self.ext_coef,
-                "device": str(self.device)
-            }
-        )
-
-        # Watch models for gradients and parameter histograms.
-        wandb.watch(self.agent, log="all", log_freq=100)
-        wandb.watch(self.rnd_model, log="all", log_freq=100)
-        '''
+        # Initialize wandb if enabled
+        if self.use_wandb:
+            wandb.init(
+                project=self.wandb_project,
+                entity=self.wandb_entity,
+                name=self.wandb_run_name,
+                config={
+                    "algorithm": "NovelD_PPO",
+                    "env_id": self.env_id,
+                    "total_timesteps": self.total_timesteps,
+                    "learning_rate": self.learning_rate,
+                    "num_envs": self.num_envs,
+                    "num_steps": self.num_steps,
+                    "gamma": self.gamma,
+                    "gae_lambda": self.gae_lambda,
+                    "num_minibatches": self.num_minibatches,
+                    "update_epochs": self.update_epochs,
+                    "clip_coef": self.clip_coef,
+                    "ent_coef": self.ent_coef,
+                    "vf_coef": self.vf_coef,
+                    "max_grad_norm": self.max_grad_norm,
+                    "int_coef": self.int_coef,
+                    "ext_coef": self.ext_coef,
+                    "int_gamma": self.int_gamma,
+                    "alpha": self.alpha,
+                    "update_proportion": self.update_proportion,
+                    "device": str(self.device)
+                }
+            )
+            # Watch models for gradients and parameter histograms.
+            wandb.watch(self.agent, log="all", log_freq=100)
+            wandb.watch(self.rnd_model, log="all", log_freq=100)
         print("\n=== Training Configuration ===")
         print(f"Env: {self.env_id} | Device: {self.device}")
         print(f"Total Steps: {self.total_timesteps:,} | Batch Size: {self.batch_size} | Minibatch Size: {self.minibatch_size}")
@@ -315,6 +334,18 @@ class NovelD_PPO:
                 rewards[step] = torch.FloatTensor(reward).to(self.device)
                 next_obs = torch.FloatTensor(next_obs).to(self.device)
                 next_done = torch.FloatTensor(done).to(self.device)
+                
+                # Track extrinsic rewards if available from info dict
+                if hasattr(self, 'extrinsic_reward_trackers') or (info and any('reward_breakdown' in i for i in info)):
+                    if not hasattr(self, 'extrinsic_reward_trackers'):
+                        self.extrinsic_reward_trackers = {'noise': [], 'interaction': [], 'location_change': []}
+                    
+                    # Aggregate reward breakdowns from all environments
+                    for env_idx, env_info in enumerate(info):
+                        if 'reward_breakdown' in env_info:
+                            for reward_type, value in env_info['reward_breakdown'].items():
+                                if reward_type in self.extrinsic_reward_trackers and value > 0:
+                                    self.extrinsic_reward_trackers[reward_type].append(value)
 
                 with torch.no_grad():
                     novelty = self.calculate_novelty(next_obs)
@@ -353,8 +384,7 @@ class NovelD_PPO:
 
             # Log update-level training metrics.
             if update % 10 == 0:
-                '''
-                wandb.log({
+                log_dict = {
                     "learning_rate": optimizer.param_groups[0]["lr"],
                     "novelty": novelty.mean().item(),
                     "curiosity_reward": curiosity_rewards.mean().item(),
@@ -362,8 +392,20 @@ class NovelD_PPO:
                     "global_step": global_step,
                     "updates": update,
                     **opt_metrics
-                }, step=global_step)
-                '''
+                }
+                
+                # Add extrinsic reward logging if available
+                if hasattr(self, 'extrinsic_reward_trackers'):
+                    for reward_type, values in self.extrinsic_reward_trackers.items():
+                        if values:
+                            log_dict[f"extrinsic_reward/{reward_type}_mean"] = np.mean(values)
+                            log_dict[f"extrinsic_reward/{reward_type}_total"] = np.sum(values)
+                            # Clear tracker for next logging period
+                            self.extrinsic_reward_trackers[reward_type] = []
+                
+                if self.use_wandb:
+                    wandb.log(log_dict, step=global_step)
+                
                 print(f"\n[Update {update}/{num_updates}] Step: {global_step:,}")
                 print(f"Novelty: {novelty.mean().item():.4f} | Curiosity Reward: {curiosity_rewards.mean().item():.4f}")
                 print(f"Policy Loss: {opt_metrics['pg_loss']:.4f} | Value Loss: {opt_metrics['v_loss']:.4f} | Entropy: {opt_metrics['entropy']:.4f}")
@@ -380,6 +422,13 @@ class NovelD_PPO:
                 }, checkpoint_path)
                 print(f"Saved checkpoint at {global_step} timesteps to {checkpoint_path}")
                 
+                # Log checkpoint save to wandb
+                if self.use_wandb:
+                    wandb.log({
+                        "checkpoint_saved": 1,
+                        "checkpoint_step": global_step
+                    }, step=global_step)
+                
                 # Test the agent with 10 episodes of 200 steps each
                 # Create a separate CSV file for this checkpoint in a dedicated directory
                 csv_dir = os.path.join(checkpoint_dir, "activity_logs")
@@ -389,8 +438,11 @@ class NovelD_PPO:
                                checkpoint_path=checkpoint_path, checkpoint_id=global_step, 
                                save_episode=False, csv_path=checkpoint_csv_path)
 
-        wandb.finish()
+        # Finish wandb run
+        if self.use_wandb:
+            wandb.finish()
         self.envs.close()
+        print("\nTraining completed!")
 
     def compute_advantages(self, next_value_ext, next_value_int, rewards, curiosity_rewards, ext_values, int_values, dones, next_done):
         next_value_ext = next_value_ext.flatten()
