@@ -29,13 +29,6 @@ BEST_HYPERPARAMS = {
 # Experiment configurations
 EXPERIMENT_CONFIGS = [
     {
-        'name': 'pure_intrinsic_baseline',
-        'extrinsic_rewards': {},
-        'int_coef': 1.0,
-        'ext_coef': 0.0,
-        'description': 'Pure intrinsic rewards baseline (NovelD only)'
-    },
-    {
         'name': 'pure_extrinsic_all_rewards',
         'extrinsic_rewards': {
             'noise': 0.1,
@@ -45,6 +38,13 @@ EXPERIMENT_CONFIGS = [
         'int_coef': 0.0,
         'ext_coef': 1.0,
         'description': 'Pure extrinsic rewards only (no intrinsic motivation)'
+    },
+    {
+        'name': 'pure_intrinsic_baseline',
+        'extrinsic_rewards': {},
+        'int_coef': 1.0,
+        'ext_coef': 0.0,
+        'description': 'Pure intrinsic rewards baseline (NovelD only)'
     }
 ]
 
