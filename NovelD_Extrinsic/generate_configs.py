@@ -26,32 +26,51 @@ BEST_HYPERPARAMS = {
     'total_timesteps': 2500000
 }
 
-# Single experiment with pure extrinsic rewards
-EXTRINSIC_REWARD_CONFIG = {
-    'name': 'pure_extrinsic_all_rewards',
-    'extrinsic_rewards': {
-        'noise': 0.1,
-        'interaction': 0.1,
-        'location_change': 0.1
+# Experiment configurations
+EXPERIMENT_CONFIGS = [
+    {
+        'name': 'pure_intrinsic_baseline',
+        'extrinsic_rewards': {},
+        'int_coef': 1.0,
+        'ext_coef': 0.0,
+        'description': 'Pure intrinsic rewards baseline (NovelD only)'
     },
-    'description': 'Pure extrinsic rewards only (no intrinsic motivation)'
-}
+    {
+        'name': 'pure_extrinsic_all_rewards',
+        'extrinsic_rewards': {
+            'noise': 0.1,
+            'interaction': 0.1,
+            'location_change': 0.1
+        },
+        'int_coef': 0.0,
+        'ext_coef': 1.0,
+        'description': 'Pure extrinsic rewards only (no intrinsic motivation)'
+    }
+]
 
 def generate_experiment_config():
-    """Generate single experiment configuration"""
+    """Generate experiment configurations"""
+    configs = []
     
-    # Start with best hyperparameters
-    hyperparams = BEST_HYPERPARAMS.copy()
+    for i, exp_config in enumerate(EXPERIMENT_CONFIGS):
+        # Start with best hyperparameters
+        hyperparams = BEST_HYPERPARAMS.copy()
+        
+        # Override with experiment-specific coefficients
+        hyperparams['int_coef'] = exp_config['int_coef']
+        hyperparams['ext_coef'] = exp_config['ext_coef']
+        
+        experiment = {
+            'id': i,
+            'name': f"exp_{i:03d}_{exp_config['name']}",
+            'description': exp_config['description'],
+            'extrinsic_rewards': exp_config['extrinsic_rewards'],
+            'hyperparameters': hyperparams
+        }
+        
+        configs.append(experiment)
     
-    experiment = {
-        'id': 0,
-        'name': f"exp_000_{EXTRINSIC_REWARD_CONFIG['name']}",
-        'description': EXTRINSIC_REWARD_CONFIG['description'],
-        'extrinsic_rewards': EXTRINSIC_REWARD_CONFIG['extrinsic_rewards'],
-        'hyperparameters': hyperparams
-    }
-    
-    return [experiment]
+    return configs
 
 def save_configs(configs, output_dir='configs'):
     """Save configuration to files"""
@@ -89,14 +108,14 @@ def save_configs(configs, output_dir='configs'):
     with open(summary_path, 'w') as f:
         json.dump(summary, f, indent=2)
     
-    print(f"Generated {len(configs)} experiment configuration")
+    print(f"Generated {len(configs)} experiment configurations")
     print(f"Saved to {output_dir}/")
     
     # Print summary
     print("\nExperiment Summary:")
     for config in configs:
         rewards = config['extrinsic_rewards']
-        reward_str = ', '.join([f"{k}={v}" for k, v in rewards.items()])
+        reward_str = ', '.join([f"{k}={v}" for k, v in rewards.items()]) if rewards else "none"
         print(f"  {config['name']}:")
         print(f"    Description: {config['description']}")
         print(f"    Rewards: {reward_str}")
