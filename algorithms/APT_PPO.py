@@ -411,13 +411,17 @@ class APT_PPO:
                                 save_episode=True, csv_path=checkpoint_csv_path)
 
             # Compute intrinsic (curiosity) rewards via kNN on sampled batches
-            curiosity_rewards = self.compute_batch_intrinsic_rewards(obs)
+            raw_curiosity_rewards = self.compute_batch_intrinsic_rewards(obs)
+            
+            # Store raw rewards for logging
+            raw_avg_intrinsic = raw_curiosity_rewards.mean().item()
+            raw_std_intrinsic = raw_curiosity_rewards.std().item()
 
             # Normalize intrinsic rewards using running mean and std (computed from variance)
-            reward_rms.update(curiosity_rewards.cpu().numpy())
+            reward_rms.update(raw_curiosity_rewards.cpu().numpy())
             rms_mean = torch.tensor(reward_rms.mean, device=self.device)
             rms_std = torch.tensor(np.sqrt(reward_rms.var), device=self.device) + 1e-8
-            curiosity_rewards = (curiosity_rewards - rms_mean) / rms_std
+            curiosity_rewards = (raw_curiosity_rewards - rms_mean) / rms_std
 
             avg_intrinsic = curiosity_rewards.mean().item()
             std_intrinsic = curiosity_rewards.std().item()
@@ -438,6 +442,8 @@ class APT_PPO:
                 "global_step": global_step,
                 "avg_intrinsic_reward": avg_intrinsic,
                 "std_intrinsic_reward": std_intrinsic,
+                "raw_avg_intrinsic_reward": raw_avg_intrinsic,
+                "raw_std_intrinsic_reward": raw_std_intrinsic,
                 "learning_rate": self.optimizer.param_groups[0]["lr"],
                 "extrinsic_reward": rewards.mean().item(),
                 "total_reward": (rewards.mean().item() * self.ext_coef + avg_intrinsic * self.int_coef),

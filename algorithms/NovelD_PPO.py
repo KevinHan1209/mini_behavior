@@ -348,8 +348,12 @@ class NovelD_PPO:
                                     self.extrinsic_reward_trackers[reward_type].append(value)
 
                 with torch.no_grad():
-                    novelty = self.calculate_novelty(next_obs)
-                    curiosity_rewards[step] = self.normalize_rewards(novelty)
+                    raw_novelty = self.calculate_novelty(next_obs)
+                    curiosity_rewards[step] = self.normalize_rewards(raw_novelty)
+                    # Store raw novelty for logging
+                    if not hasattr(self, 'raw_novelty_buffer'):
+                        self.raw_novelty_buffer = []
+                    self.raw_novelty_buffer.append(raw_novelty)
 
             # Compute advantages for extrinsic and intrinsic rewards.
             with torch.no_grad():
@@ -384,10 +388,22 @@ class NovelD_PPO:
 
             # Log update-level training metrics.
             if update % 10 == 0:
+                # Calculate raw novelty stats from buffer
+                if hasattr(self, 'raw_novelty_buffer') and self.raw_novelty_buffer:
+                    raw_novelty_tensor = torch.cat(self.raw_novelty_buffer)
+                    raw_novelty_mean = raw_novelty_tensor.mean().item()
+                    raw_novelty_std = raw_novelty_tensor.std().item()
+                    self.raw_novelty_buffer = []  # Clear buffer
+                else:
+                    raw_novelty_mean = 0.0
+                    raw_novelty_std = 0.0
+                
                 log_dict = {
                     "learning_rate": optimizer.param_groups[0]["lr"],
-                    "novelty": novelty.mean().item(),
+                    "novelty": curiosity_rewards.mean().item(),  # Use normalized for backward compatibility
                     "curiosity_reward": curiosity_rewards.mean().item(),
+                    "raw_novelty_mean": raw_novelty_mean,
+                    "raw_novelty_std": raw_novelty_std,
                     "extrinsic_reward": rewards.mean().item(),
                     "global_step": global_step,
                     "updates": update,
