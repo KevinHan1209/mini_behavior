@@ -469,7 +469,7 @@ class APT_PPO:
                         self.extrinsic_reward_trackers[reward_type] = []
             
             if self.use_wandb:
-                wandb.log(log_dict)
+                wandb.log(log_dict, step=global_step)
 
             # Compute advantages and returns
             ext_advantages = torch.zeros_like(rewards)
@@ -583,14 +583,14 @@ class APT_PPO:
                 # Log training metrics to wandb
                 if self.use_wandb:
                     wandb.log({
-                        "policy_loss": avg_pg_loss,
-                        "value_loss": avg_v_loss,
-                        "entropy": avg_entropy,
-                        "approx_kl": avg_approx_kl,
-                        "clipfrac": avg_clipfrac,
-                        "grad_norm": grad_norm.item() if 'grad_norm' in locals() else 0.0,
-                        "ext_value_loss": ext_v_loss.item() if 'ext_v_loss' in locals() else 0.0,
-                        "int_value_loss": int_v_loss.item() if 'int_v_loss' in locals() else 0.0
+                        "training/policy_loss": avg_pg_loss,
+                        "training/value_loss": avg_v_loss,
+                        "training/entropy": avg_entropy,
+                        "training/approx_kl": avg_approx_kl,
+                        "training/clipfrac": avg_clipfrac,
+                        "training/grad_norm": grad_norm.item() if 'grad_norm' in locals() else 0.0,
+                        "training/ext_value_loss": ext_v_loss.item() if 'ext_v_loss' in locals() else 0.0,
+                        "training/int_value_loss": int_v_loss.item() if 'int_v_loss' in locals() else 0.0
                     }, step=global_step)
         
         # Finish wandb run
