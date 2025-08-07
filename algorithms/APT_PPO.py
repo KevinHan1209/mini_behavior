@@ -99,7 +99,8 @@ class APT_PPO:
                  wandb_entity=None,
                  wandb_run_name=None,
                  use_wandb=True,
-                 aggregation_method='mean'):
+                 aggregation_method='mean',
+                 intrinsic_rewards_csv_path=None):
         self.env = env
         self.envs = env  # Alias for compatibility
         self.env_id = env_id
@@ -153,7 +154,10 @@ class APT_PPO:
         self.exploration_state_occurrences = []
         
         # Create CSV file for intrinsic reward logging
-        self.intrinsic_rewards_csv = "intrinsic_rewards_log.csv"
+        if intrinsic_rewards_csv_path is None:
+            self.intrinsic_rewards_csv = "intrinsic_rewards_log.csv"
+        else:
+            self.intrinsic_rewards_csv = intrinsic_rewards_csv_path
         with open(self.intrinsic_rewards_csv, 'w') as f:
             f.write("global_step,update,avg_intrinsic_reward,std_intrinsic_reward\n")
 
