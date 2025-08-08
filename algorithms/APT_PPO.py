@@ -386,7 +386,7 @@ class APT_PPO:
             
             # Check if we should save a checkpoint (every 500k steps)
             if global_step % 500000 < self.num_envs:
-                checkpoint_dir = "checkpoints"
+                checkpoint_dir = self.save_dir
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
                 print(f"Saving checkpoint at {global_step} timesteps to {checkpoint_path}")
