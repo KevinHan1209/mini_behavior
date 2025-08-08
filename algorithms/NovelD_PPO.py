@@ -423,7 +423,7 @@ class NovelD_PPO:
                     wandb.log(log_dict, step=global_step)
                 
                 print(f"\n[Update {update}/{num_updates}] Step: {global_step:,}")
-                print(f"Novelty: {novelty.mean().item():.4f} | Curiosity Reward: {curiosity_rewards.mean().item():.4f}")
+                print(f"Novelty: {raw_novelty_mean:.4f} | Curiosity Reward: {curiosity_rewards.mean().item():.4f}")
                 print(f"Policy Loss: {opt_metrics['pg_loss']:.4f} | Value Loss: {opt_metrics['v_loss']:.4f} | Entropy: {opt_metrics['entropy']:.4f}")
                 print(f"KL: {opt_metrics['approx_kl']:.4f} | ClipFrac: {opt_metrics['clipfrac']:.4f}")
                 print("-" * 50)
