@@ -66,8 +66,9 @@ def run_experiment(config_path):
     device = torch.device(config.get('device', 'cuda') if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
-    # Create output directory
-    output_dir = Path(f"APT_Experiments_v2/results/{config['experiment_name']}")
+    # Create output directory (relative to script location)
+    script_dir = Path(__file__).parent
+    output_dir = script_dir / "results" / config['experiment_name']
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Create checkpoints directory for APT_PPO
