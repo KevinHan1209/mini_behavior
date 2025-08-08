@@ -3,7 +3,7 @@ import sys
 from batch_js_divergence import process_activity_logs
 import json
 
-def generate_js_divergence_summary(experiments_dir="NovelD_Experiments/results", pkl_path="post_processing/averaged_state_distributions.pkl"):
+def generate_js_divergence_summary(experiments_dir="APT_Experiments/results", pkl_path="post_processing/averaged_state_distributions.pkl"):
     """
     Generate a comprehensive summary of JS divergence statistics for all experiments.
     
