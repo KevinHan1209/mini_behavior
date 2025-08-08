@@ -81,6 +81,17 @@ def run_experiment(config_path, output_dir='results'):
         os.makedirs(exp_checkpoint_dir, exist_ok=True)
         os.symlink(os.path.abspath(exp_checkpoint_dir), original_checkpoint_dir)
         
+        # Determine wandb project based on experiment category
+        wandb_project = "NovelD_Extrinsic"  # Default
+        if 'location' in exp_name.lower():
+            wandb_project = "NovelD_Location"
+        elif 'interaction' in exp_name.lower():
+            wandb_project = "NovelD_Interaction"
+        elif 'noise' in exp_name.lower():
+            wandb_project = "NovelD_Noise"
+        elif 'pure_intrinsic' in exp_name.lower():
+            wandb_project = "NovelD_Intrinsic"
+        
         # Create agent with experiment hyperparameters
         agent = NovelD_PPO(
             env_id,
@@ -101,7 +112,9 @@ def run_experiment(config_path, output_dir='results'):
             ext_coef=hyperparams['ext_coef'],
             int_gamma=hyperparams['int_gamma'],
             alpha=hyperparams['alpha'],
-            update_proportion=hyperparams['update_proportion']
+            update_proportion=hyperparams['update_proportion'],
+            wandb_project=wandb_project,
+            wandb_run_name=exp_name
         )
         
         # Train agent
