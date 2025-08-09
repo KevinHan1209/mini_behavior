@@ -1,0 +1,105 @@
+CHECKPOINT ACTIVITY ANALYSIS REPORT
+======================================================================
+
+Number of checkpoints analyzed: 5
+Checkpoints: [500000, 1000000, 1500000, 2000000, 2500000]
+
+Total activities across all checkpoints: 671
+
+PER-CHECKPOINT ANALYSIS
+----------------------------------------------------------------------
+
+Checkpoint 500,000:
+  Total activity: 129
+  Active pairs: 56/190
+  Max activity count: 20
+  Mean activity: 0.68
+  Std activity: 1.85
+  Top 5 most active pairs:
+    - rattle_0 / noise: 20
+    - bucket_toy_0 / noise: 8
+    - ring_toy_0 / gothit: 7
+    - piggie_bank_0 / open: 5
+    - tree_busy_box_0 / toggled: 4
+
+Checkpoint 1,000,000:
+  Total activity: 192
+  Active pairs: 44/190
+  Max activity count: 44
+  Mean activity: 1.01
+  Std activity: 3.98
+  Top 5 most active pairs:
+    - rattle_0 / noise: 44
+    - music_toy_0 / noise: 24
+    - farm_toy_0 / popup: 13
+    - bucket_toy_0 / noise: 12
+    - piggie_bank_0 / noise: 8
+
+Checkpoint 1,500,000:
+  Total activity: 131
+  Active pairs: 34/190
+  Max activity count: 40
+  Mean activity: 0.69
+  Std activity: 3.21
+  Top 5 most active pairs:
+    - rattle_0 / noise: 40
+    - bucket_toy_0 / noise: 10
+    - ring_toy_0 / gothit: 8
+    - piggie_bank_0 / open: 7
+    - piggie_bank_0 / noise: 6
+
+Checkpoint 2,000,000:
+  Total activity: 110
+  Active pairs: 31/190
+  Max activity count: 30
+  Mean activity: 0.58
+  Std activity: 2.51
+  Top 5 most active pairs:
+    - rattle_0 / noise: 30
+    - music_toy_0 / noise: 9
+    - rattle_0 / gothit: 8
+    - rattle_0 / thrown: 6
+    - rattle_0 / mouthed: 5
+
+Checkpoint 2,500,000:
+  Total activity: 109
+  Active pairs: 40/190
+  Max activity count: 24
+  Mean activity: 0.57
+  Std activity: 2.23
+  Top 5 most active pairs:
+    - rattle_0 / noise: 24
+    - music_toy_0 / noise: 16
+    - rattle_0 / gothit: 5
+    - rattle_0 / thrown: 4
+    - ring_toy_0 / thrown: 4
+
+
+EXPLORATION COVERAGE
+----------------------------------------------------------------------
+Total possible object-state pairs: 190
+Pairs explored at least once: 73
+Exploration coverage: 38.4%
+
+Never explored pairs (117):
+  - beach_ball_0 / hitter
+  - broom_0 / hitter
+  - broom_0 / mouthed
+  - broom_set_0 / attached
+  - broom_set_0 / contains
+  - bucket_toy_0 / contains
+  - bucket_toy_0 / hitter
+  - cart_toy_0 / contains
+  - coin_0 / gothit
+  - coin_0 / hitter
+  - coin_0 / mouthed
+  - coin_0 / thrown
+  - coin_1 / gothit
+  - coin_1 / hitter
+  - coin_1 / mouthed
+  - coin_1 / thrown
+  - coin_2 / gothit
+  - coin_2 / hitter
+  - coin_2 / mouthed
+  - coin_2 / thrown
+  ... and 97 more

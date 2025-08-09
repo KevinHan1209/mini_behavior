@@ -1,0 +1,31 @@
+{
+    "experiment_name": "exp_001_k_5",
+    "description": "k ablation: k=5 (default is 12)",
+    "hyperparameters": {
+        "total_timesteps": 2500000,
+        "learning_rate": 0.0001,
+        "num_envs": 8,
+        "num_steps": 125,
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+        "num_minibatches": 4,
+        "update_epochs": 4,
+        "clip_coef": 0.1,
+        "ent_coef": 0.01,
+        "vf_coef": 0.5,
+        "max_grad_norm": 0.5,
+        "int_coef": 1.0,
+        "ext_coef": 0.0,
+        "int_gamma": 0.99,
+        "k": 5,
+        "c": 1,
+        "replay_buffer_size": 1000000,
+        "apt_batch_size": 1024,
+        "aggregation_method": "mean"
+    },
+    "seed": 1,
+    "device": "cuda",
+    "wandb_project": "APT_PPO_V2",
+    "wandb_entity": null,
+    "use_wandb": true
+}
