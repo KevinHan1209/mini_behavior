@@ -21,19 +21,19 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Embedded data - this would normally come from CSV files
-# For deployment, we're embedding the key data directly
+# Embedded data extracted from actual checkpoint CSV files
+# This is the real experimental data from APT_Experiments_v2
 EXPERIMENT_DATA = {
     "exp_000_default": {
         "label": "Default (k=12, ent=0.01)",
         "k": 12,
         "ent_coef": 0.01,
         "checkpoints": {
-            500000: {"total_activity": 143, "unique_states": 60, "state_coverage": 0.316},
-            1000000: {"total_activity": 165, "unique_states": 62, "state_coverage": 0.326},
-            1500000: {"total_activity": 180, "unique_states": 64, "state_coverage": 0.337},
-            2000000: {"total_activity": 195, "unique_states": 65, "state_coverage": 0.342},
-            2500000: {"total_activity": 210, "unique_states": 66, "state_coverage": 0.347}
+            500000: {"total_activity": 143, "unique_states": 34, "state_coverage": 0.179},
+            1000000: {"total_activity": 73, "unique_states": 30, "state_coverage": 0.158},
+            1500000: {"total_activity": 128, "unique_states": 40, "state_coverage": 0.211},
+            2000000: {"total_activity": 145, "unique_states": 35, "state_coverage": 0.184},
+            2500000: {"total_activity": 143, "unique_states": 60, "state_coverage": 0.316}
         }
     },
     "exp_001_k_5": {
@@ -41,11 +41,11 @@ EXPERIMENT_DATA = {
         "k": 5,
         "ent_coef": 0.01,
         "checkpoints": {
-            500000: {"total_activity": 130, "unique_states": 55, "state_coverage": 0.289},
-            1000000: {"total_activity": 148, "unique_states": 57, "state_coverage": 0.300},
-            1500000: {"total_activity": 162, "unique_states": 58, "state_coverage": 0.305},
-            2000000: {"total_activity": 175, "unique_states": 59, "state_coverage": 0.311},
-            2500000: {"total_activity": 188, "unique_states": 60, "state_coverage": 0.316}
+            500000: {"total_activity": 130, "unique_states": 41, "state_coverage": 0.216},
+            1000000: {"total_activity": 103, "unique_states": 35, "state_coverage": 0.184},
+            1500000: {"total_activity": 131, "unique_states": 23, "state_coverage": 0.121},
+            2000000: {"total_activity": 117, "unique_states": 42, "state_coverage": 0.221},
+            2500000: {"total_activity": 126, "unique_states": 41, "state_coverage": 0.216}
         }
     },
     "exp_002_k_25": {
@@ -53,11 +53,11 @@ EXPERIMENT_DATA = {
         "k": 25,
         "ent_coef": 0.01,
         "checkpoints": {
-            500000: {"total_activity": 129, "unique_states": 54, "state_coverage": 0.284},
-            1000000: {"total_activity": 145, "unique_states": 56, "state_coverage": 0.295},
-            1500000: {"total_activity": 158, "unique_states": 57, "state_coverage": 0.300},
-            2000000: {"total_activity": 170, "unique_states": 58, "state_coverage": 0.305},
-            2500000: {"total_activity": 182, "unique_states": 59, "state_coverage": 0.311}
+            500000: {"total_activity": 129, "unique_states": 56, "state_coverage": 0.295},
+            1000000: {"total_activity": 192, "unique_states": 44, "state_coverage": 0.232},
+            1500000: {"total_activity": 131, "unique_states": 34, "state_coverage": 0.179},
+            2000000: {"total_activity": 110, "unique_states": 31, "state_coverage": 0.163},
+            2500000: {"total_activity": 109, "unique_states": 40, "state_coverage": 0.211}
         }
     },
     "exp_003_k_50": {
@@ -65,11 +65,11 @@ EXPERIMENT_DATA = {
         "k": 50,
         "ent_coef": 0.01,
         "checkpoints": {
-            500000: {"total_activity": 150, "unique_states": 58, "state_coverage": 0.305},
-            1000000: {"total_activity": 168, "unique_states": 60, "state_coverage": 0.316},
-            1500000: {"total_activity": 183, "unique_states": 61, "state_coverage": 0.321},
-            2000000: {"total_activity": 196, "unique_states": 62, "state_coverage": 0.326},
-            2500000: {"total_activity": 208, "unique_states": 63, "state_coverage": 0.332}
+            500000: {"total_activity": 150, "unique_states": 43, "state_coverage": 0.226},
+            1000000: {"total_activity": 149, "unique_states": 31, "state_coverage": 0.163},
+            1500000: {"total_activity": 186, "unique_states": 26, "state_coverage": 0.137},
+            2000000: {"total_activity": 120, "unique_states": 26, "state_coverage": 0.137},
+            2500000: {"total_activity": 5, "unique_states": 5, "state_coverage": 0.026}
         }
     },
     "exp_004_k_100": {
@@ -77,11 +77,11 @@ EXPERIMENT_DATA = {
         "k": 100,
         "ent_coef": 0.01,
         "checkpoints": {
-            500000: {"total_activity": 39, "unique_states": 28, "state_coverage": 0.147},
-            1000000: {"total_activity": 52, "unique_states": 32, "state_coverage": 0.168},
-            1500000: {"total_activity": 63, "unique_states": 35, "state_coverage": 0.184},
-            2000000: {"total_activity": 72, "unique_states": 37, "state_coverage": 0.195},
-            2500000: {"total_activity": 80, "unique_states": 39, "state_coverage": 0.205}
+            500000: {"total_activity": 39, "unique_states": 25, "state_coverage": 0.132},
+            1000000: {"total_activity": 107, "unique_states": 36, "state_coverage": 0.189},
+            1500000: {"total_activity": 129, "unique_states": 38, "state_coverage": 0.200},
+            2000000: {"total_activity": 132, "unique_states": 29, "state_coverage": 0.153},
+            2500000: {"total_activity": 101, "unique_states": 41, "state_coverage": 0.216}
         }
     },
     "exp_005_ent_coef_0": {
@@ -89,11 +89,11 @@ EXPERIMENT_DATA = {
         "k": 12,
         "ent_coef": 0.0,
         "checkpoints": {
-            500000: {"total_activity": 231, "unique_states": 68, "state_coverage": 0.358},
-            1000000: {"total_activity": 252, "unique_states": 70, "state_coverage": 0.368},
-            1500000: {"total_activity": 268, "unique_states": 71, "state_coverage": 0.374},
-            2000000: {"total_activity": 282, "unique_states": 72, "state_coverage": 0.379},
-            2500000: {"total_activity": 294, "unique_states": 73, "state_coverage": 0.384}
+            500000: {"total_activity": 231, "unique_states": 51, "state_coverage": 0.268},
+            1000000: {"total_activity": 191, "unique_states": 58, "state_coverage": 0.305},
+            1500000: {"total_activity": 106, "unique_states": 28, "state_coverage": 0.147},
+            2000000: {"total_activity": 79, "unique_states": 25, "state_coverage": 0.132},
+            2500000: {"total_activity": 75, "unique_states": 31, "state_coverage": 0.163}
         }
     },
     "exp_006_ent_coef_0.005": {
@@ -101,11 +101,11 @@ EXPERIMENT_DATA = {
         "k": 12,
         "ent_coef": 0.005,
         "checkpoints": {
-            500000: {"total_activity": 122, "unique_states": 52, "state_coverage": 0.274},
-            1000000: {"total_activity": 138, "unique_states": 54, "state_coverage": 0.284},
-            1500000: {"total_activity": 151, "unique_states": 55, "state_coverage": 0.289},
-            2000000: {"total_activity": 163, "unique_states": 56, "state_coverage": 0.295},
-            2500000: {"total_activity": 174, "unique_states": 57, "state_coverage": 0.300}
+            500000: {"total_activity": 122, "unique_states": 38, "state_coverage": 0.200},
+            1000000: {"total_activity": 139, "unique_states": 43, "state_coverage": 0.226},
+            1500000: {"total_activity": 132, "unique_states": 41, "state_coverage": 0.216},
+            2000000: {"total_activity": 118, "unique_states": 29, "state_coverage": 0.153},
+            2500000: {"total_activity": 119, "unique_states": 33, "state_coverage": 0.174}
         }
     },
     "exp_007_ent_coef_0.02": {
@@ -113,11 +113,11 @@ EXPERIMENT_DATA = {
         "k": 12,
         "ent_coef": 0.02,
         "checkpoints": {
-            500000: {"total_activity": 166, "unique_states": 61, "state_coverage": 0.321},
-            1000000: {"total_activity": 184, "unique_states": 63, "state_coverage": 0.332},
-            1500000: {"total_activity": 199, "unique_states": 64, "state_coverage": 0.337},
-            2000000: {"total_activity": 212, "unique_states": 65, "state_coverage": 0.342},
-            2500000: {"total_activity": 224, "unique_states": 66, "state_coverage": 0.347}
+            500000: {"total_activity": 166, "unique_states": 35, "state_coverage": 0.184},
+            1000000: {"total_activity": 120, "unique_states": 27, "state_coverage": 0.142},
+            1500000: {"total_activity": 169, "unique_states": 38, "state_coverage": 0.200},
+            2000000: {"total_activity": 152, "unique_states": 34, "state_coverage": 0.179},
+            2500000: {"total_activity": 91, "unique_states": 31, "state_coverage": 0.163}
         }
     },
     "exp_008_ent_coef_0.05": {
@@ -125,11 +125,11 @@ EXPERIMENT_DATA = {
         "k": 12,
         "ent_coef": 0.05,
         "checkpoints": {
-            500000: {"total_activity": 115, "unique_states": 50, "state_coverage": 0.263},
-            1000000: {"total_activity": 130, "unique_states": 52, "state_coverage": 0.274},
-            1500000: {"total_activity": 142, "unique_states": 53, "state_coverage": 0.279},
-            2000000: {"total_activity": 153, "unique_states": 54, "state_coverage": 0.284},
-            2500000: {"total_activity": 163, "unique_states": 55, "state_coverage": 0.289}
+            500000: {"total_activity": 115, "unique_states": 44, "state_coverage": 0.232},
+            1000000: {"total_activity": 107, "unique_states": 43, "state_coverage": 0.226},
+            1500000: {"total_activity": 130, "unique_states": 35, "state_coverage": 0.184},
+            2000000: {"total_activity": 122, "unique_states": 28, "state_coverage": 0.147},
+            2500000: {"total_activity": 100, "unique_states": 43, "state_coverage": 0.226}
         }
     },
     "exp_009_ent_coef_0.1": {
@@ -137,11 +137,11 @@ EXPERIMENT_DATA = {
         "k": 12,
         "ent_coef": 0.1,
         "checkpoints": {
-            500000: {"total_activity": 132, "unique_states": 56, "state_coverage": 0.295},
-            1000000: {"total_activity": 148, "unique_states": 58, "state_coverage": 0.305},
-            1500000: {"total_activity": 161, "unique_states": 59, "state_coverage": 0.311},
-            2000000: {"total_activity": 173, "unique_states": 60, "state_coverage": 0.316},
-            2500000: {"total_activity": 184, "unique_states": 61, "state_coverage": 0.321}
+            500000: {"total_activity": 132, "unique_states": 38, "state_coverage": 0.200},
+            1000000: {"total_activity": 128, "unique_states": 29, "state_coverage": 0.153},
+            1500000: {"total_activity": 150, "unique_states": 31, "state_coverage": 0.163},
+            2000000: {"total_activity": 154, "unique_states": 30, "state_coverage": 0.158},
+            2500000: {"total_activity": 94, "unique_states": 34, "state_coverage": 0.179}
         }
     }
 }
