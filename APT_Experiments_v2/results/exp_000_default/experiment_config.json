@@ -1,0 +1,14 @@
+{
+    "experiment_name": "exp_000_default",
+    "k": 12,
+    "ent_coef": 0.01,
+    "int_coef": 1.0,
+    "ext_coef": 0.0,
+    "int_gamma": 0.99,
+    "learning_rate": 0.0001,
+    "num_envs": 8,
+    "num_steps": 125,
+    "total_timesteps": 2500000,
+    "aggregation_method": "mean",
+    "apt_batch_size": 1024
+}
