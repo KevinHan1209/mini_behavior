@@ -284,6 +284,37 @@ def extract_entropy_coef_from_dirname(dirname):
         except ValueError:
             print(f"Warning: Could not parse entropy coefficient from '{ent_part}', using default 0.01")
             return 0.01
+        
+def extract_rnd_params_from_dirname(dirname):
+    """Extract RND update frequency and weight decay from directory name
+    
+    Expected format: MultiToy_8x8_freq1_decay0_0001_seed5_1754942590
+    """
+    rnd_update_freq = 1  # default
+    rnd_weight_decay = 0.0  # default
+    
+    # Extract update frequency
+    freq_match = re.search(r'freq(\d+)', dirname)
+    if freq_match:
+        rnd_update_freq = int(freq_match.group(1))
+    
+    # Extract weight decay - handle the decimal format with underscores
+    decay_match = re.search(r'decay(\d+_\d+)', dirname)
+    if decay_match:
+        decay_str = decay_match.group(1)
+        
+        if decay_str == "0_0":
+            rnd_weight_decay = 0.0
+        else:
+            try:
+                # Convert "0_0001" to "0.0001"
+                clean_str = decay_str.replace("_", ".", 1)  # Only replace first underscore
+                rnd_weight_decay = float(clean_str)
+            except ValueError:
+                print(f"Warning: Could not parse weight decay from '{decay_str}', using default 0.0")
+                rnd_weight_decay = 0.0
+    
+    return rnd_update_freq, rnd_weight_decay
 
 def make_single_env(env_id, seed, env_kwargs):
     env = gym.make(env_id, **env_kwargs)
@@ -345,18 +376,22 @@ def find_all_model_checkpoints(model_dir):
     return checkpoints
 
 
-def test_agent(env_id, model, device, task, room_size, step, model_seed, ent_coef, 
+def test_agent(env_id, model, device, task, room_size, step, model_seed, rnd_update_freq, rnd_weight_decay,
                agent_dist, num_episodes=5, max_steps_per_episode=1000, 
                convergence_window=10, convergence_threshold=0.001):
     print(f"\n=== Testing Agent (Seed {model_seed}): {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
-    wandb.init(project="rnd-ppo-test-multiseed-convergence",
-               name=f"RND_PPO_{task}_{room_size}x{room_size}_seed{model_seed}_ent{ent_coef}_step{step}",
+    wandb.init(project="rnd-ppo-test-prediction-variations",
+           name=f"RND_PPO_{task}_{room_size}x{room_size}_freq{rnd_update_freq}_decay{str(rnd_weight_decay).replace('.', '_')}_seed{model_seed}_step{step}",
+    #wandb.init(project="rnd-ppo-test-multiseed-convergence",
+    #           name=f"RND_PPO_{task}_{room_size}x{room_size}_seed{model_seed}_ent{ent_coef}_step{step}",
                config={"env_id": env_id,
                        "mode": "testing",
                        "model_seed": model_seed,
-                       "entropy_coef": ent_coef,
+                       "rnd_update_freq": rnd_update_freq,
+                       "rnd_weight_decay": rnd_weight_decay,
+                       #"entropy_coef": ent_coef,
                        "step": step,
                        "num_episodes": num_episodes,
                        "max_steps": max_steps_per_episode,
@@ -381,7 +416,10 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, ent_coe
     wandb.log({"flag_mapping": mapping_table})
     
     # Output directory for GIFs
-    output_dir = f"results_4/rnd_{room_size}x{room_size}_seed{model_seed}_ent{ent_coef}_step{step}"
+    freq_str = f"freq{rnd_update_freq}"
+    decay_str = f"decay{str(rnd_weight_decay).replace('.', '_')}"
+    output_dir = f"results_prediction_variations/rnd_{room_size}x{room_size}_{freq_str}_{decay_str}_seed{model_seed}_step{step}"
+    #output_dir = f"results_4/rnd_{room_size}x{room_size}_seed{model_seed}_ent{ent_coef}_step{step}"
     gif_dir = f"{output_dir}/gifs"
     csv_dir = f"{output_dir}/csvs"
     os.makedirs(gif_dir, exist_ok=True)
@@ -620,7 +658,7 @@ def main():
     parser.add_argument("--max_steps", type=int, default=1000, help="Max steps per episode")
     parser.add_argument("--step", type=int, default=None, help="Specific step to test (uses latest if not specified)")
     parser.add_argument("--seed", type=int, default=None, help="Specific seed to test (tests all seeds if not specified)")
-    parser.add_argument("--base_dir", type=str, default="models/RND_PPO_grid_search_4", help="Base directory for saved models")
+    parser.add_argument("--base_dir", type=str, default="models/RND_PPO_prediction_variations", help="Base directory for saved models")
     parser.add_argument("--num_episodes", type=int, default=5, help="Number of test episodes")
     parser.add_argument("--max_steps_per_episode", type=int, default=1000, help="Max steps per test episode")
     parser.add_argument("--ent_coef", type=float, default=None, help="Specific entropy coefficient to test (tests all if not specified)")
@@ -667,7 +705,8 @@ def main():
     
     for seed_dir in seed_dirs:
         seed = int(seed_dir.split("seed")[1].split("_")[0])
-        ent_coef = extract_entropy_coef_from_dirname(seed_dir)
+        #ent_coef = extract_entropy_coef_from_dirname(seed_dir)
+        rnd_update_freq, rnd_weight_decay = extract_rnd_params_from_dirname(seed_dir)
         model_dir = os.path.join(args.base_dir, seed_dir)
         
         # Get all checkpoints for this seed
@@ -693,26 +732,30 @@ def main():
                 env_id=test_env_name,
                 device=device,
                 seed=seed,
-                ent_coef=ent_coef
+                rnd_update_freq=rnd_update_freq,  # Add this
+                rnd_weight_decay=rnd_weight_decay
+                #ent_coef=ent_coef
             )
             
             model.load(model_path)
         
-        test_agent(
-                env_id=test_env_name,
-                model=model,
-                device=device,
-                task=args.task,
-                room_size=args.room_size,
-                step=50000,
-                model_seed=seed,
-                ent_coef=ent_coef,
-                agent_dist=agent_dist,
-                num_episodes=args.num_episodes,
-                max_steps_per_episode=args.max_steps_per_episode,
-                convergence_window=args.convergence_window,
-                convergence_threshold=args.convergence_threshold
-        )
+            test_agent(
+                    env_id=test_env_name,
+                    model=model,
+                    device=device,
+                    task=args.task,
+                    room_size=args.room_size,
+                    step=step,
+                    model_seed=seed,
+                    #ent_coef=ent_coef,
+                    rnd_update_freq=rnd_update_freq,  # Add this
+                    rnd_weight_decay=rnd_weight_decay,
+                    agent_dist=agent_dist,
+                    num_episodes=args.num_episodes,
+                    max_steps_per_episode=args.max_steps_per_episode,
+                    convergence_window=args.convergence_window,
+                    convergence_threshold=args.convergence_threshold
+            )
 
 
 if __name__ == "__main__":

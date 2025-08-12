@@ -48,11 +48,7 @@ class RND_PPO:
             #alpha=0.5,
             #update_proportion=0.25,
             rnd_reward_scale=1.0, #added
-            seed=1,
-            update_obs_rms=True, #added
-            obs_rms_clip=5.0, #added
-            rnd_update_freq=1, #added
-            rnd_weight_decay=0.0, #added
+            seed=1
             ):
         
         self.envs = gym.vector.SyncVectorEnv(
@@ -81,8 +77,6 @@ class RND_PPO:
         #self.update_proportion = update_proportion
         self.rnd_reward_scale = rnd_reward_scale #added
         self.anneal_lr = True
-        self.update_obs_rms = update_obs_rms #added
-        self.obs_rms_clip = obs_rms_clip #added
 
         # Calculate batch sizes
         self.batch_size = int(num_envs * num_steps)
@@ -92,7 +86,6 @@ class RND_PPO:
         # Initialize running statistics
         self.reward_rms = RunningMeanStd()
         self.obs_rms = RunningMeanStd(shape=self.envs.single_observation_space.shape)
-        self.int_reward_rms = RunningMeanStd() #added
         self.rms = RMS(self.device)
 
         # Use the environment's observation space
@@ -109,7 +102,7 @@ class RND_PPO:
         #action_dim = int(np.prod(self.envs.single_action_space.nvec))
         #self.agent = Agent(obs_dim=self.envs.single_observation_space.shape[0],action_dims=action_dim).to(self.device)
         #self.agent = Agent(self.env.action_space[0].nvec, self.env.single_observation_space.shape[0]).to(self.device)
-        self.rnd_model = RNDModel(self.obs_dim, target_seed=1).to(self.device).float() #added target_seed=1 to ensure fixed target initialization
+        self.rnd_model = RNDModel(self.obs_dim).to(self.device).float()
 
         # Add validation for environment compatibility
         if not hasattr(self.envs.single_observation_space, 'shape'):
@@ -120,10 +113,6 @@ class RND_PPO:
         #self.novelty_scale = 1.0
         #self.ext_reward_scale = 1.0
         #self.int_reward_scale = 1.0
-
-        self.rnd_update_freq = rnd_update_freq
-        self.rnd_weight_decay = rnd_weight_decay
-        self.rnd_update_counter = 0
 
     def train(self, save_freq=None, save_path=None):
 
@@ -142,8 +131,6 @@ class RND_PPO:
                 "clip_coef": self.clip_coef,
                 "ent_coef": self.ent_coef,
                 "vf_coef": self.vf_coef,
-                "rnd_reward_scale": self.rnd_reward_scale, #added
-                "update_obs_rms": self.update_obs_rms, #added
                 #"int_coef": self.int_coef,
                 #"ext_coef": self.ext_coef,
                 "device": str(self.device)
@@ -158,24 +145,10 @@ class RND_PPO:
         print(f"Env: {self.env_id} | Device: {self.device}")
         print(f"Total Steps: {self.total_timesteps:,} | Batch Size: {self.batch_size} | Minibatch Size: {self.minibatch_size}")
         print(f"Learning Rate: {self.learning_rate}\n")
-        print(f"Update Obs RMS: {self.update_obs_rms} | Entropy Coef: {self.ent_coef}")
         
-        #optimizer = optim.Adam(
-        #    list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()),
-        #    lr=self.learning_rate, eps=1e-5
-        #)
-
-        agent_optimizer = optim.Adam(
-            self.agent.parameters(),
-            lr=self.learning_rate, 
-            eps=1e-5
-        )
-
-        rnd_optimizer = optim.Adam(
-            self.rnd_model.predictor.parameters(),
-            lr=self.learning_rate, 
-            eps=1e-5,
-            weight_decay=self.rnd_weight_decay  # Apply weight decay only to RND predictor
+        optimizer = optim.Adam(
+            list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()),
+            lr=self.learning_rate, eps=1e-5
         )
         
         next_obs = torch.FloatTensor(self.envs.reset()).to(self.device)
@@ -203,9 +176,7 @@ class RND_PPO:
             if self.anneal_lr:
                 frac = 1.0 - (update - 1.0) / num_updates
                 lrnow = frac * self.learning_rate
-                #optimizer.param_groups[0]["lr"] = lrnow
-                agent_optimizer.param_groups[0]["lr"] = lrnow
-                rnd_optimizer.param_groups[0]["lr"] = lrnow
+                optimizer.param_groups[0]["lr"] = lrnow
 
             # Collect rollout data for one update
             for step in range(self.num_steps):
@@ -229,26 +200,10 @@ class RND_PPO:
 
                 with torch.no_grad():
                     next_obs_tensor = torch.FloatTensor(next_obs).to(self.device)
-
-                    if self.update_obs_rms:
-                        # Update observation RMS with the new observations
-                        self.obs_rms.update(next_obs_tensor.cpu().numpy())
-                        # Clip the RMS values to avoid extreme values
-                        #self.obs_rms.mean = np.clip(self.obs_rms.mean, -self.obs_rms_clip, self.obs_rms_clip)
-                        #self.obs_rms.var = np.clip(self.obs_rms.var, 1e-8, self.obs_rms_clip**2)
-
-                    rnd_reward = self.calculate_novelty(next_obs_tensor) #calculate novelty with updated RMS
-
-                    self.int_reward_rms.update(rnd_reward.cpu().numpy()) #update intrinsic reward RMS
-                    normalized_rnd_reward = rnd_reward / np.sqrt(self.int_reward_rms.var + 1e-8)  # Normalize intrinsic reward
-
+                    rnd_reward = self.calculate_novelty(next_obs_tensor)
                     reward_tensor = torch.tensor(reward, device=self.device)
-                    #rnd_reward_scaled = self.rnd_reward_scale * rnd_reward
-                    rnd_reward_scaled = self.rnd_reward_scale * normalized_rnd_reward  # Scale the normalized intrinsic reward
+                    rnd_reward_scaled = self.rnd_reward_scale * rnd_reward
                     combined_reward = reward_tensor + rnd_reward_scaled
-
-                    extrinsic_rewards[step] = reward_tensor
-                    intrinsic_rewards[step] = rnd_reward_scaled
                     #novelty = self.calculate_novelty(next_obs)
                     #curiosity_rewards[step] = self.normalize_rewards(novelty)
 
@@ -257,28 +212,14 @@ class RND_PPO:
                 next_obs = torch.FloatTensor(next_obs).to(self.device)
                 next_done = torch.FloatTensor(done).to(self.device)
 
-            if save_freq is not None and save_path is not None:
-                checkpoint_number = global_step // save_freq
-                last_checkpoint_number = last_save_step // save_freq
-                
-                # If we've crossed into a new checkpoint interval
-                if checkpoint_number > last_checkpoint_number:
-                    # Save at the exact checkpoint step
-                    checkpoint_step = checkpoint_number * save_freq
-                    save_file = f"{save_path}/model_step_{checkpoint_step}.pt"
-                    self.save(save_file)
-                    print(f"\n[Checkpoint] Model saved to {save_file} at step {global_step} (checkpoint at {checkpoint_step})")
-                    
-                    last_save_step = checkpoint_step
-                    
-                    wandb.log({"checkpoint_saved": True}, step=global_step)
-                #save_file = f"{save_path}/model_step_{global_step}.pt"
-                #self.save(save_file)
-                #print(f"\n[Checkpoint] Model saved to {save_file} at step {global_step}")
+            if save_freq is not None and save_path is not None and (global_step - last_save_step) >= save_freq:
+                save_file = f"{save_path}/model_step_{global_step}.pt"
+                self.save(save_file)
+                print(f"\n[Checkpoint] Model saved to {save_file} at step {global_step}")
             
-                #last_save_step = global_step
+                last_save_step = global_step
             
-                #wandb.log({"checkpoint_saved": True}, step=global_step)
+                wandb.log({"checkpoint_saved": True}, step=global_step)
 
             # Compute advantages rewards
             with torch.no_grad():
@@ -307,33 +248,20 @@ class RND_PPO:
             }, step=global_step)
 
             # Optimize policy and value networks while collecting metrics.
-            #opt_metrics = self.optimize(
-            #    b_obs, b_logprobs, b_actions, b_advantages,
-            #    b_returns, optimizer
-            #)
-
             opt_metrics = self.optimize(
                 b_obs, b_logprobs, b_actions, b_advantages,
-                b_returns, agent_optimizer, rnd_optimizer
+                b_returns, optimizer
             )
 
             # Log update-level training metrics.
             if update % 10 == 0:
                 wandb.log({
-                    "learning_rate": agent_optimizer.param_groups[0]["lr"],
-                    "rnd_learning_rate": rnd_optimizer.param_groups[0]["lr"],
+                    "learning_rate": optimizer.param_groups[0]["lr"],
                     #"novelty": novelty.mean().item(),
                     #"curiosity_reward": curiosity_rewards.mean().item(),
-                    "extrinsic_reward": extrinsic_rewards.mean().item(),
-                    "intrinsic_reward": intrinsic_rewards.mean().item(),
+                    #"extrinsic_reward": rewards.mean().item(),
                     "global_step": global_step,
                     "rnd_reward": rnd_reward.mean().item(),
-                    "policy_entropy": entropy.mean().item(),  # ADD THIS
-                    "obs_rms_mean": float(np.mean(self.obs_rms.mean)),  # ADD THIS
-                    "obs_rms_var": float(np.mean(self.obs_rms.var)),    # ADD THIS
-                    "obs_rms_count": float(self.obs_rms.count),         # ADD THIS
-                    "rnd_update_freq": self.rnd_update_freq,
-                    "rnd_weight_decay": self.rnd_weight_decay,
                     #"updates": update,
                     **opt_metrics
                 }, step=global_step)
@@ -371,77 +299,15 @@ class RND_PPO:
 
         return advantages
 
-    # def optimize(self, b_obs, b_logprobs, b_actions, b_advantages, b_returns, optimizer):
-    #     # Normalize observations for the RND loss.
-    #     metrics = {
-    #         "pg_loss": [],
-    #         "v_loss": [],
-    #         "entropy": [],
-    #         "rnd_loss": [],
-    #         "total_loss": [],
-    #         "clipfrac": []
-    #     }
-
-    #     for epoch in range(self.update_epochs):
-    #         # Shuffle data
-    #         inds = np.arange(self.batch_size)
-    #         np.random.shuffle(inds)
-
-    #         for start in range(0, self.batch_size, self.minibatch_size):
-    #             end = start + self.minibatch_size
-    #             mb_inds = inds[start:end]
-
-    #             # New log probabilities, entropy and value predictions.
-    #             _, newlogprob, entropy, new_value_ext, new_values = self.agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
-    #             logratio = newlogprob - b_logprobs[mb_inds]
-    #             ratio = logratio.exp()
-
-    #             # Policy loss.
-    #             mb_advantages = b_advantages[mb_inds]
-    #             pg_loss1 = -mb_advantages * ratio
-    #             pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
-    #             pg_loss = torch.max(pg_loss1, pg_loss2).mean()
-    #             metrics["pg_loss"].append(pg_loss.item())
-
-    #             # Value loss.
-    #             v_loss = 0.5 * ((new_values - b_returns[mb_inds]) ** 2).mean()
-    #             metrics["v_loss"].append(v_loss.item())
-
-    #             # RND loss.
-    #             normalized_obs = self.normalize_obs(b_obs[mb_inds]) #added to remove agent position from rnd
-    #             masked_obs = self.mask_agent_position(normalized_obs) #added to remove agent position from rnd
-    #             predict_feature, target_feature = self.rnd_model(masked_obs)
-    #             rnd_loss = F.mse_loss(predict_feature, target_feature.detach())
-    #             metrics["rnd_loss"].append(rnd_loss.item())
-
-    #             # Combined loss.
-    #             entropy_loss = entropy.mean()
-    #             loss = pg_loss - self.ent_coef * entropy_loss + v_loss * self.vf_coef + rnd_loss
-    #             metrics["entropy"].append(entropy_loss.item())
-    #             metrics["total_loss"].append(loss.item())
-
-    #             clip_fraction = ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
-    #             metrics["clipfrac"].append(clip_fraction)
-
-    #             optimizer.zero_grad()
-    #             loss.backward()
-    #             if self.max_grad_norm:
-    #                 torch.nn.utils.clip_grad_norm_(list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()), self.max_grad_norm)
-    #             optimizer.step()
-
-    #     avg_metrics = {k: np.mean(v) for k, v in metrics.items()}
-    #     return avg_metrics
-    
-    def optimize(self, b_obs, b_logprobs, b_actions, b_advantages, b_returns, agent_optimizer, rnd_optimizer):
-        """Optimize with separate optimizers and RND update frequency control"""
+    def optimize(self, b_obs, b_logprobs, b_actions, b_advantages, b_returns, optimizer):
+        # Normalize observations for the RND loss.
         metrics = {
             "pg_loss": [],
             "v_loss": [],
             "entropy": [],
             "rnd_loss": [],
             "total_loss": [],
-            "clipfrac": [],
-            "rnd_updated": []  # Track when RND was actually updated
+            "clipfrac": []
         }
 
         for epoch in range(self.update_epochs):
@@ -453,83 +319,45 @@ class RND_PPO:
                 end = start + self.minibatch_size
                 mb_inds = inds[start:end]
 
-                # New log probabilities, entropy and value predictions
-                _, newlogprob, entropy, new_value_ext, new_values = self.agent.get_action_and_value(
-                    b_obs[mb_inds], b_actions.long()[mb_inds]
-                )
+                # New log probabilities, entropy and value predictions.
+                _, newlogprob, entropy, new_value_ext, new_values = self.agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
-                # Policy loss
+                # Policy loss.
                 mb_advantages = b_advantages[mb_inds]
                 pg_loss1 = -mb_advantages * ratio
                 pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()
                 metrics["pg_loss"].append(pg_loss.item())
 
-                # Value loss
+                # Value loss.
                 v_loss = 0.5 * ((new_values - b_returns[mb_inds]) ** 2).mean()
                 metrics["v_loss"].append(v_loss.item())
 
-                # Entropy loss
+                # RND loss.
+                normalized_obs = self.normalize_obs(b_obs[mb_inds]) #added to remove agent position from rnd
+                masked_obs = self.mask_agent_position(normalized_obs) #added to remove agent position from rnd
+                predict_feature, target_feature = self.rnd_model(masked_obs)
+                rnd_loss = F.mse_loss(predict_feature, target_feature.detach())
+                metrics["rnd_loss"].append(rnd_loss.item())
+
+                # Combined loss.
                 entropy_loss = entropy.mean()
+                loss = pg_loss - self.ent_coef * entropy_loss + v_loss * self.vf_coef + rnd_loss
                 metrics["entropy"].append(entropy_loss.item())
-
-                # Agent loss (policy + value + entropy)
-                agent_loss = pg_loss - self.ent_coef * entropy_loss + v_loss * self.vf_coef
-
-                # Update agent
-                agent_optimizer.zero_grad()
-                agent_loss.backward()
-                if self.max_grad_norm:
-                    torch.nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
-                agent_optimizer.step()
-
-                # RND loss and update (with frequency control)
-                rnd_updated = False
-                self.rnd_update_counter += 1
-                
-                if self.rnd_update_counter >= self.rnd_update_freq:
-                    # Reset counter
-                    self.rnd_update_counter = 0
-                    rnd_updated = True
-                    
-                    # Calculate RND loss
-                    normalized_obs = self.normalize_obs(b_obs[mb_inds])
-                    masked_obs = self.mask_agent_position(normalized_obs)
-                    predict_feature, target_feature = self.rnd_model(masked_obs)
-                    rnd_loss = F.mse_loss(predict_feature, target_feature.detach())
-                    
-                    # Update RND predictor
-                    rnd_optimizer.zero_grad()
-                    rnd_loss.backward()
-                    if self.max_grad_norm:
-                        torch.nn.utils.clip_grad_norm_(self.rnd_model.predictor.parameters(), self.max_grad_norm)
-                    rnd_optimizer.step()
-                    
-                    metrics["rnd_loss"].append(rnd_loss.item())
-                else:
-                    # Still calculate RND loss for logging, but don't update
-                    with torch.no_grad():
-                        normalized_obs = self.normalize_obs(b_obs[mb_inds])
-                        masked_obs = self.mask_agent_position(normalized_obs)
-                        predict_feature, target_feature = self.rnd_model(masked_obs)
-                        rnd_loss = F.mse_loss(predict_feature, target_feature.detach())
-                        metrics["rnd_loss"].append(rnd_loss.item())
-
-                metrics["rnd_updated"].append(rnd_updated)
-                
-                # Total loss for logging (agent_loss + rnd_loss, but they're optimized separately)
-                total_loss = agent_loss + rnd_loss
-                metrics["total_loss"].append(total_loss.item())
+                metrics["total_loss"].append(loss.item())
 
                 clip_fraction = ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
                 metrics["clipfrac"].append(clip_fraction)
 
-        # Add RND update statistics to metrics
+                optimizer.zero_grad()
+                loss.backward()
+                if self.max_grad_norm:
+                    torch.nn.utils.clip_grad_norm_(list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()), self.max_grad_norm)
+                optimizer.step()
+
         avg_metrics = {k: np.mean(v) for k, v in metrics.items()}
-        avg_metrics["rnd_update_rate"] = np.mean(metrics["rnd_updated"])  # Fraction of steps where RND was updated
-        
         return avg_metrics
     
     def mask_agent_position(self, obs):
@@ -548,62 +376,28 @@ class RND_PPO:
             novelty = ((target_feature - predict_feature) ** 2).sum(1) / 2 + 1e-8
             return novelty.clamp(0, 10)
 
-    # def normalize_obs(self, obs):
-    #     original_dim = len(obs.shape)
-    #     if torch.isnan(obs).any():
-    #         raise ValueError("NaN values detected in observations")
-    #     if obs.requires_grad:
-    #         obs = obs.detach()
-    #     if original_dim == 1:
-    #         obs = obs.unsqueeze(0)
-    #     normalized = ((obs - torch.FloatTensor(self.obs_rms.mean).to(self.device)) / 
-    #                 torch.sqrt(torch.FloatTensor(self.obs_rms.var).to(self.device) + 1e-8)).clip(-5, 5)
-    #     return normalized.squeeze(0) if original_dim == 1 else normalized
-
     def normalize_obs(self, obs):
-        """Normalize observations using running statistics"""
+        original_dim = len(obs.shape)
         if torch.isnan(obs).any():
             raise ValueError("NaN values detected in observations")
         if obs.requires_grad:
             obs = obs.detach()
-        
-        mean = torch.FloatTensor(self.obs_rms.mean).to(self.device)
-        var = torch.FloatTensor(self.obs_rms.var).to(self.device)
-        
-        normalized = (obs - mean) / torch.sqrt(var + 1e-8)
-        return normalized.clamp(-self.obs_rms_clip, self.obs_rms_clip)
+        if original_dim == 1:
+            obs = obs.unsqueeze(0)
+        normalized = ((obs - torch.FloatTensor(self.obs_rms.mean).to(self.device)) / 
+                    torch.sqrt(torch.FloatTensor(self.obs_rms.var).to(self.device) + 1e-8)).clip(-5, 5)
+        return normalized.squeeze(0) if original_dim == 1 else normalized
     
     def save(self, path):
         torch.save({
             'agent': self.agent.state_dict(),
-            'rnd_model': self.rnd_model.state_dict(),
-            'obs_rms': {
-                'mean': self.obs_rms.mean,
-                'var': self.obs_rms.var,
-                'count': self.obs_rms.count
-            },
-            'int_reward_rms': {
-                'mean': self.int_reward_rms.mean,
-                'var': self.int_reward_rms.var,
-                'count': self.int_reward_rms.count
-            }
+            'rnd_model': self.rnd_model.state_dict()
         }, path)
 
     def load(self, path):
         checkpoint = torch.load(path)
         self.agent.load_state_dict(checkpoint['agent'])
         self.rnd_model.load_state_dict(checkpoint['rnd_model'])
-
-        if 'obs_rms' in checkpoint:
-            self.obs_rms.mean = checkpoint['obs_rms']['mean']
-            self.obs_rms.var = checkpoint['obs_rms']['var']
-            self.obs_rms.count = checkpoint['obs_rms']['count']
-            print(f"Loaded obs_rms with count: {self.obs_rms.count}")
-        
-        if 'int_reward_rms' in checkpoint:
-            self.int_reward_rms.mean = checkpoint['int_reward_rms']['mean']
-            self.int_reward_rms.var = checkpoint['int_reward_rms']['var']
-            self.int_reward_rms.count = checkpoint['int_reward_rms']['count']
 
 class RunningMeanStd:
     """Tracks running mean and standard deviation of input data"""
@@ -664,21 +458,9 @@ class RunningMeanStd:
         return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)'''
 
 class RNDModel(nn.Module):
-    """Random Network Distillation model for novelty detection with fixed target initialization"""
-    def __init__(self, input_size, hidden_size=256,target_seed=1):
+    """Random Network Distillation model for novelty detection"""
+    def __init__(self, input_size, hidden_size=256):
         super().__init__()
-
-        # CRITICAL FIX: Save current RNG state
-        cpu_rng_state = torch.get_rng_state()
-        if torch.cuda.is_available():
-            cuda_rng_state = torch.cuda.get_rng_state_all()
-        
-        # Set fixed seed for target network
-        torch.manual_seed(target_seed)
-        np.random.seed(target_seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(target_seed)
-
         self.target = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
@@ -686,13 +468,6 @@ class RNDModel(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size)
         )
-
-        # Restore RNG state for predictor
-        torch.set_rng_state(cpu_rng_state)
-        if torch.cuda.is_available():
-            torch.cuda.set_rng_state_all(cuda_rng_state)
-
-
         self.predictor = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),

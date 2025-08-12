@@ -172,7 +172,18 @@ def calculate_merged_csv_distributions(merged_df, group_by_columns=['entropy', '
         
         total_episodes = group_df['episode'].nunique()
         # Use dynamic step count based on convergence testing (up to 1000)
-        total_opportunities = total_episodes * 1000
+        # Get actual steps taken per episode (assuming episodes can end early due to convergence)
+        steps_per_episode = []
+        for episode_num in group_df['episode'].unique():
+            episode_df = group_df[group_df['episode'] == episode_num]
+            # Maximum activity count gives us a lower bound on steps taken
+            max_activity_in_episode = episode_df['activity_count'].max()
+            # You might need to adjust this multiplier based on your activity frequency
+            estimated_steps = min(1000, max_activity_in_episode * 2)  # Conservative estimate
+            steps_per_episode.append(estimated_steps)
+
+        avg_steps_per_episode = np.mean(steps_per_episode) if steps_per_episode else 1000
+        total_opportunities = total_episodes * avg_steps_per_episode
         
         # Process each object type
         for obj_type in group_df['object_type'].unique():
@@ -666,7 +677,7 @@ def main():
     parser.add_argument('results_dir', help='Directory containing test results (e.g., results/)')
     parser.add_argument('--pkl-path', default='post_processing/averaged_state_distributions.pkl', 
                        help='Path to the agent distribution pickle file')
-    parser.add_argument('--output-dir', default='comprehensive_analysis_results', 
+    parser.add_argument('--output-dir', default='comprehensive_analysis_results_upd', 
                        help='Directory to save analysis results')
     parser.add_argument('--group-by', nargs='+', default=['entropy', 'step'],
                        choices=['seed', 'entropy', 'step', 'episode'],
