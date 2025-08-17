@@ -95,7 +95,9 @@ def run_experiment(config_path, output_dir='results'):
             ext_coef=hyperparams['ext_coef'],
             int_gamma=hyperparams['int_gamma'],
             alpha=hyperparams['alpha'],
-            update_proportion=hyperparams['update_proportion']
+            update_proportion=hyperparams['update_proportion'],
+            wandb_project="NovelD_Hyperparameter_Ablation",  # Descriptive project name
+            wandb_run_name=exp_name  # Use experiment name as wandb run name
         )
         
         # Train agent

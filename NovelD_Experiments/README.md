@@ -73,6 +73,11 @@ Output in `results/exp_*/`:
 - `checkpoints/activity_logs/` - CSV activity logs
 - `SUCCESS` - Marker file if completed successfully
 
+**WandB Integration:** Each experiment run is automatically logged to WandB with:
+- Project name: `NovelD_Hyperparameter_Ablation`
+- Run name: matches the experiment name (e.g., `exp_000_alpha_0`)
+- Full hyperparameter configuration logged
+
 ### 3. Results Analyzer (`analyze_results.py`)
 Analyzes all experiment results and calculates JS divergences:
 ```bash
