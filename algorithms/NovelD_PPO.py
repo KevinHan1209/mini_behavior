@@ -135,7 +135,8 @@ class NovelD_PPO:
             wandb_project="NovelD_PPO",
             wandb_entity=None,
             wandb_run_name=None,
-            use_wandb=True
+            use_wandb=True,
+            norm_adv = True
             ):
         
         self.envs = gym.vector.SyncVectorEnv(
@@ -219,6 +220,7 @@ class NovelD_PPO:
         self.wandb_run_name = wandb_run_name
         self.use_wandb = use_wandb and WANDB_AVAILABLE
         self.anneal_lr = True
+        self.norm_adv = norm_adv
 
         # Calculate batch sizes
         self.batch_size = int(num_envs * num_steps)
@@ -530,6 +532,8 @@ class NovelD_PPO:
                     metrics["clipfrac"].append(clip_frac)
 
                 mb_advantages = b_advantages[mb_inds]
+                if self.norm_adv:
+                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
                 pg_loss1 = -mb_advantages * ratio
                 pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()

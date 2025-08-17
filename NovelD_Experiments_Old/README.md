@@ -1,7 +1,5 @@
 # NovelD Hyperparameter Ablation Experiments
 
-**Updated Version** - This version includes the normalized advantages fix in NovelD.
-
 This directory contains a complete pipeline for running NovelD hyperparameter ablation experiments on virtual machines.
 
 ## Overview

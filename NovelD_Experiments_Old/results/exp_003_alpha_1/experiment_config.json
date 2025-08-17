@@ -1,0 +1,25 @@
+{
+  "id": 3,
+  "name": "exp_003_alpha_1",
+  "ablated_param": "alpha",
+  "ablated_value": 1,
+  "hyperparameters": {
+    "alpha": 1,
+    "update_proportion": 0.25,
+    "int_gamma": 0.99,
+    "ent_coef": 0.01,
+    "learning_rate": 0.0003,
+    "num_envs": 8,
+    "num_steps": 125,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "num_minibatches": 4,
+    "update_epochs": 4,
+    "clip_coef": 0.2,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "int_coef": 1.0,
+    "ext_coef": 0.0,
+    "total_timesteps": 2500000
+  }
+}
