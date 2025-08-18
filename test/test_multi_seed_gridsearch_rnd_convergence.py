@@ -381,7 +381,7 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, ent_coe
     wandb.log({"flag_mapping": mapping_table})
     
     # Output directory for GIFs
-    output_dir = f"results_4/rnd_{room_size}x{room_size}_seed{model_seed}_ent{ent_coef}_step{step}"
+    output_dir = f"results_5/rnd_{room_size}x{room_size}_seed{model_seed}_ent{ent_coef}_step{step}"
     gif_dir = f"{output_dir}/gifs"
     csv_dir = f"{output_dir}/csvs"
     os.makedirs(gif_dir, exist_ok=True)
@@ -620,7 +620,7 @@ def main():
     parser.add_argument("--max_steps", type=int, default=1000, help="Max steps per episode")
     parser.add_argument("--step", type=int, default=None, help="Specific step to test (uses latest if not specified)")
     parser.add_argument("--seed", type=int, default=None, help="Specific seed to test (tests all seeds if not specified)")
-    parser.add_argument("--base_dir", type=str, default="models/RND_PPO_grid_search_4", help="Base directory for saved models")
+    parser.add_argument("--base_dir", type=str, default="models/RND_PPO_grid_search_5", help="Base directory for saved models")
     parser.add_argument("--num_episodes", type=int, default=5, help="Number of test episodes")
     parser.add_argument("--max_steps_per_episode", type=int, default=1000, help="Max steps per test episode")
     parser.add_argument("--ent_coef", type=float, default=None, help="Specific entropy coefficient to test (tests all if not specified)")
@@ -698,21 +698,21 @@ def main():
             
             model.load(model_path)
         
-        test_agent(
-                env_id=test_env_name,
-                model=model,
-                device=device,
-                task=args.task,
-                room_size=args.room_size,
-                step=50000,
-                model_seed=seed,
-                ent_coef=ent_coef,
-                agent_dist=agent_dist,
-                num_episodes=args.num_episodes,
-                max_steps_per_episode=args.max_steps_per_episode,
-                convergence_window=args.convergence_window,
-                convergence_threshold=args.convergence_threshold
-        )
+            test_agent(
+                    env_id=test_env_name,
+                    model=model,
+                    device=device,
+                    task=args.task,
+                    room_size=args.room_size,
+                    step=step,
+                    model_seed=seed,
+                    ent_coef=ent_coef,
+                    agent_dist=agent_dist,
+                    num_episodes=args.num_episodes,
+                    max_steps_per_episode=args.max_steps_per_episode,
+                    convergence_window=args.convergence_window,
+                    convergence_threshold=args.convergence_threshold
+            )
 
 
 if __name__ == "__main__":

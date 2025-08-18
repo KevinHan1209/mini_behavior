@@ -15,11 +15,11 @@ from env_wrapper import CustomObservationWrapper
 @dataclass
 class Args:
     # Experiment settings
-    exp_name: str = "rnd_ppo_prediction_variations"
+    exp_name: str = "rnd_ppo_variations"
     """experiment name for logging"""
     seed_start: int = 3
     """starting seed number"""
-    seed_count: int = 5
+    seed_count: int = 3
     """number of seeds to run sequentially"""
     
     # Environment settings
@@ -31,7 +31,7 @@ class Args:
     """maximum steps per episode"""
     
     # Training settings
-    total_timesteps: int = int(1e6)
+    total_timesteps: int = int(2e6)
     """total timesteps for each training run"""
     num_envs: int = 8
     """number of parallel environments"""
@@ -39,7 +39,7 @@ class Args:
     """number of steps per environment per update"""
     rnd_reward_scale: float = 0.1
     """scaling factor for intrinsic rewards"""
-    ent_coef: float = 0.001
+    ent_coef: float = 0.01
     """entropy coefficient (fixed based on previous experiments)"""
     
     # RND Prediction Network Variations
@@ -55,7 +55,7 @@ class Args:
     # Logging settings
     track: bool = True
     """whether to track with wandb"""
-    wandb_project_name: str = "rnd-ppo-prediction-variations"
+    wandb_project_name: str = "rnd_ppo_variations"
     """wandb project name"""
     wandb_entity: str = None
     """wandb entity name"""
@@ -63,7 +63,7 @@ class Args:
     # Saving settings
     save_freq: int = 100000
     """how often to save model (in steps)"""
-    save_dir: str = "models/RND_PPO_prediction_variations"
+    save_dir: str = "models/RND_PPO_variations"
     """directory to save models"""
 
 def make_env(env_id, seed, idx, env_kwargs):
@@ -82,10 +82,13 @@ def init_env(env_id, num_envs, seed, env_kwargs):
 def setup_env_registration(args):
     """Register the training and test environments"""
     env_name = f"MiniGrid-{args.task}-{args.room_size}x{args.room_size}-N2-LP-v4"
-    env_kwargs = {"room_size": args.room_size, "max_steps": args.max_steps}
+    env_kwargs = {"room_size": args.room_size, "max_steps": args.max_steps,
+                   "extrinsic_rewards": {"noise": 0.1, "interaction": 0.1, "location_change": 0.1}
+        }
     
     test_env_name = f"MiniGrid-{args.task}-{args.room_size}x{args.room_size}-N2-LP-v5"
-    test_env_kwargs = {"room_size": args.room_size, "max_steps": args.max_steps, "test_env": True}
+    test_env_kwargs = {"room_size": args.room_size, "max_steps": args.max_steps,
+                   "extrinsic_rewards": {"noise": 0.1, "interaction": 0.1, "location_change": 0.1}, "test_env": True}
     
     from mini_behavior.register import env_list
     
@@ -200,10 +203,10 @@ if __name__ == "__main__":
     
     # Default values for RND prediction network variations
     if args.rnd_update_freq_values is None:
-        args.rnd_update_freq_values = [1] # [1, 2, 4]  
+        args.rnd_update_freq_values = [2, 4]  
     
     if args.rnd_weight_decay_values is None:
-        args.rnd_weight_decay_values = [1e-4, 1e-3, 1e-2]  # Range of weight decay values
+        args.rnd_weight_decay_values = [0.0] #[0.0, 1e-4, 1e-3, 1e-2]  # Range of weight decay values
     
     seeds = list(range(args.seed_start, args.seed_start + args.seed_count))
     

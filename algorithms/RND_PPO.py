@@ -53,6 +53,7 @@ class RND_PPO:
             obs_rms_clip=5.0, #added
             rnd_update_freq=1, #added
             rnd_weight_decay=0.0, #added
+            norm_adv=True,
             ):
         
         self.envs = gym.vector.SyncVectorEnv(
@@ -83,6 +84,7 @@ class RND_PPO:
         self.anneal_lr = True
         self.update_obs_rms = update_obs_rms #added
         self.obs_rms_clip = obs_rms_clip #added
+        self.norm_adv = norm_adv
 
         # Calculate batch sizes
         self.batch_size = int(num_envs * num_steps)
@@ -224,8 +226,16 @@ class RND_PPO:
                 #ext_values[step] = value_ext.flatten()
                 values[step] = value.flatten()
 
-                action_list = action.detach().cpu().tolist()
-                next_obs, reward, done, info = self.envs.step(action_list)
+                #action_list = action.detach().cpu().tolist()
+                #next_obs, reward, done, info = self.envs.step(action_list)
+                next_obs, reward, done, info = self.envs.step(action.cpu().numpy())
+
+                #if global_step % 1000 == 0:  # Log every 1000 steps
+                    #print(f"Debug Step {global_step}:")
+                    #print(f"  Raw rewards from env: {reward}")
+                    #print(f"  Max reward: {max(reward)}, Min reward: {min(reward)}")
+                    #print(f"  Any non-zero rewards: {any(r != 0 for r in reward)}")
+                    #print(f"  Done flags: {done}")
 
                 with torch.no_grad():
                     next_obs_tensor = torch.FloatTensor(next_obs).to(self.device)
@@ -243,6 +253,8 @@ class RND_PPO:
                     normalized_rnd_reward = rnd_reward / np.sqrt(self.int_reward_rms.var + 1e-8)  # Normalize intrinsic reward
 
                     reward_tensor = torch.tensor(reward, device=self.device)
+                    #debug_reward = reward_tensor + 0.01  # Small constant reward
+                    #extrinsic_rewards[step] = debug_reward
                     #rnd_reward_scaled = self.rnd_reward_scale * rnd_reward
                     rnd_reward_scaled = self.rnd_reward_scale * normalized_rnd_reward  # Scale the normalized intrinsic reward
                     combined_reward = reward_tensor + rnd_reward_scaled
@@ -326,6 +338,7 @@ class RND_PPO:
                     #"curiosity_reward": curiosity_rewards.mean().item(),
                     "extrinsic_reward": extrinsic_rewards.mean().item(),
                     "intrinsic_reward": intrinsic_rewards.mean().item(),
+                    "total_reward": rewards.mean().item(),
                     "global_step": global_step,
                     "rnd_reward": rnd_reward.mean().item(),
                     "policy_entropy": entropy.mean().item(),  # ADD THIS
@@ -462,6 +475,9 @@ class RND_PPO:
 
                 # Policy loss
                 mb_advantages = b_advantages[mb_inds]
+                if self.norm_adv:
+                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+            
                 pg_loss1 = -mb_advantages * ratio
                 pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()
