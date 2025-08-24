@@ -1,0 +1,32 @@
+{
+  "id": 423,
+  "name": "exp_423_interaction_ent_0_05",
+  "description": "Interaction only extrinsic; entropy coefficient = 0.05",
+  "ablated_param": "ent_coef",
+  "ablated_value": 0.05,
+  "extrinsic_rewards": {
+    "location_change": 0.0,
+    "interaction": 0.0415,
+    "noise": 0.0
+  },
+  "hyperparameters": {
+    "alpha": 1,
+    "update_proportion": 0.25,
+    "int_gamma": 0.99,
+    "ent_coef": 0.05,
+    "learning_rate": 0.0003,
+    "num_envs": 8,
+    "num_steps": 125,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "num_minibatches": 4,
+    "update_epochs": 4,
+    "clip_coef": 0.2,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "int_coef": 0.0,
+    "ext_coef": 1.0,
+    "total_timesteps": 2500000
+  }
+}
+
