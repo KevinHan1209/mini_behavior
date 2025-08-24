@@ -69,103 +69,188 @@ def load_agent_distributions(pkl_path="post_processing/averaged_state_distributi
     return flat_dist
 
 def extract_metadata_from_path(csv_path):
-    """Extract metadata (seed, entropy, step, episode) from CSV file path"""
+    """Extract metadata (seed, entropy, step, episode, frequency, decay) from CSV file path"""
     path_parts = Path(csv_path).parts
     
-    metadata = {}
+    metadata = {
+        'seed': None,
+        'entropy': None,
+        'step': None,
+        'frequency': None,
+        'decay': None
+    }
     
     for part in path_parts:
         if part.startswith('rnd_'):
             parts = part.split('_')
             
-            metadata['seed'] = None
-            metadata['entropy'] = None
-            metadata['step'] = None
-            
             i = 0
             while i < len(parts):
                 p = parts[i]
                 
+                # Skip dimension parts like 8x8, 6x4, etc.
                 if 'x' in p and p.replace('x', '').replace('8', '').replace('6', '').replace('4', '') == '':
                     i += 1
                     continue
                 
+                # Handle frequency
                 if p.startswith('freq'):
                     freq_value = p[4:]  # Extract number after 'freq'
-                    metadata['frequency'] = int(freq_value) if freq_value.isdigit() else None
+                    if freq_value.isdigit():
+                        metadata['frequency'] = int(freq_value)
                     i += 1
                     continue
                 
+                # Handle decay - this is the tricky one
                 if p.startswith('decay'):
                     decay_base = p[5:]  # Get part after 'decay'
-                    decay_parts = [decay_base]
                     
+                    # Look ahead to see if next parts are digits that should be combined
+                    decay_parts = [decay_base]
                     j = i + 1
-                    while j < len(parts):
+                    
+                    # Collect subsequent numeric parts that look like decimal components
+                    while j < len(parts) and j < len(parts):
                         next_part = parts[j]
-                        if next_part.isdigit() and len(next_part) <= 4:
+                        # Check if this looks like a decimal part (1-4 digits)
+                        if (next_part.isdigit() and len(next_part) <= 4 and 
+                            not next_part.startswith('seed') and 
+                            not next_part.startswith('step') and
+                            not next_part.startswith('ent')):
                             decay_parts.append(next_part)
                             j += 1
                         else:
                             break
                     
+                    # Parse the decay value
                     if len(decay_parts) == 1:
-                        metadata['decay'] = float(decay_base) if decay_base.replace('.', '').isdigit() else 0.0
+                        # Single part like 'decay0' or 'decay1.5'
+                        if decay_base.replace('.', '').isdigit():
+                            metadata['decay'] = float(decay_base)
+                        else:
+                            metadata['decay'] = 0.0
                     else:
+                        # Multiple parts like 'decay0', '0' -> 0.0
                         if decay_parts[0] == '0':
+                            # Handle cases like decay0_0 -> 0.0 or decay0_01 -> 0.01
                             decimal_part = ''.join(decay_parts[1:])
-                            metadata['decay'] = float(f"0.{decimal_part}")
-                        else:
-                            metadata['decay'] = float(decay_parts[0])
-                    
-                    i = j  
-                    continue
-                
-                if p.startswith('seed'):
-                    seed_value = p[4:]
-                    metadata['seed'] = int(seed_value) if seed_value.isdigit() else None
-                    i += 1
-                    continue
-                
-                if p.startswith('step'):
-                    step_value = p[4:]
-                    metadata['step'] = step_value  # Keep as string in case it's "final"
-                    i += 1
-                    continue
-                
-                if p.startswith('ent'):
-                    ent_value = p[3:]
-                    try:
-                        if '.' in ent_value:
-                            metadata['entropy'] = float(ent_value)
-                        elif '_' in ent_value:
-                            ent_parts = ent_value.split('_')
-                            if len(ent_parts) == 2 and ent_parts[0].isdigit() and ent_parts[1].isdigit():
-                                metadata['entropy'] = float(f"{ent_parts[0]}.{ent_parts[1]}")
+                            if decimal_part.isdigit():
+                                metadata['decay'] = float(f"0.{decimal_part}")
                             else:
-                                metadata['entropy'] = float(ent_value.replace('_', '.'))
+                                metadata['decay'] = 0.0
                         else:
-                            metadata['entropy'] = float(ent_value) if ent_value.replace('.', '').isdigit() else None
-                    except ValueError:
+                            # Handle cases like decay1_5 -> 1.5
+                            try:
+                                if decay_parts[0].isdigit():
+                                    integer_part = decay_parts[0]
+                                    decimal_part = ''.join(decay_parts[1:])
+                                    if decimal_part.isdigit():
+                                        metadata['decay'] = float(f"{integer_part}.{decimal_part}")
+                                    else:
+                                        metadata['decay'] = float(integer_part)
+                                else:
+                                    metadata['decay'] = 0.0
+                            except ValueError:
+                                metadata['decay'] = 0.0
+                    
+                    i = j  # Skip the parts we've consumed
+                    continue
+                
+                # Handle entropy
+                if p.startswith('ent'):
+                    ent_value = p[3:]  # Get part after 'ent'
+                    
+                    # Look ahead for potential decimal parts
+                    ent_parts = [ent_value]
+                    j = i + 1
+                    
+                    # Collect subsequent numeric parts for entropy
+                    while j < len(parts):
+                        next_part = parts[j]
+                        if (next_part.isdigit() and len(next_part) <= 4 and
+                            not next_part.startswith('seed') and 
+                            not next_part.startswith('step') and
+                            not next_part.startswith('freq') and
+                            not next_part.startswith('decay')):
+                            ent_parts.append(next_part)
+                            j += 1
+                        else:
+                            break
+                    
+                    # Parse entropy value
+                    try:
+                        if len(ent_parts) == 1:
+                            # Single part like 'ent0.01' or 'ent1'
+                            if '.' in ent_value:
+                                metadata['entropy'] = float(ent_value)
+                            elif ent_value.isdigit():
+                                metadata['entropy'] = float(ent_value)
+                            else:
+                                metadata['entropy'] = None
+                        else:
+                            # Multiple parts like 'ent0', '01' -> 0.01
+                            if ent_parts[0] == '0':
+                                decimal_part = ''.join(ent_parts[1:])
+                                if decimal_part.isdigit():
+                                    metadata['entropy'] = float(f"0.{decimal_part}")
+                                else:
+                                    metadata['entropy'] = 0.0
+                            else:
+                                # Handle cases like ent1_5 -> 1.5
+                                if ent_parts[0].isdigit():
+                                    integer_part = ent_parts[0]
+                                    decimal_part = ''.join(ent_parts[1:])
+                                    if decimal_part.isdigit():
+                                        metadata['entropy'] = float(f"{integer_part}.{decimal_part}")
+                                    else:
+                                        metadata['entropy'] = float(integer_part)
+                                else:
+                                    metadata['entropy'] = None
+                    except (ValueError, IndexError):
                         metadata['entropy'] = None
+                    
+                    i = j  # Skip consumed parts
+                    continue
+                
+                # Handle seed
+                if p.startswith('seed'):
+                    seed_value = p[4:]  # Get part after 'seed'
+                    if seed_value.isdigit():
+                        metadata['seed'] = int(seed_value)
                     i += 1
                     continue
                 
+                # Handle step
+                if p.startswith('step'):
+                    step_value = p[4:]  # Get part after 'step'
+                    if step_value == 'final':
+                        metadata['step'] = 'final'
+                    elif step_value.isdigit():
+                        metadata['step'] = int(step_value)
+                    else:
+                        metadata['step'] = step_value  # Keep as string for other cases
+                    i += 1
+                    continue
+                
+                # Move to next part if no matches
                 i += 1
             
-            break 
+            break  # Stop after processing the first rnd_ part
     
+    # Extract episode from filename if present
     filename = Path(csv_path).name
     if filename.startswith('episode_'):
         try:
-            episode_num = filename.split('_')[1]
-            metadata['episode'] = int(episode_num)
+            episode_parts = filename.split('_')
+            if len(episode_parts) >= 2 and episode_parts[1].isdigit():
+                metadata['episode'] = int(episode_parts[1])
         except (IndexError, ValueError):
             pass
     
-    if 'frequency' not in metadata or metadata['frequency'] is None:
+    # Set defaults for missing values
+    if metadata['frequency'] is None:
         metadata['frequency'] = 1  # Default frequency
-    if 'decay' not in metadata or metadata['decay'] is None:
+    if metadata['decay'] is None:
         metadata['decay'] = 0.0  # Default decay
     
     return metadata
@@ -227,11 +312,37 @@ def merge_all_activity_csvs(results_dir):
     print(f"Skipped files: {len(skipped_files)}")
     
     if len(merged_df) > 0:
-        print(f"Seeds found: {sorted([s for s in merged_df['seed'].unique() if s is not None])}")
-        print(f"Frequencies found: {sorted([f for f in merged_df['frequency'].unique() if f is not None])}")
-        print(f"Decay values found: {sorted([d for d in merged_df['decay'].unique() if d is not None])}")
-        print(f"Steps found: {sorted([s for s in merged_df['step'].unique() if s is not None])}")
-        print(f"Episodes found: {sorted([e for e in merged_df['episode'].unique() if e is not None])}")
+        # Safe sorting for mixed data types
+        def safe_sort_unique(column_values, column_name):
+            """Safely sort unique values that might be mixed types"""
+            unique_vals = [val for val in column_values.unique() if val is not None]
+            
+            if column_name == 'step':
+                # Custom sorting for step column (handle 'final' and numeric values)
+                def step_sort_key(step):
+                    if step == 'final':
+                        return float('inf')  # Put 'final' at the end
+                    try:
+                        return int(step)
+                    except (ValueError, TypeError):
+                        return -1  # Put other non-numeric steps at the beginning
+                return sorted(unique_vals, key=step_sort_key)
+            else:
+                # For other columns, try to sort normally
+                try:
+                    return sorted(unique_vals)
+                except TypeError:
+                    # If sorting fails due to mixed types, convert all to strings
+                    return sorted([str(val) for val in unique_vals])
+        
+        print(f"Seeds found: {safe_sort_unique(merged_df['seed'], 'seed')}")
+        print(f"Frequencies found: {safe_sort_unique(merged_df['frequency'], 'frequency')}")
+        print(f"Decay values found: {safe_sort_unique(merged_df['decay'], 'decay')}")
+        print(f"Steps found: {safe_sort_unique(merged_df['step'], 'step')}")
+        print(f"Episodes found: {safe_sort_unique(merged_df['episode'], 'episode')}")
+        
+        if 'entropy' in merged_df.columns:
+            print(f"Entropies found: {safe_sort_unique(merged_df['entropy'], 'entropy')}")
     
     return merged_df
 
@@ -257,6 +368,7 @@ def load_action_probability_data(action_files, verbose=False):
             config_key = (
                 metadata.get('frequency', 1),
                 metadata.get('decay', 0.0),
+                metadata.get('entropy', None),  # Add this
                 metadata.get('seed', 'unknown')
             )
             
@@ -290,7 +402,7 @@ def prepare_action_plot_data(all_action_data):
     total_data_points = 0
     
     for config_key, checkpoints in all_action_data.items():
-        freq, decay, seed = config_key
+        freq, decay, entropy, seed = config_key
         
         for checkpoint_data in checkpoints:
             step = checkpoint_data['step']
@@ -309,12 +421,14 @@ def prepare_action_plot_data(all_action_data):
                             plot_data.append({
                                 'frequency': freq,
                                 'decay': decay,
+                                'entropy': entropy,
                                 'seed': seed,
                                 'checkpoint_step': step,
                                 'action_dimension': dim_idx,
                                 'action_index': action_idx,
                                 'probability': prob,
-                                'config': f"freq{freq}_decay{str(decay).replace('.', '_')}_seed{seed}",
+                                'config': f"freq{freq}_decay{str(decay).replace('.', '_')}_ent{str(entropy).replace('.', '_')}_seed{seed}",
+
                                 'action_label': f"Dim{dim_idx}_Act{action_idx}"
                             })
                             checkpoint_data_points += 1
@@ -1238,14 +1352,16 @@ def analyze_results_comprehensive(summary_df, detailed_df, quality_df):
     
     if len(problematic) > 0:
         print(f"\nPROBLEMATIC CONFIGURATIONS ({len(problematic)}):")
-        print("Steps with issues:", sorted(problematic['step'].unique()))
+        print("Steps with issues:", sorted([s for s in problematic['step'].unique() if s != 'final']))
         
         if 'frequency' in problematic.columns:
-            print("Frequencies with issues:", sorted(problematic['frequency'].unique()))
+            print("Frequencies with issues:", sorted([f for f in problematic['frequency'].unique() if f is not None]))
         if 'decay' in problematic.columns:
-            print("Decay values with issues:", sorted(problematic['decay'].unique()))
+            print("Decay values with issues:", sorted([d for d in problematic['decay'].unique() if d is not None]))
+
         if 'entropy' in problematic.columns:
-            print("Entropies with issues:", sorted(problematic['entropy'].unique()))
+            print("Entropies with issues:", sorted([e for e in problematic['entropy'].unique() if e is not None]))
+
         
         problematic_with_score = problematic.copy()
         problematic_with_score['quality_score'] = (
@@ -1319,12 +1435,13 @@ def analyze_results_comprehensive(summary_df, detailed_df, quality_df):
 
 def main():
     parser = argparse.ArgumentParser(description='Comprehensive merge and analysis of test results with JS and KL divergences')
-    parser.add_argument('results_dir', help='Directory containing test results (e.g., results/)')
+    parser.add_argument('results_dir', default='results_variations',
+                        help='Directory containing test results (e.g., results/)')
     parser.add_argument('--pkl-path', default='post_processing/averaged_state_distributions.pkl', 
                        help='Path to the agent distribution pickle file')
-    parser.add_argument('--output-dir', default='comprehensive_analysis_results_6', 
+    parser.add_argument('--output-dir', default='comprehensive_analysis_results_7', 
                        help='Directory to save analysis results')
-    parser.add_argument('--group-by', nargs='+', default=['frequency', 'decay', 'step'],
+    parser.add_argument('--group-by', nargs='+', default=['entropy', 'step'],
                    choices=['seed', 'frequency', 'decay', 'entropy', 'step', 'episode'],
                    help='Columns to group by for analysis')
     parser.add_argument('--verbose', '-v', action='store_true', 

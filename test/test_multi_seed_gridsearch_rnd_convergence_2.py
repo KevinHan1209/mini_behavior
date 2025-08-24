@@ -312,13 +312,43 @@ def extract_entropy_coef_from_dirname(dirname):
             print(f"Warning: Could not parse entropy coefficient from '{ent_part}', using default 0.01")
             return 0.01
         
-def extract_rnd_params_from_dirname(dirname):
-    """Extract RND update frequency and weight decay from directory name
+def extract_params_from_dirname(dirname):
+    """Extract entropy coefficient, RND update frequency and weight decay from directory name
     
-    Expected format: MultiToy_8x8_freq1_decay0_0001_seed5_1754942590
+    Expected formats: 
+    - MultiToy_8x8_ent0_1_seed8_1755793364
+    - MultiToy_8x8_freq1_decay0_0001_seed5_1754942590
+    - MultiToy_8x8_ent0_01_freq2_decay0_001_seed3_123456789
     """
-    rnd_update_freq = 1  # default
-    rnd_weight_decay = 0.0  # default
+    # Defaults
+    ent_coef = 0.01
+    rnd_update_freq = 1
+    rnd_weight_decay = 0.0
+    
+    # Extract entropy coefficient
+    ent_match = re.search(r'ent(\d+_\d+)', dirname)
+    if ent_match:
+        ent_part = ent_match.group(1)
+        if ent_part == "0_001":
+            ent_coef = 0.001
+        elif ent_part == "0_01":
+            ent_coef = 0.01
+        elif ent_part == "0_1":
+            ent_coef = 0.1
+        elif ent_part == "0_2":
+            ent_coef = 0.2
+        elif ent_part == "0_05":
+            ent_coef = 0.05
+        elif ent_part == "1_0":
+            ent_coef = 1.0
+        else:
+            try:
+                # Convert "0_1" to "0.1" format
+                clean_str = ent_part.replace("_", ".", 1)
+                ent_coef = float(clean_str)
+            except ValueError:
+                print(f"Warning: Could not parse entropy coefficient from '{ent_part}', using default 0.01")
+                ent_coef = 0.01
     
     # Extract update frequency
     freq_match = re.search(r'freq(\d+)', dirname)
@@ -329,19 +359,17 @@ def extract_rnd_params_from_dirname(dirname):
     decay_match = re.search(r'decay(\d+_\d+)', dirname)
     if decay_match:
         decay_str = decay_match.group(1)
-        
         if decay_str == "0_0":
             rnd_weight_decay = 0.0
         else:
             try:
-                # Convert "0_0001" to "0.0001"
-                clean_str = decay_str.replace("_", ".", 1)  # Only replace first underscore
+                clean_str = decay_str.replace("_", ".", 1)
                 rnd_weight_decay = float(clean_str)
             except ValueError:
                 print(f"Warning: Could not parse weight decay from '{decay_str}', using default 0.0")
                 rnd_weight_decay = 0.0
     
-    return rnd_update_freq, rnd_weight_decay
+    return ent_coef, rnd_update_freq, rnd_weight_decay
 
 def make_single_env(env_id, seed, env_kwargs):
     env = gym.make(env_id, **env_kwargs)
@@ -405,19 +433,20 @@ def find_all_model_checkpoints(model_dir):
     return checkpoints
 
 
-def test_agent(env_id, model, device, task, room_size, step, model_seed, rnd_update_freq, rnd_weight_decay,
+def test_agent(env_id, model, device, task, room_size, step, model_seed, ent_coef, rnd_update_freq, rnd_weight_decay,
                agent_dist, num_episodes=5, max_steps_per_episode=1000, 
                convergence_window=10, convergence_threshold=0.001):
     print(f"\n=== Testing Agent (Seed {model_seed}): {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
     wandb.init(project="rnd-ppo_w_external",
-           name=f"RND_PPO_{task}_{room_size}x{room_size}_freq{rnd_update_freq}_decay{str(rnd_weight_decay).replace('.', '_')}_seed{model_seed}_step{step}",
+               name=f"RND_PPO_{task}_{room_size}x{room_size}_ent{str(ent_coef).replace('.', '_')}_freq{rnd_update_freq}_decay{str(rnd_weight_decay).replace('.', '_')}_seed{model_seed}_step{step}",
                config={"env_id": env_id,
                        "mode": "testing",
                        "model_seed": model_seed,
                        "rnd_update_freq": rnd_update_freq,
                        "rnd_weight_decay": rnd_weight_decay,
+                       "ent_coef": ent_coef,
                        "step": step,
                        "num_episodes": num_episodes,
                        "max_steps": max_steps_per_episode,
@@ -445,7 +474,8 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, rnd_upd
     # Output directory for results
     freq_str = f"freq{rnd_update_freq}"
     decay_str = f"decay{str(rnd_weight_decay).replace('.', '_')}"
-    output_dir = f"results_variations/rnd_{room_size}x{room_size}_{freq_str}_{decay_str}_seed{model_seed}_step{step}"
+    ent_coef_str = f"ent{str(ent_coef).replace('.', '_')}"
+    output_dir = f"results_variations/rnd_{room_size}x{room_size}_{freq_str}_{decay_str}_{ent_coef_str}_seed{model_seed}_step{step}"
     gif_dir = f"{output_dir}/gifs"
     csv_dir = f"{output_dir}/csvs"
     action_prob_dir = f"{output_dir}/action_probabilities"  # NEW: Add action prob directory
@@ -457,7 +487,6 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, rnd_upd
     episode_lengths = []
     episode_novelties = []
     
-    # NEW: Track action probabilities across all episodes
     all_action_probs = {
         'checkpoint_step': step,
         'model_seed': model_seed,
@@ -477,7 +506,6 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, rnd_upd
         activity = [0] * num_binary_flags
         prev_flags = None
         
-        # NEW: Track action probabilities for this episode
         episode_action_probs = []
         
         # Initialize convergence tracking
@@ -485,6 +513,12 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, rnd_upd
         kl_history = deque(maxlen=convergence_window * 3)
         
         while not done and steps < max_steps_per_episode:
+            # Render the environment for visualization (only for last episode to save memory)
+            if episode == num_episodes - 1:
+                frame = test_env.render()
+                if frame is not None:
+                    frames.append(np.moveaxis(frame, 2, 0))
+
             # Get action from model
             with torch.no_grad():
                 obs_tensor = torch.FloatTensor(obs).to(device).unsqueeze(0)
@@ -628,7 +662,6 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, rnd_upd
             'action_probs': episode_action_probs  # This is the key fix - store the actual data
         })
         
-        # DEBUG: Print action prob collection status
         print(f"Episode {episode}: collected {len(episode_action_probs)} action probability entries")
         if episode_action_probs:
             first_entry = episode_action_probs[0]
@@ -639,8 +672,6 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, rnd_upd
         episode_rewards.append(total_reward)
         episode_lengths.append(steps)
         episode_novelties.append(np.mean(novelty_values))
-        
-        # ... rest of existing convergence and logging code ...
         
         # Calculate final divergences for this episode
         total_opportunities = steps
@@ -673,6 +704,12 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, rnd_upd
             "episode": episode
         })
 
+        # Save episode as GIF if frames were captured
+        if frames and episode == num_episodes - 1:
+            gif_path = f"{gif_dir}/episode_{episode + 1}.gif"
+            write_gif(np.array(frames), gif_path, fps=1)
+            wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+
         # Log activity per binary flag
         activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
         activity_data = []
@@ -693,15 +730,12 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, rnd_upd
         activity_df.to_csv(csv_path, index=False)
         wandb.log({f"episode_{episode + 1}_activity": activity_table})
         
-        # Print episode summary
         print(f"\n=== Episode {episode + 1} Summary ===")
         print(f"Total Reward: {total_reward:.2f} | Steps: {steps} | Mean Novelty: {np.mean(novelty_values):.4f}")
         print(f"Final JS Divergence: {final_avg_js:.6f} | Final KL Divergence: {final_avg_kl:.6f}")
 
-    # NEW: Save action probabilities for this checkpoint - FIXED: Save in checkpoint directory
     action_prob_file = os.path.join(action_prob_dir, f"action_probs_step_{step}.pkl")
     
-    # DEBUG: Final check before saving
     print(f"\nFinal action prob data check:")
     print(f"Total episodes: {len(all_action_probs['episodes_data'])}")
     for i, episode in enumerate(all_action_probs['episodes_data']):
@@ -711,7 +745,6 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, rnd_upd
         pickle.dump(all_action_probs, f)
     print(f"Saved action probabilities to: {action_prob_file}")
     
-    # Log summary action probability statistics to wandb
     total_steps_all_episodes = sum(len(ep['action_probs']) for ep in all_action_probs['episodes_data'])
     wandb.log({
         "total_action_probability_samples": total_steps_all_episodes,
@@ -743,70 +776,6 @@ def load_all_action_probabilities(base_dir, seed=None):
     return all_data
 
 
-def create_action_probability_boxplots(action_prob_data, save_path=None):
-    """Create box plots showing action probability evolution across checkpoints"""
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    import pandas as pd
-    import numpy as np
-    
-    # Prepare data for plotting
-    plot_data = []
-    
-    for checkpoint_data in action_prob_data:
-        checkpoint_step = checkpoint_data['checkpoint_step']
-        
-        for episode_data in checkpoint_data['episodes_data']:
-            for step_data in episode_data['action_probs']:
-                action_probs = step_data['action_probs']
-                
-                # For each action dimension
-                for dim_idx, dim_probs in enumerate(action_probs):
-                    # For each action in this dimension
-                    for action_idx, prob in enumerate(dim_probs):
-                        plot_data.append({
-                            'checkpoint_step': checkpoint_step,
-                            'action_dimension': dim_idx,
-                            'action_index': action_idx,
-                            'probability': prob,
-                            'action_label': f"Dim{dim_idx}_Action{action_idx}"
-                        })
-    
-    df = pd.DataFrame(plot_data)
-    
-    # Create separate plots for each action dimension
-    action_dims = df['action_dimension'].unique()
-    
-    fig, axes = plt.subplots(len(action_dims), 1, figsize=(15, 5*len(action_dims)))
-    if len(action_dims) == 1:
-        axes = [axes]
-    
-    for dim_idx, ax in enumerate(axes):
-        dim_data = df[df['action_dimension'] == dim_idx]
-        
-        # Create box plot
-        sns.boxplot(data=dim_data, x='checkpoint_step', y='probability', 
-                   hue='action_label', ax=ax)
-        
-        ax.set_title(f'Action Dimension {dim_idx} - Probability Distribution Evolution')
-        ax.set_xlabel('Checkpoint Step')
-        ax.set_ylabel('Action Probability')
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        
-        # Rotate x-axis labels if there are many checkpoints
-        if len(dim_data['checkpoint_step'].unique()) > 8:
-            ax.tick_params(axis='x', rotation=45)
-    
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Saved box plot to {save_path}")
-    
-    plt.show()
-
-
-
 def main():
     parser = argparse.ArgumentParser(description="Test RND_PPO models from multi-seed training with convergence")
     parser.add_argument("--task", type=str, default="MultiToy", help="Task name")
@@ -814,7 +783,7 @@ def main():
     parser.add_argument("--max_steps", type=int, default=1000, help="Max steps per episode")
     parser.add_argument("--step", type=int, default=None, help="Specific step to test (uses latest if not specified)")
     parser.add_argument("--seed", type=int, default=None, help="Specific seed to test (tests all seeds if not specified)")
-    parser.add_argument("--base_dir", type=str, default="models/RND_PPO_variations", help="Base directory for saved models")
+    parser.add_argument("--base_dir", type=str, default="models/RND_PPO_entropy_w_external_rewards", help="Base directory for saved models")
     parser.add_argument("--num_episodes", type=int, default=5, help="Number of test episodes")
     parser.add_argument("--max_steps_per_episode", type=int, default=1000, help="Max steps per test episode")
     parser.add_argument("--ent_coef", type=float, default=None, help="Specific entropy coefficient to test (tests all if not specified)")
@@ -861,8 +830,7 @@ def main():
     
     for seed_dir in seed_dirs:
         seed = int(seed_dir.split("seed")[1].split("_")[0])
-        #ent_coef = extract_entropy_coef_from_dirname(seed_dir)
-        rnd_update_freq, rnd_weight_decay = extract_rnd_params_from_dirname(seed_dir)
+        ent_coef, rnd_update_freq, rnd_weight_decay = extract_params_from_dirname(seed_dir)
         model_dir = os.path.join(args.base_dir, seed_dir)
         
         # Get all checkpoints for this seed
@@ -888,9 +856,9 @@ def main():
                 env_id=test_env_name,
                 device=device,
                 seed=seed,
-                rnd_update_freq=rnd_update_freq,  # Add this
+                rnd_update_freq=rnd_update_freq,
                 rnd_weight_decay=rnd_weight_decay,
-                ent_coef=0.01
+                ent_coef=ent_coef
             )
             
             model.load(model_path)
@@ -903,7 +871,7 @@ def main():
                     room_size=args.room_size,
                     step=step,
                     model_seed=seed,
-                    #ent_coef=ent_coef,
+                    ent_coef=ent_coef,
                     rnd_update_freq=rnd_update_freq,  # Add this
                     rnd_weight_decay=rnd_weight_decay,
                     agent_dist=agent_dist,
