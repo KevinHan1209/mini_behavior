@@ -17,9 +17,9 @@ class Args:
     # Experiment settings
     exp_name: str = "rnd_ppo_grid_search"
     """experiment name for logging"""
-    seed_start: int = 5
+    seed_start: int = 6
     """starting seed number"""
-    seed_count: int = 1
+    seed_count: int = 3
     """number of seeds to run sequentially"""
     
     # Environment settings
@@ -31,7 +31,7 @@ class Args:
     """maximum steps per episode"""
     
     # Training settings
-    total_timesteps: int = int(1e6)
+    total_timesteps: int = int(2e6)
     """total timesteps for each training run"""
     num_envs: int = 8
     """number of parallel environments"""
@@ -57,9 +57,9 @@ class Args:
     """wandb entity name"""
     
     # Saving settings
-    save_freq: int = 50000
+    save_freq: int = 100000
     """how often to save model (in steps)"""
-    save_dir: str = "models/RND_PPO_grid_search_4"
+    save_dir: str = "models/RND_PPO_entropy_w_external_rewards"
     """directory to save models"""
 
 def make_env(env_id, seed, idx, env_kwargs):
@@ -78,10 +78,12 @@ def init_env(env_id, num_envs, seed, env_kwargs):
 def setup_env_registration(args):
     """Register the training and test environments"""
     env_name = f"MiniGrid-{args.task}-{args.room_size}x{args.room_size}-N2-LP-v4"
-    env_kwargs = {"room_size": args.room_size, "max_steps": args.max_steps}
+    env_kwargs = {"room_size": args.room_size, "max_steps": args.max_steps,
+                  "extrinsic_rewards": {"noise": 0.1, "interaction": 0.1, "location_change": 0.1}}
     
     test_env_name = f"MiniGrid-{args.task}-{args.room_size}x{args.room_size}-N2-LP-v5"
-    test_env_kwargs = {"room_size": args.room_size, "max_steps": args.max_steps, "test_env": True}
+    test_env_kwargs = {"room_size": args.room_size, "max_steps": args.max_steps,
+                       "extrinsic_rewards": {"noise": 0.1, "interaction": 0.1, "location_change": 0.1}, "test_env": True}
     
     from mini_behavior.register import env_list
     
@@ -188,7 +190,7 @@ if __name__ == "__main__":
     args = tyro.cli(Args)
     
     if args.ent_coef_values is None:
-        args.ent_coef_values = [0.1] # [0.0, 0.001, 0.01, 0.05, 0.1] #[0.0, 0.01, 0.1, 0.5, 1.0, 2.0] #[0.0, 0.001, 0.01, 0.05, 0.1]
+        args.ent_coef_values = [0.0, 0.001, 0.01, 0.1, 1.0] # [0.0, 0.001, 0.01, 0.05, 0.1] #[0.0, 0.01, 0.1, 0.5, 1.0, 2.0] #[0.0, 0.001, 0.01, 0.05, 0.1]
     
     seeds = list(range(args.seed_start, args.seed_start + args.seed_count))
     
