@@ -566,10 +566,10 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, ent_coe
         })
 
         # Save episode as GIF if frames were captured
-        #if frames and episode == num_episodes - 1:
-        #    gif_path = f"{gif_dir}/episode_{episode + 1}.gif"
-        #    write_gif(np.array(frames), gif_path, fps=1)
-        #    wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
+        if frames and episode == num_episodes - 1:
+            gif_path = f"{gif_dir}/episode_{episode + 1}.gif"
+            write_gif(np.array(frames), gif_path, fps=1)
+            wandb.log({"episode_replay": wandb.Video(gif_path, fps=10, format="gif")})
         
         # Log activity per binary flag
         activity_table = wandb.Table(columns=["flag_id", "object_type", "object_index", "state_name", "activity_count"])
