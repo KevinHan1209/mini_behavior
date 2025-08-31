@@ -549,7 +549,7 @@ class NovelD_PPO:
 
                 # Combined loss.
                 entropy_loss = entropy.mean()
-                loss = pg_loss - self.ent_coef * entropy_loss + v_loss * self.vf_coef + forward_loss
+                loss = pg_loss - self.ent_coef * entropy_loss.clip(max=2.0) + v_loss * self.vf_coef + forward_loss
                 metrics["entropy"].append(entropy_loss.item())
                 metrics["total_loss"].append(loss.item())
 
