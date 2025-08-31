@@ -240,32 +240,30 @@ class RND_PPO:
                 with torch.no_grad():
                     next_obs_tensor = torch.FloatTensor(next_obs).to(self.device)
 
-                    if self.update_obs_rms:
-                        # Update observation RMS with the new observations
-                        self.obs_rms.update(next_obs_tensor.cpu().numpy())
-                        # Clip the RMS values to avoid extreme values
-                        #self.obs_rms.mean = np.clip(self.obs_rms.mean, -self.obs_rms_clip, self.obs_rms_clip)
-                        #self.obs_rms.var = np.clip(self.obs_rms.var, 1e-8, self.obs_rms_clip**2)
-
-                    rnd_reward = self.calculate_novelty(next_obs_tensor) #calculate novelty with updated RMS
-
-                    self.int_reward_rms.update(rnd_reward.cpu().numpy()) #update intrinsic reward RMS
-                    normalized_rnd_reward = rnd_reward / np.sqrt(self.int_reward_rms.var + 1e-8)  # Normalize intrinsic reward
-
                     reward_tensor = torch.tensor(reward, device=self.device)
-                    #debug_reward = reward_tensor + 0.01  # Small constant reward
-                    #extrinsic_rewards[step] = debug_reward
-                    #rnd_reward_scaled = self.rnd_reward_scale * rnd_reward
-                    rnd_reward_scaled = self.rnd_reward_scale * normalized_rnd_reward  # Scale the normalized intrinsic reward
-                    combined_reward = reward_tensor + rnd_reward_scaled
+
+                    if self.rnd_reward_scale > 0.0:
+                        if self.update_obs_rms:
+                            self.obs_rms.update(next_obs_tensor.cpu().numpy())
+
+                        rnd_reward = self.calculate_novelty(next_obs_tensor)
+                        self.int_reward_rms.update(rnd_reward.cpu().numpy())
+                        normalized_rnd_reward = rnd_reward / np.sqrt(self.int_reward_rms.var + 1e-8)
+                        rnd_reward_scaled = self.rnd_reward_scale * normalized_rnd_reward
+                        combined_reward = reward_tensor + rnd_reward_scaled
+                    else:
+                        # EXTRINSIC-ONLY PATH
+                        rnd_reward = torch.zeros(self.num_envs, device=self.device)
+                        rnd_reward_scaled = torch.zeros_like(rnd_reward)
+                        combined_reward = reward_tensor
 
                     extrinsic_rewards[step] = reward_tensor
                     intrinsic_rewards[step] = rnd_reward_scaled
-                    #novelty = self.calculate_novelty(next_obs)
-                    #curiosity_rewards[step] = self.normalize_rewards(novelty)
+                    rewards[step] = combined_reward
+
 
                 #rewards[step] = torch.FloatTensor(reward).to(self.device)
-                rewards[step] = combined_reward #training on both extrinsic and intrinsic
+                #rewards[step] = combined_reward #training on both extrinsic and intrinsic
                 next_obs = torch.FloatTensor(next_obs).to(self.device)
                 next_done = torch.FloatTensor(done).to(self.device)
 

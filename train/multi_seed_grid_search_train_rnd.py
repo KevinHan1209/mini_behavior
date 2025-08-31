@@ -19,7 +19,7 @@ class Args:
     """experiment name for logging"""
     seed_start: int = 6
     """starting seed number"""
-    seed_count: int = 3
+    seed_count: int = 1
     """number of seeds to run sequentially"""
     
     # Environment settings
@@ -37,7 +37,7 @@ class Args:
     """number of parallel environments"""
     num_steps: int = 200
     """number of steps per environment per update"""
-    rnd_reward_scale: float = 0.1
+    rnd_reward_scale: float = 0.0
     """scaling factor for intrinsic rewards"""
     
     # Grid search settings
@@ -59,7 +59,7 @@ class Args:
     # Saving settings
     save_freq: int = 100000
     """how often to save model (in steps)"""
-    save_dir: str = "models/RND_PPO_entropy_w_external_rewards"
+    save_dir: str = "models/RND_PPO_entropy_w_only_external_rewards"
     """directory to save models"""
 
 def make_env(env_id, seed, idx, env_kwargs):

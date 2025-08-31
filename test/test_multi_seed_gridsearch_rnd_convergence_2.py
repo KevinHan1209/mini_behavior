@@ -59,7 +59,6 @@ def save_action_probabilities(action_probs_data, checkpoint_step, model_seed, ba
     print(f"Saved action probabilities to {filepath}")
     print(f"  Total episodes: {len(action_probs_data.get('episodes_data', []))}")
     
-    # Debug: Check if episodes have action_probs data
     episodes_data = action_probs_data.get('episodes_data', [])
     for i, episode in enumerate(episodes_data[:2]):  # Check first 2 episodes
         action_probs = episode.get('action_probs', [])
@@ -284,33 +283,6 @@ def generate_flag_mapping(env):
                         "state_name": state_name
                     })
     return mapping
-
-def extract_entropy_coef_from_dirname(dirname):
-
-    if "ent0_" not in dirname:
-        return 0.01  # Default value if not found
-    
-    # Extract the part after "ent0_"
-    ent_part = dirname.split("ent0_")[1].split("_")[0]
-    
-    # Convert to float
-    if ent_part == "001":
-        return 0.001
-    elif ent_part == "01":
-        return 0.01
-    elif ent_part == "1":
-        return 0.1
-    elif ent_part == "2":
-        return 0.2
-    elif ent_part == "05":
-        return 0.05
-    else:
-        # Try to parse as float with decimal point
-        try:
-            return float(f"0.{ent_part}")
-        except ValueError:
-            print(f"Warning: Could not parse entropy coefficient from '{ent_part}', using default 0.01")
-            return 0.01
         
 def extract_params_from_dirname(dirname):
     """Extract entropy coefficient, RND update frequency and weight decay from directory name
@@ -439,7 +411,7 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, ent_coe
     print(f"\n=== Testing Agent (Seed {model_seed}): {num_episodes} Episodes ===")
     
     # Initialize wandb for testing
-    wandb.init(project="rnd-ppo_w_external",
+    wandb.init(project="rnd-ppo_only_external",
                name=f"RND_PPO_{task}_{room_size}x{room_size}_ent{str(ent_coef).replace('.', '_')}_freq{rnd_update_freq}_decay{str(rnd_weight_decay).replace('.', '_')}_seed{model_seed}_step{step}",
                config={"env_id": env_id,
                        "mode": "testing",
@@ -475,7 +447,7 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, ent_coe
     freq_str = f"freq{rnd_update_freq}"
     decay_str = f"decay{str(rnd_weight_decay).replace('.', '_')}"
     ent_coef_str = f"ent{str(ent_coef).replace('.', '_')}"
-    output_dir = f"results_variations/rnd_{room_size}x{room_size}_{freq_str}_{decay_str}_{ent_coef_str}_seed{model_seed}_step{step}"
+    output_dir = f"results_no_intrinsic/rnd_{room_size}x{room_size}_{freq_str}_{decay_str}_{ent_coef_str}_seed{model_seed}_step{step}"
     gif_dir = f"{output_dir}/gifs"
     csv_dir = f"{output_dir}/csvs"
     action_prob_dir = f"{output_dir}/action_probabilities"  # NEW: Add action prob directory
@@ -751,6 +723,9 @@ def test_agent(env_id, model, device, task, room_size, step, model_seed, ent_coe
         "action_prob_file": action_prob_file
     })
 
+    test_env.close()
+    wandb.finish()
+
 def load_all_action_probabilities(base_dir, seed=None):
     """Load all action probability files for analysis"""
     import glob
@@ -783,7 +758,7 @@ def main():
     parser.add_argument("--max_steps", type=int, default=1000, help="Max steps per episode")
     parser.add_argument("--step", type=int, default=None, help="Specific step to test (uses latest if not specified)")
     parser.add_argument("--seed", type=int, default=None, help="Specific seed to test (tests all seeds if not specified)")
-    parser.add_argument("--base_dir", type=str, default="models/RND_PPO_entropy_w_external_rewards", help="Base directory for saved models")
+    parser.add_argument("--base_dir", type=str, default="models/RND_PPO_entropy_w_only_external_rewards", help="Base directory for saved models")
     parser.add_argument("--num_episodes", type=int, default=5, help="Number of test episodes")
     parser.add_argument("--max_steps_per_episode", type=int, default=1000, help="Max steps per test episode")
     parser.add_argument("--ent_coef", type=float, default=None, help="Specific entropy coefficient to test (tests all if not specified)")
@@ -855,6 +830,7 @@ def main():
                 env=test_env,
                 env_id=test_env_name,
                 device=device,
+                rnd_reward_scale=0.0,
                 seed=seed,
                 rnd_update_freq=rnd_update_freq,
                 rnd_weight_decay=rnd_weight_decay,
