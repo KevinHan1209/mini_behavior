@@ -229,6 +229,7 @@ def main():
         wandb_run_name=args.wandb_run_name,
         wrap_observations=False,
         norm_adv=True,
+        use_intrinsic=False,
     )
 
     # Set up per-update evaluation callback to log returns vs iteration

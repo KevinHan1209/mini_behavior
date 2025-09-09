@@ -150,7 +150,8 @@ class NovelD_PPO:
             use_wandb=True,
             norm_adv = True,
             wrap_observations: bool = True,
-            update_callback=None
+            update_callback=None,
+            use_intrinsic=None
             ):
         
         # Build vectorized envs with optional observation wrapper (for generic gym envs like CartPole, disable it)
@@ -250,6 +251,11 @@ class NovelD_PPO:
         self.norm_adv = norm_adv
         self.wrap_observations = wrap_observations
         self.update_callback = update_callback
+        # Intrinsic curiosity usage (RND)
+        if use_intrinsic is None:
+            self.use_intrinsic = (self.int_coef is not None and self.int_coef > 0.0)
+        else:
+            self.use_intrinsic = bool(use_intrinsic)
 
         # Calculate batch sizes
         self.batch_size = int(num_envs * num_steps)
@@ -270,7 +276,7 @@ class NovelD_PPO:
         obs_dim = self.envs.single_observation_space.shape[0]
 
         self.agent = Agent(obs_dim=obs_dim, action_dims=action_dims).to(self.device)
-        self.rnd_model = RNDModel(self.obs_dim).to(self.device).float()
+        self.rnd_model = RNDModel(self.obs_dim).to(self.device).float() if self.use_intrinsic else None
         self.action_dims = action_dims
 
         # Add validation for environment compatibility
@@ -319,16 +325,17 @@ class NovelD_PPO:
                 created_wandb_run = True
             # Watch models for gradients and parameter histograms.
             wandb.watch(self.agent, log="all", log_freq=100)
-            wandb.watch(self.rnd_model, log="all", log_freq=100)
+            if self.use_intrinsic and self.rnd_model is not None:
+                wandb.watch(self.rnd_model, log="all", log_freq=100)
         print("\n=== Training Configuration ===")
         print(f"Env: {self.env_id} | Device: {self.device}")
         print(f"Total Steps: {self.total_timesteps:,} | Batch Size: {self.batch_size} | Minibatch Size: {self.minibatch_size}")
         print(f"Learning Rate: {self.learning_rate}\n")
         
-        optimizer = optim.Adam(
-            list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()),
-            lr=self.learning_rate, eps=1e-5
-        )
+        params = list(self.agent.parameters())
+        if self.use_intrinsic and self.rnd_model is not None:
+            params += list(self.rnd_model.predictor.parameters())
+        optimizer = optim.Adam(params, lr=self.learning_rate, eps=1e-5)
         obs = self.envs.reset()
 
         next_obs = torch.FloatTensor(self.envs.reset()).to(self.device)
@@ -388,13 +395,16 @@ class NovelD_PPO:
                                 if reward_type in self.extrinsic_reward_trackers and value > 0:
                                     self.extrinsic_reward_trackers[reward_type].append(value)
 
-                with torch.no_grad():
-                    raw_novelty = self.calculate_novelty(next_obs)
-                    curiosity_rewards[step] = self.normalize_rewards(raw_novelty)
-                    # Store raw novelty for logging
-                    if not hasattr(self, 'raw_novelty_buffer'):
-                        self.raw_novelty_buffer = []
-                    self.raw_novelty_buffer.append(raw_novelty)
+                if self.use_intrinsic and self.rnd_model is not None:
+                    with torch.no_grad():
+                        raw_novelty = self.calculate_novelty(next_obs)
+                        curiosity_rewards[step] = self.normalize_rewards(raw_novelty)
+                        # Store raw novelty for logging
+                        if not hasattr(self, 'raw_novelty_buffer'):
+                            self.raw_novelty_buffer = []
+                        self.raw_novelty_buffer.append(raw_novelty)
+                else:
+                    curiosity_rewards[step] = torch.zeros_like(curiosity_rewards[step])
 
             # Compute advantages for extrinsic and intrinsic rewards.
             with torch.no_grad():
@@ -561,10 +571,13 @@ class NovelD_PPO:
                 mb_inds = inds[start:end]
 
                 # RND loss.
-                predict_next_state_feature, target_next_state_feature = self.rnd_model(rnd_next_obs[mb_inds])
-                forward_loss = F.mse_loss(predict_next_state_feature, target_next_state_feature.detach(), reduction="none").mean(-1)
-                mask = (torch.rand(len(forward_loss), device=self.device) < self.update_proportion).float()
-                forward_loss = (forward_loss * mask).sum() / torch.max(mask.sum(), torch.tensor([1], device=self.device, dtype=torch.float32))
+                if self.use_intrinsic and self.rnd_model is not None:
+                    predict_next_state_feature, target_next_state_feature = self.rnd_model(rnd_next_obs[mb_inds])
+                    forward_loss = F.mse_loss(predict_next_state_feature, target_next_state_feature.detach(), reduction="none").mean(-1)
+                    mask = (torch.rand(len(forward_loss), device=self.device) < self.update_proportion).float()
+                    forward_loss = (forward_loss * mask).sum() / torch.max(mask.sum(), torch.tensor([1], device=self.device, dtype=torch.float32))
+                else:
+                    forward_loss = torch.tensor(0.0, device=self.device)
                 metrics["rnd_forward_loss"].append(forward_loss.item())
 
                 # New log probabilities, entropy and value predictions.
@@ -590,8 +603,11 @@ class NovelD_PPO:
                 new_ext_values = new_ext_values.view(-1)
                 new_int_values = new_int_values.view(-1)
                 ext_v_loss = 0.5 * ((new_ext_values - b_ext_returns[mb_inds]) ** 2).mean()
-                int_v_loss = 0.5 * ((new_int_values - b_int_returns[mb_inds]) ** 2).mean()
-                v_loss = int_v_loss
+                if self.use_intrinsic:
+                    int_v_loss = 0.5 * ((new_int_values - b_int_returns[mb_inds]) ** 2).mean()
+                else:
+                    int_v_loss = torch.tensor(0.0, device=self.device)
+                v_loss = int_v_loss if self.use_intrinsic else ext_v_loss
                 metrics["v_loss"].append(v_loss.item())
 
                 # Combined loss.
@@ -615,6 +631,8 @@ class NovelD_PPO:
         return avg_metrics
 
     def calculate_novelty(self, obs):
+        if not (self.use_intrinsic and self.rnd_model is not None):
+            raise RuntimeError("calculate_novelty called but intrinsic curiosity is disabled")
         with torch.no_grad():
             normalized_obs = self.normalize_obs(obs)
             target_feature = self.rnd_model.target(normalized_obs)
