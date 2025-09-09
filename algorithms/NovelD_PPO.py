@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import gym
+from gym import spaces
 try:
     import wandb
     WANDB_AVAILABLE = True
@@ -25,6 +26,17 @@ def make_env(env_id, seed, idx):
         env.seed(seed + idx)
         return env
     return thunk
+
+# Helper to infer action dims from action space
+
+def get_action_dims_from_space(action_space):
+    if isinstance(action_space, spaces.MultiDiscrete):
+        return list(action_space.nvec)
+    elif isinstance(action_space, spaces.Discrete):
+        return [action_space.n]
+    else:
+        raise NotImplementedError(f"Unsupported action space type: {type(action_space)}")
+
 
 def count_binary_flags(env):
     """
@@ -136,12 +148,26 @@ class NovelD_PPO:
             wandb_entity=None,
             wandb_run_name=None,
             use_wandb=True,
-            norm_adv = True
+            norm_adv = True,
+            wrap_observations: bool = True
             ):
         
-        self.envs = gym.vector.SyncVectorEnv(
-            [make_env(env_id, seed, i) for i in range(num_envs)]
-        )
+        # Build vectorized envs with optional observation wrapper (for generic gym envs like CartPole, disable it)
+        def _make_env(idx):
+            def thunk():
+                env = gym.make(env_id)
+                if wrap_observations:
+                    env = CustomObservationWrapper(env)
+                # Seed using modern API if available
+                try:
+                    env.reset(seed=seed + idx)
+                except TypeError:
+                    # Fallback for older gym versions
+                    if hasattr(env, 'seed'):
+                        env.seed(seed + idx)
+                return env
+            return thunk
+        self.envs = gym.vector.SyncVectorEnv([_make_env(i) for i in range(num_envs)])
         
         # Check room dimensions from the environment
         print("\n=== Environment Room Dimensions ===")
@@ -221,6 +247,7 @@ class NovelD_PPO:
         self.use_wandb = use_wandb and WANDB_AVAILABLE
         self.anneal_lr = True
         self.norm_adv = norm_adv
+        self.wrap_observations = wrap_observations
 
         # Calculate batch sizes
         self.batch_size = int(num_envs * num_steps)
@@ -236,11 +263,13 @@ class NovelD_PPO:
         self.obs_dim = self.obs_space.shape[0]
 
         # Initialize agent and RND model
-        action_dims = self.envs.single_action_space.nvec  # [5, 2, 3]
+        self.action_space = self.envs.single_action_space
+        action_dims = get_action_dims_from_space(self.action_space)
         obs_dim = self.envs.single_observation_space.shape[0]
 
         self.agent = Agent(obs_dim=obs_dim, action_dims=action_dims).to(self.device)
         self.rnd_model = RNDModel(self.obs_dim).to(self.device).float()
+        self.action_dims = action_dims
 
         # Add validation for environment compatibility
         if not hasattr(self.envs.single_observation_space, 'shape'):
@@ -298,7 +327,7 @@ class NovelD_PPO:
 
         next_obs = torch.FloatTensor(self.envs.reset()).to(self.device)
         obs = torch.zeros((self.num_steps, self.num_envs) + self.obs_space.shape, dtype=torch.float32).to(self.device)
-        action_dims = self.envs.single_action_space.nvec  # [5, 2, 3]
+        action_dims = self.action_dims
         actions = torch.zeros((self.num_steps, self.num_envs, len(action_dims)), dtype=torch.long).to(self.device)
         logprobs = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
@@ -332,7 +361,11 @@ class NovelD_PPO:
                 ext_values[step] = value_ext.flatten()
                 int_values[step] = value_int.flatten()
 
-                next_obs, reward, done, info = self.envs.step(action.cpu().numpy())
+                action_np = action.cpu().numpy()
+                # For single Discrete action spaces, squeeze the last dim
+                if len(action_dims) == 1 and isinstance(self.action_space, spaces.Discrete):
+                    action_np = action_np.squeeze(-1)
+                next_obs, reward, done, info = self.envs.step(action_np)
                 rewards[step] = torch.FloatTensor(reward).to(self.device)
                 next_obs = torch.FloatTensor(next_obs).to(self.device)
                 next_done = torch.FloatTensor(done).to(self.device)
