@@ -490,10 +490,12 @@ class NovelD_PPO:
                 checkpoint_dir = "checkpoints"
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{global_step}.pt")
-                torch.save({
+                state = {
                     'agent_state_dict': self.agent.state_dict(),
-                    'rnd_predictor_state_dict': self.rnd_model.predictor.state_dict(),
-                }, checkpoint_path)
+                }
+                if self.use_intrinsic and self.rnd_model is not None:
+                    state['rnd_predictor_state_dict'] = self.rnd_model.predictor.state_dict()
+                torch.save(state, checkpoint_path)
                 print(f"Saved checkpoint at {global_step} timesteps to {checkpoint_path}")
                 
                 # Log checkpoint save to wandb
@@ -619,7 +621,10 @@ class NovelD_PPO:
                 optimizer.zero_grad()
                 loss.backward()
                 if self.max_grad_norm:
-                    torch.nn.utils.clip_grad_norm_(list(self.agent.parameters()) + list(self.rnd_model.predictor.parameters()), self.max_grad_norm)
+                    clip_params = list(self.agent.parameters())
+                    if self.use_intrinsic and self.rnd_model is not None:
+                        clip_params += list(self.rnd_model.predictor.parameters())
+                    torch.nn.utils.clip_grad_norm_(clip_params, self.max_grad_norm)
                 optimizer.step()
 
                 if self.target_kl is not None:
@@ -773,7 +778,8 @@ class NovelD_PPO:
     def load_checkpoint(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         self.agent.load_state_dict(checkpoint['agent_state_dict'])
-        self.rnd_model.predictor.load_state_dict(checkpoint['rnd_predictor_state_dict'])
+        if self.use_intrinsic and self.rnd_model is not None and 'rnd_predictor_state_dict' in checkpoint:
+            self.rnd_model.predictor.load_state_dict(checkpoint['rnd_predictor_state_dict'])
         print(f"Loaded checkpoint from {checkpoint_path}")
 
 class RunningMeanStd:
