@@ -283,34 +283,38 @@ class NovelD_PPO:
 
     def train(self):
         # Initialize wandb if enabled
+        created_wandb_run = False
         if self.use_wandb:
-            wandb.init(
-                project=self.wandb_project,
-                entity=self.wandb_entity,
-                name=self.wandb_run_name,
-                config={
-                    "algorithm": "NovelD_PPO",
-                    "env_id": self.env_id,
-                    "total_timesteps": self.total_timesteps,
-                    "learning_rate": self.learning_rate,
-                    "num_envs": self.num_envs,
-                    "num_steps": self.num_steps,
-                    "gamma": self.gamma,
-                    "gae_lambda": self.gae_lambda,
-                    "num_minibatches": self.num_minibatches,
-                    "update_epochs": self.update_epochs,
-                    "clip_coef": self.clip_coef,
-                    "ent_coef": self.ent_coef,
-                    "vf_coef": self.vf_coef,
-                    "max_grad_norm": self.max_grad_norm,
-                    "int_coef": self.int_coef,
-                    "ext_coef": self.ext_coef,
-                    "int_gamma": self.int_gamma,
-                    "alpha": self.alpha,
-                    "update_proportion": self.update_proportion,
-                    "device": str(self.device)
-                }
-            )
+            # If there's no active run, create one. Otherwise, reuse existing.
+            if getattr(wandb, "run", None) is None:
+                wandb.init(
+                    project=self.wandb_project,
+                    entity=self.wandb_entity,
+                    name=self.wandb_run_name,
+                    config={
+                        "algorithm": "NovelD_PPO",
+                        "env_id": self.env_id,
+                        "total_timesteps": self.total_timesteps,
+                        "learning_rate": self.learning_rate,
+                        "num_envs": self.num_envs,
+                        "num_steps": self.num_steps,
+                        "gamma": self.gamma,
+                        "gae_lambda": self.gae_lambda,
+                        "num_minibatches": self.num_minibatches,
+                        "update_epochs": self.update_epochs,
+                        "clip_coef": self.clip_coef,
+                        "ent_coef": self.ent_coef,
+                        "vf_coef": self.vf_coef,
+                        "max_grad_norm": self.max_grad_norm,
+                        "int_coef": self.int_coef,
+                        "ext_coef": self.ext_coef,
+                        "int_gamma": self.int_gamma,
+                        "alpha": self.alpha,
+                        "update_proportion": self.update_proportion,
+                        "device": str(self.device)
+                    }
+                )
+                created_wandb_run = True
             # Watch models for gradients and parameter histograms.
             wandb.watch(self.agent, log="all", log_freq=100)
             wandb.watch(self.rnd_model, log="all", log_freq=100)
@@ -489,9 +493,10 @@ class NovelD_PPO:
                                checkpoint_path=checkpoint_path, checkpoint_id=global_step, 
                                save_episode=False, csv_path=checkpoint_csv_path)
 
-        # Finish wandb run
+        # Finish wandb run only if we created it here
         if self.use_wandb:
-            wandb.finish()
+            if 'created_wandb_run' in locals() and created_wandb_run:
+                wandb.finish()
         self.envs.close()
         print("\nTraining completed!")
 

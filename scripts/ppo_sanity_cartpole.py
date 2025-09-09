@@ -71,7 +71,7 @@ def step_env(env, action):
         return obs, float(reward), bool(done), info
 
 
-def evaluate_agent(ppo: NovelD_PPO, env_id: str, episodes: int = 5, render: bool = False) -> float:
+def evaluate_agent(ppo: NovelD_PPO, env_id: str, episodes: int = 5, render: bool = False, return_returns: bool = False):
     env = gym.make(env_id)
     returns = []
     for ep in range(episodes):
@@ -98,7 +98,10 @@ def evaluate_agent(ppo: NovelD_PPO, env_id: str, episodes: int = 5, render: bool
             ep_ret += reward
         returns.append(ep_ret)
     env.close()
-    return float(np.mean(returns))
+    avg_return = float(np.mean(returns)) if returns else 0.0
+    if return_returns:
+        return avg_return, returns
+    return avg_return
 
 
 def get_frame(env):
@@ -219,25 +222,33 @@ def main():
     )
 
     print("Evaluating before training...")
-    pre_return = evaluate_agent(ppo, args.env_id, episodes=args.pre_episodes, render=args.render_eval)
+    pre_return, pre_returns = evaluate_agent(ppo, args.env_id, episodes=args.pre_episodes, render=args.render_eval, return_returns=True)
     print(f"Average return before training: {pre_return:.2f}")
     if args.wandb:
-        wandb.log({"eval/pre_return": pre_return})
+        # Scalar and histogram of per-episode returns
+        wandb.log({
+            "eval/pre_return": pre_return,
+            "eval/pre_returns_hist": wandb.Histogram(pre_returns),
+        })
 
     print("\nStarting training...")
     ppo.train()
 
     print("\nEvaluating after training...")
-    post_return = evaluate_agent(ppo, args.env_id, episodes=args.post_episodes, render=args.render_eval)
+    post_return, post_returns = evaluate_agent(ppo, args.env_id, episodes=args.post_episodes, render=args.render_eval, return_returns=True)
     print(f"Average return after training: {post_return:.2f}")
 
     improved = post_return > pre_return + 20.0  # require at least 20 point improvement
     meets_target = post_return >= args.target_return
 
     if args.wandb:
+        # Scalars, histograms, and a W&B bar chart for pre vs post
+        pre_post_table = wandb.Table(data=[["pre", pre_return], ["post", post_return]], columns=["phase", "avg_return"])
         wandb.log({
             "eval/post_return": post_return,
+            "eval/post_returns_hist": wandb.Histogram(post_returns),
             "eval/improvement": post_return - pre_return,
+            "eval/returns_bar": wandb.plot.bar(pre_post_table, "phase", "avg_return", title="CartPole Pre vs Post Return"),
             "sanity/improved": improved,
             "sanity/meets_target": meets_target,
         })
