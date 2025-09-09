@@ -28,13 +28,18 @@ except Exception:
     WANDB_AVAILABLE = False
 
 try:
+    import matplotlib
+    # Force a non-interactive backend for headless environments
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib import patches
     MPL_AVAILABLE = True
-except Exception:
+    MPL_IMPORT_ERROR = None
+except Exception as e:
     plt = None
     patches = None
     MPL_AVAILABLE = False
+    MPL_IMPORT_ERROR = e
 
 try:
     import imageio
@@ -191,70 +196,76 @@ def _draw_cartpole_frame(ax, x, theta, x_threshold, width_px=640, height_px=360)
 
 
 def record_cartpole_matplotlib_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fps: int = 20, out_dir: str = None):
-    if not (MPL_AVAILABLE and IMAGEIO_AVAILABLE):
+    if not MPL_AVAILABLE:
+        print(f"[viz] Matplotlib not available: {MPL_IMPORT_ERROR}")
+        return None
+    if not IMAGEIO_AVAILABLE:
+        print("[viz] imageio not available. Install with `pip install imageio`.")
         return None
 
-    # Query x_threshold from a fresh env
     try:
-        probe_env = gym.make(env_id)
-        x_threshold = float(getattr(probe_env.unwrapped, 'x_threshold', 2.4))
-        probe_env.close()
-    except Exception:
-        x_threshold = 2.4
-
-    # Run an episode and collect obs
-    env = gym.make(env_id)
-    obs, _ = reset_env(env)
-    frames = []
-    done = False
-    steps = 0
-
-    # Prepare a figure once and reuse
-    fig, ax = plt.subplots(figsize=(6.4, 3.6), dpi=100)
-
-    while not done and steps < max_steps:
-        # Draw from observation (CartPole obs = [x, x_dot, theta, theta_dot])
+        # Query x_threshold from a fresh env
         try:
-            x = float(obs[0])
-            theta = float(obs[2])
+            probe_env = gym.make(env_id)
+            x_threshold = float(getattr(probe_env.unwrapped, 'x_threshold', 2.4))
+            probe_env.close()
         except Exception:
-            # Fallback to env.unwrapped.state if obs missing
-            st = getattr(env.unwrapped, 'state', None)
-            if st is None:
-                break
-            x = float(st[0])
-            theta = float(st[2])
+            x_threshold = 2.4
 
-        _draw_cartpole_frame(ax, x, theta, x_threshold)
-        fig.canvas.draw()
-        # Convert figure to image
-        w, h = fig.canvas.get_width_height()
-        img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-        img = img.reshape((h, w, 3))
-        frames.append(img)
+        # Run an episode and collect obs
+        env = gym.make(env_id)
+        obs, _ = reset_env(env)
+        frames = []
+        done = False
+        steps = 0
 
-        # Step with policy
-        obs_tensor = torch.tensor(obs, dtype=torch.float32, device=ppo.device).unsqueeze(0)
-        with torch.no_grad():
-            action, _, _, _, _ = ppo.agent.get_action_and_value(obs_tensor)
-        action_np = action.detach().cpu().numpy()
-        action_env = int(action_np.squeeze()) if len(ppo.action_dims) == 1 else action_np[0]
-        obs, _, done, _ = step_env(env, action_env)
-        steps += 1
+        # Prepare a figure once and reuse
+        fig, ax = plt.subplots(figsize=(6.4, 3.6), dpi=100)
 
-    plt.close(fig)
-    env.close()
+        while not done and steps < max_steps:
+            # Draw from observation (CartPole obs = [x, x_dot, theta, theta_dot])
+            try:
+                x = float(obs[0])
+                theta = float(obs[2])
+            except Exception:
+                # Fallback to env.unwrapped.state if obs missing
+                st = getattr(env.unwrapped, 'state', None)
+                if st is None:
+                    break
+                x = float(st[0])
+                theta = float(st[2])
 
-    if not frames:
-        return None
+            _draw_cartpole_frame(ax, x, theta, x_threshold)
+            fig.canvas.draw()
+            # Convert figure to image
+            w, h = fig.canvas.get_width_height()
+            img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            img = img.reshape((h, w, 3))
+            frames.append(img)
 
-    out_dir = out_dir or os.path.join(REPO_ROOT, 'outputs')
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, 'ppo_cartpole_matplotlib.gif')
-    try:
+            # Step with policy
+            obs_tensor = torch.tensor(obs, dtype=torch.float32, device=ppo.device).unsqueeze(0)
+            with torch.no_grad():
+                action, _, _, _, _ = ppo.agent.get_action_and_value(obs_tensor)
+            action_np = action.detach().cpu().numpy()
+            action_env = int(action_np.squeeze()) if len(ppo.action_dims) == 1 else action_np[0]
+            obs, _, done, _ = step_env(env, action_env)
+            steps += 1
+
+        plt.close(fig)
+        env.close()
+
+        if not frames:
+            print("[viz] No frames collected for Matplotlib visualization.")
+            return None
+
+        out_dir = out_dir or os.path.join(REPO_ROOT, 'outputs')
+        os.makedirs(out_dir, exist_ok=True)
+        out_path = os.path.join(out_dir, 'ppo_cartpole_matplotlib.gif')
         imageio.mimsave(out_path, frames, fps=fps)
         return out_path
-    except Exception:
+    except Exception as e:
+        print(f"[viz] Matplotlib video error: {e}")
         return None
 
 def main():
@@ -399,7 +410,10 @@ def main():
             if args.wandb:
                 wandb.log({"eval/video_matplotlib": wandb.Video(viz_path, fps=20, format="gif")})
         else:
-            print("Could not record Matplotlib CartPole video (missing matplotlib/imageio or an error occurred).")
+            print("Could not record Matplotlib CartPole video (missing matplotlib/imageio or an error occurred).\n"
+                  "To enable, install the extras in your current environment:\n"
+                  "  python -m pip install matplotlib imageio\n"
+                  "If running headless, this script now uses the 'Agg' backend automatically.")
 
     # Optional: simple visualization of pre vs post return
     if MPL_AVAILABLE:
