@@ -169,6 +169,8 @@ def main():
     parser.add_argument("--post_episodes", type=int, default=5)
     parser.add_argument("--target_return", type=float, default=150.0, help="success threshold for average return after training")
     parser.add_argument("--render_eval", action="store_true")
+    parser.add_argument("--eval_every", type=int, default=5, help="evaluate and log returns every N updates")
+    parser.add_argument("--eval_episodes", type=int, default=5, help="episodes per evaluation point")
     parser.add_argument("--wandb", action="store_true", help="enable Weights & Biases logging")
     parser.add_argument("--wandb_project", type=str, default="PPO-Sanity")
     parser.add_argument("--wandb_entity", type=str, default=None)
@@ -199,8 +201,16 @@ def main():
                 "seed": args.seed,
                 "int_coef": 0.0,
                 "ext_coef": 1.0,
+                "eval_every": args.eval_every,
+                "eval_episodes": args.eval_episodes,
             },
         )
+        # Define metrics for nicer plots
+        try:
+            wandb.define_metric("update")
+            wandb.define_metric("eval/return", step_metric="update")
+        except Exception:
+            pass
 
     # Instantiate NovelD_PPO with wrapper disabled and extrinsic-only optimization
     ppo = NovelD_PPO(
@@ -220,6 +230,21 @@ def main():
         wrap_observations=False,
         norm_adv=True,
     )
+
+    # Set up per-update evaluation callback to log returns vs iteration
+    eval_curve = []  # list of (update, avg_return)
+    def on_update(update, global_step, agent_ref):
+        if args.eval_every > 0 and (update % args.eval_every == 0):
+            avg_ret, rets = evaluate_agent(agent_ref, args.env_id, episodes=args.eval_episodes, render=False, return_returns=True)
+            eval_curve.append((update, avg_ret))
+            print(f"[Eval] Update {update}: avg_return={avg_ret:.2f}")
+            if args.wandb:
+                wandb.log({
+                    "update": update,
+                    "eval/return": avg_ret,
+                    "eval/returns_hist_iter": wandb.Histogram(rets),
+                }, step=update)
+    ppo.update_callback = on_update
 
     print("Evaluating before training...")
     pre_return, pre_returns = evaluate_agent(ppo, args.env_id, episodes=args.pre_episodes, render=args.render_eval, return_returns=True)
@@ -270,7 +295,7 @@ def main():
         fig = plt.figure(figsize=(4, 3))
         plt.bar(["pre", "post"], [pre_return, post_return], color=["#9999ff", "#66cc66"]) 
         plt.ylabel("Average Return")
-        plt.title("PPO Sanity Check: CartPole")
+        plt.title("PPO Sanity Check: CartPole (Pre vs Post)")
         plt.tight_layout()
         # Save locally
         out_dir = os.path.join(REPO_ROOT, "outputs")
@@ -281,6 +306,35 @@ def main():
         if args.wandb:
             wandb.log({"eval/return_plot": wandb.Image(fig)})
         plt.close(fig)
+
+    # Return vs iteration line plot
+    if MPL_AVAILABLE and len(eval_curve) > 0:
+        updates = [u for u, _ in eval_curve]
+        values = [v for _, v in eval_curve]
+        fig2 = plt.figure(figsize=(5, 3))
+        plt.plot(updates, values, marker="o")
+        plt.xlabel("Update")
+        plt.ylabel("Average Return")
+        plt.title("CartPole Return vs Update")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        out_dir = os.path.join(REPO_ROOT, "outputs")
+        os.makedirs(out_dir, exist_ok=True)
+        curve_path = os.path.join(out_dir, "ppo_return_curve.png")
+        plt.savefig(curve_path)
+        print(f"Saved return-vs-update plot to {curve_path}")
+        if args.wandb:
+            wandb.log({"eval/return_curve_img": wandb.Image(fig2)})
+            # Also log a native W&B line plot if available
+            try:
+                from wandb import plot
+                xs = updates
+                ys = [values]
+                keys = ["avg_return"]
+                wandb.log({"eval/return_curve": wandb.plot.line_series(xs=xs, ys=ys, keys=keys, title="CartPole Return vs Update", xname="update")})
+            except Exception:
+                pass
+        plt.close(fig2)
 
     print("\nSanity check result:")
     print(f"Improved: {improved} (Δ={post_return - pre_return:.1f}) | Meets target ({args.target_return}): {meets_target}")

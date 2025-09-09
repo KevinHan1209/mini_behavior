@@ -149,7 +149,8 @@ class NovelD_PPO:
             wandb_run_name=None,
             use_wandb=True,
             norm_adv = True,
-            wrap_observations: bool = True
+            wrap_observations: bool = True,
+            update_callback=None
             ):
         
         # Build vectorized envs with optional observation wrapper (for generic gym envs like CartPole, disable it)
@@ -248,6 +249,7 @@ class NovelD_PPO:
         self.anneal_lr = True
         self.norm_adv = norm_adv
         self.wrap_observations = wrap_observations
+        self.update_callback = update_callback
 
         # Calculate batch sizes
         self.batch_size = int(num_envs * num_steps)
@@ -466,6 +468,13 @@ class NovelD_PPO:
                 print(f"Policy Loss: {opt_metrics['pg_loss']:.4f} | Value Loss: {opt_metrics['v_loss']:.4f} | Entropy: {opt_metrics['entropy']:.4f}")
                 print(f"KL: {opt_metrics['approx_kl']:.4f} | ClipFrac: {opt_metrics['clipfrac']:.4f}")
                 print("-" * 50)
+
+            # External callback for per-update hooks (e.g., evaluation)
+            if self.update_callback is not None:
+                try:
+                    self.update_callback(update, global_step, self)
+                except Exception as e:
+                    print(f"Update callback error: {e}")
 
             if global_step % 500000 < self.num_envs:
                 checkpoint_dir = "checkpoints"
