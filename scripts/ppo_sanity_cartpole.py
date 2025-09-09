@@ -29,9 +29,11 @@ except Exception:
 
 try:
     import matplotlib.pyplot as plt
+    from matplotlib import patches
     MPL_AVAILABLE = True
 except Exception:
     plt = None
+    patches = None
     MPL_AVAILABLE = False
 
 try:
@@ -156,6 +158,105 @@ def record_policy_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fps:
         return None, frames
 
 
+def _draw_cartpole_frame(ax, x, theta, x_threshold, width_px=640, height_px=360):
+    ax.clear()
+    ax.set_xlim(-x_threshold * 1.2, x_threshold * 1.2)
+    ax.set_ylim(-0.2, 1.2)
+    ax.axis('off')
+
+    # Ground
+    ax.plot([-x_threshold * 1.2, x_threshold * 1.2], [0, 0], color='black', linewidth=2)
+
+    # Cart parameters (in plot units)
+    cart_w = 0.4
+    cart_h = 0.2
+    cart_y = cart_h / 2
+
+    # Pole parameters
+    pole_len = 1.0  # just for drawing (not exact physical length)
+
+    # Draw cart as rectangle centered at (x, cart_y)
+    cart = patches.Rectangle((x - cart_w / 2, 0), cart_w, cart_h, color='#4C72B0')
+    ax.add_patch(cart)
+
+    # Draw pole as a line from cart top center
+    cart_top_x = x
+    cart_top_y = cart_h
+    pole_x_end = cart_top_x + pole_len * np.sin(theta)
+    pole_y_end = cart_top_y + pole_len * np.cos(theta)
+    ax.plot([cart_top_x, pole_x_end], [cart_top_y, pole_y_end], color='#DD8452', linewidth=3)
+
+    # Draw axle
+    ax.add_patch(patches.Circle((cart_top_x, cart_top_y), 0.02, color='k'))
+
+
+def record_cartpole_matplotlib_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fps: int = 20, out_dir: str = None):
+    if not (MPL_AVAILABLE and IMAGEIO_AVAILABLE):
+        return None
+
+    # Query x_threshold from a fresh env
+    try:
+        probe_env = gym.make(env_id)
+        x_threshold = float(getattr(probe_env.unwrapped, 'x_threshold', 2.4))
+        probe_env.close()
+    except Exception:
+        x_threshold = 2.4
+
+    # Run an episode and collect obs
+    env = gym.make(env_id)
+    obs, _ = reset_env(env)
+    frames = []
+    done = False
+    steps = 0
+
+    # Prepare a figure once and reuse
+    fig, ax = plt.subplots(figsize=(6.4, 3.6), dpi=100)
+
+    while not done and steps < max_steps:
+        # Draw from observation (CartPole obs = [x, x_dot, theta, theta_dot])
+        try:
+            x = float(obs[0])
+            theta = float(obs[2])
+        except Exception:
+            # Fallback to env.unwrapped.state if obs missing
+            st = getattr(env.unwrapped, 'state', None)
+            if st is None:
+                break
+            x = float(st[0])
+            theta = float(st[2])
+
+        _draw_cartpole_frame(ax, x, theta, x_threshold)
+        fig.canvas.draw()
+        # Convert figure to image
+        w, h = fig.canvas.get_width_height()
+        img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        img = img.reshape((h, w, 3))
+        frames.append(img)
+
+        # Step with policy
+        obs_tensor = torch.tensor(obs, dtype=torch.float32, device=ppo.device).unsqueeze(0)
+        with torch.no_grad():
+            action, _, _, _, _ = ppo.agent.get_action_and_value(obs_tensor)
+        action_np = action.detach().cpu().numpy()
+        action_env = int(action_np.squeeze()) if len(ppo.action_dims) == 1 else action_np[0]
+        obs, _, done, _ = step_env(env, action_env)
+        steps += 1
+
+    plt.close(fig)
+    env.close()
+
+    if not frames:
+        return None
+
+    out_dir = out_dir or os.path.join(REPO_ROOT, 'outputs')
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, 'ppo_cartpole_matplotlib.gif')
+    try:
+        imageio.mimsave(out_path, frames, fps=fps)
+        return out_path
+    except Exception:
+        return None
+
 def main():
     parser = argparse.ArgumentParser(description="PPO optimizer sanity check on CartPole")
     parser.add_argument("--env_id", type=str, default="CartPole-v1")
@@ -175,7 +276,8 @@ def main():
     parser.add_argument("--wandb_project", type=str, default="PPO-Sanity")
     parser.add_argument("--wandb_entity", type=str, default=None)
     parser.add_argument("--wandb_run_name", type=str, default=None)
-    parser.add_argument("--log_video", action="store_true", help="record and log a video after training")
+    parser.add_argument("--log_video", action="store_true", help="record and log a video after training (env-rendered)")
+    parser.add_argument("--viz_cartpole", action="store_true", help="record and log a Matplotlib-drawn CartPole video after training")
     args = parser.parse_args()
 
     if args.wandb and not WANDB_AVAILABLE:
@@ -279,17 +381,25 @@ def main():
             "sanity/meets_target": meets_target,
         })
 
-    # Optional: record and log a video
-    video_path = None
+    # Optional: record and log a video (env-rendered)
     if args.log_video:
         gif_path, frames = record_policy_video(ppo, args.env_id, max_steps=500, fps=20)
         if gif_path:
             print(f"Saved evaluation video to {gif_path}")
-            video_path = gif_path
             if args.wandb:
-                wandb.log({"eval/video": wandb.Video(gif_path, fps=20, format="gif")})
+                wandb.log({"eval/video_env": wandb.Video(gif_path, fps=20, format="gif")})
         else:
-            print("Could not record video (imageio not available or env rendering unsupported).")
+            print("Could not record env-rendered video (imageio not available or env rendering unsupported).")
+
+    # Optional: record and log a Matplotlib-drawn CartPole video (robust and not dependent on env.render)
+    if args.viz_cartpole:
+        viz_path = record_cartpole_matplotlib_video(ppo, args.env_id, max_steps=500, fps=20)
+        if viz_path:
+            print(f"Saved Matplotlib CartPole video to {viz_path}")
+            if args.wandb:
+                wandb.log({"eval/video_matplotlib": wandb.Video(viz_path, fps=20, format="gif")})
+        else:
+            print("Could not record Matplotlib CartPole video (missing matplotlib/imageio or an error occurred).")
 
     # Optional: simple visualization of pre vs post return
     if MPL_AVAILABLE:
