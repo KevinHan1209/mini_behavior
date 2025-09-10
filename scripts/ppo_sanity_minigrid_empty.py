@@ -167,7 +167,8 @@ def record_minigrid_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fp
     if not IMAGEIO_AVAILABLE:
         print("[viz] imageio not available. Install with `pip install imageio imageio-ffmpeg`.")
         return None
-    env = gym.make(env_id)
+    # Build env consistent with training obs (FullyObs + Flat) so the agent input matches
+    env = minigrid_env_factory(env_id, seed=0, idx=123)
     obs = env.reset()
     if isinstance(obs, tuple):
         obs = obs[0]
