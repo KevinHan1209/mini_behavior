@@ -125,10 +125,11 @@ def get_frame(env):
         return None
 
 
-def record_policy_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fps: int = 20, out_dir: str = None):
+def record_policy_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fps: int = 20, out_dir: str = None, fmt: str = "mp4"):
     if not IMAGEIO_AVAILABLE:
+        print("[viz] imageio not available. Install with `pip install imageio`.")
         return None, None
-    # Try to create env with rgb_array rendering
+    # Create env and step while grabbing frames
     try:
         env = gym.make(env_id, render_mode="rgb_array") if GYMNASIUM else gym.make(env_id)
     except Exception:
@@ -150,16 +151,36 @@ def record_policy_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fps:
         steps += 1
     env.close()
     if not frames:
+        print("[viz] No frames captured from env-rendered video.")
         return None, None
 
-    # Save gif
+    # Save video
     out_dir = out_dir or os.path.join(REPO_ROOT, "outputs")
     os.makedirs(out_dir, exist_ok=True)
-    gif_path = os.path.join(out_dir, "ppo_cartpole_episode.gif")
-    try:
-        imageio.mimsave(gif_path, frames, fps=fps)
-        return gif_path, frames
-    except Exception:
+    base = os.path.join(out_dir, "ppo_cartpole_episode")
+    if fmt == "gif":
+        out_path = base + ".gif"
+        try:
+            imageio.mimsave(out_path, frames, fps=fps)
+            print(f"[viz] Saved env-rendered {fmt} with {len(frames)} frames to {out_path}")
+            return out_path, frames
+        except Exception as e:
+            print(f"[viz] Could not write GIF: {e}")
+            return None, frames
+    elif fmt == "mp4":
+        out_path = base + ".mp4"
+        try:
+            writer = imageio.get_writer(out_path, fps=fps)
+            for f in frames:
+                writer.append_data(f)
+            writer.close()
+            print(f"[viz] Saved env-rendered {fmt} with {len(frames)} frames to {out_path}")
+            return out_path, frames
+        except Exception as e:
+            print(f"[viz] Could not write MP4: {e}. Try `pip install imageio-ffmpeg`.")
+            return None, frames
+    else:
+        print(f"[viz] Unsupported video format: {fmt}")
         return None, frames
 
 
@@ -195,7 +216,7 @@ def _draw_cartpole_frame(ax, x, theta, x_threshold, width_px=640, height_px=360)
     ax.add_patch(patches.Circle((cart_top_x, cart_top_y), 0.02, color='k'))
 
 
-def record_cartpole_matplotlib_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fps: int = 20, out_dir: str = None):
+def record_cartpole_matplotlib_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fps: int = 20, out_dir: str = None, fmt: str = "mp4"):
     if not MPL_AVAILABLE:
         print(f"[viz] Matplotlib not available: {MPL_IMPORT_ERROR}")
         return None
@@ -261,9 +282,27 @@ def record_cartpole_matplotlib_video(ppo: NovelD_PPO, env_id: str, max_steps: in
 
         out_dir = out_dir or os.path.join(REPO_ROOT, 'outputs')
         os.makedirs(out_dir, exist_ok=True)
-        out_path = os.path.join(out_dir, 'ppo_cartpole_matplotlib.gif')
-        imageio.mimsave(out_path, frames, fps=fps)
-        return out_path
+        base = os.path.join(out_dir, 'ppo_cartpole_matplotlib')
+        if fmt == 'gif':
+            out_path = base + '.gif'
+            imageio.mimsave(out_path, frames, fps=fps)
+            print(f"[viz] Saved Matplotlib {fmt} with {len(frames)} frames to {out_path}")
+            return out_path
+        elif fmt == 'mp4':
+            out_path = base + '.mp4'
+            try:
+                writer = imageio.get_writer(out_path, fps=fps)
+                for frame in frames:
+                    writer.append_data(frame)
+                writer.close()
+                print(f"[viz] Saved Matplotlib {fmt} with {len(frames)} frames to {out_path}")
+                return out_path
+            except Exception as e:
+                print(f"[viz] Could not write MP4: {e}. Try `pip install imageio-ffmpeg`.")
+                return None
+        else:
+            print(f"[viz] Unsupported video format: {fmt}")
+            return None
     except Exception as e:
         print(f"[viz] Matplotlib video error: {e}")
         return None
@@ -289,6 +328,7 @@ def main():
     parser.add_argument("--wandb_run_name", type=str, default=None)
     parser.add_argument("--log_video", action="store_true", help="record and log a video after training (env-rendered)")
     parser.add_argument("--viz_cartpole", action="store_true", help="record and log a Matplotlib-drawn CartPole video after training")
+    parser.add_argument("--video_format", choices=["gif", "mp4"], default="mp4", help="format for saved videos and W&B logging")
     args = parser.parse_args()
 
     if args.wandb and not WANDB_AVAILABLE:
@@ -394,25 +434,25 @@ def main():
 
     # Optional: record and log a video (env-rendered)
     if args.log_video:
-        gif_path, frames = record_policy_video(ppo, args.env_id, max_steps=500, fps=20)
-        if gif_path:
-            print(f"Saved evaluation video to {gif_path}")
+        vid_path, frames = record_policy_video(ppo, args.env_id, max_steps=500, fps=20, fmt=args.video_format)
+        if vid_path:
+            print(f"Saved evaluation video to {vid_path}")
             if args.wandb:
-                wandb.log({"eval/video_env": wandb.Video(gif_path, fps=20, format="gif")})
+                wandb.log({"eval/video_env": wandb.Video(vid_path, fps=20, format=args.video_format)})
         else:
             print("Could not record env-rendered video (imageio not available or env rendering unsupported).")
 
     # Optional: record and log a Matplotlib-drawn CartPole video (robust and not dependent on env.render)
     if args.viz_cartpole:
-        viz_path = record_cartpole_matplotlib_video(ppo, args.env_id, max_steps=500, fps=20)
+        viz_path = record_cartpole_matplotlib_video(ppo, args.env_id, max_steps=500, fps=20, fmt=args.video_format)
         if viz_path:
             print(f"Saved Matplotlib CartPole video to {viz_path}")
             if args.wandb:
-                wandb.log({"eval/video_matplotlib": wandb.Video(viz_path, fps=20, format="gif")})
+                wandb.log({"eval/video_matplotlib": wandb.Video(viz_path, fps=20, format=args.video_format)})
         else:
             print("Could not record Matplotlib CartPole video (missing matplotlib/imageio or an error occurred).\n"
                   "To enable, install the extras in your current environment:\n"
-                  "  python -m pip install matplotlib imageio\n"
+                  "  python -m pip install matplotlib imageio imageio-ffmpeg\n"
                   "If running headless, this script now uses the 'Agg' backend automatically.")
 
     # Optional: simple visualization of pre vs post return

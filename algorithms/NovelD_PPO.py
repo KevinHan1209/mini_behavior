@@ -13,11 +13,25 @@ except ImportError:
     WANDB_AVAILABLE = False
     print("Warning: wandb not installed. Logging disabled.")
 from networks.actor_critic import Agent
-from env_wrapper import CustomObservationWrapper
+# Lazy import to avoid pulling mini_behavior deps unless needed
+try:
+    from env_wrapper import CustomObservationWrapper  # type: ignore
+except Exception:
+    CustomObservationWrapper = None
 import os
 import csv
-from array2gif import write_gif
-from mini_behavior.utils.states_base import RelativeObjectState
+# Optional deps: array2gif
+try:
+    from array2gif import write_gif  # type: ignore
+except Exception:
+    def write_gif(*args, **kwargs):
+        raise RuntimeError("array2gif is not installed. Install with `pip install array2gif` if GIF export is needed.")
+# Optional type from mini_behavior; define a stub if unavailable
+try:
+    from mini_behavior.utils.states_base import RelativeObjectState  # type: ignore
+except Exception:
+    class RelativeObjectState:
+        pass
 
 def make_env(env_id, seed, idx):
     def thunk():
@@ -151,14 +165,17 @@ class NovelD_PPO:
             norm_adv = True,
             wrap_observations: bool = True,
             update_callback=None,
-            use_intrinsic=None
+            use_intrinsic=None,
+            env_make_fn=None
             ):
         
-        # Build vectorized envs with optional observation wrapper (for generic gym envs like CartPole, disable it)
-        def _make_env(idx):
+        # Build vectorized envs with optional custom factory
+        def _default_make_env(idx):
             def thunk():
                 env = gym.make(env_id)
                 if wrap_observations:
+                    if CustomObservationWrapper is None:
+                        raise RuntimeError("CustomObservationWrapper is unavailable. Ensure env_wrapper.py and its dependencies are importable, or set wrap_observations=False.")
                     env = CustomObservationWrapper(env)
                 # Seed using modern API if available
                 try:
@@ -169,7 +186,8 @@ class NovelD_PPO:
                         env.seed(seed + idx)
                 return env
             return thunk
-        self.envs = gym.vector.SyncVectorEnv([_make_env(i) for i in range(num_envs)])
+        make_thunk = (lambda i: (lambda: env_make_fn(env_id, seed, i))) if callable(env_make_fn) else _default_make_env
+        self.envs = gym.vector.SyncVectorEnv([make_thunk(i) for i in range(num_envs)])
         
         # Check room dimensions from the environment
         print("\n=== Environment Room Dimensions ===")
@@ -251,6 +269,7 @@ class NovelD_PPO:
         self.norm_adv = norm_adv
         self.wrap_observations = wrap_observations
         self.update_callback = update_callback
+        self.env_make_fn = env_make_fn
         # Intrinsic curiosity usage (RND)
         if use_intrinsic is None:
             self.use_intrinsic = (self.int_coef is not None and self.int_coef > 0.0)
