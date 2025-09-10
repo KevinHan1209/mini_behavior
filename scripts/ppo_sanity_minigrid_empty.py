@@ -154,19 +154,24 @@ def evaluate_agent(ppo: NovelD_PPO, env_id: str, episodes: int = 5) -> float:
 
 
 def _get_frame_minigrid(env):
-    try:
-        return env.render(mode="rgb_array")
-    except Exception:
+    # Try multiple safe ways to get an RGB array without opening a window
+    for fn in (
+        lambda: env.render('rgb_array'),
+        lambda: env.render(mode='rgb_array'),
+        lambda: getattr(env, 'get_frame', lambda: None)(),
+        lambda: env.unwrapped.render('rgb_array') if hasattr(env, 'unwrapped') else None,
+    ):
         try:
-            return env.render()
+            frame = fn()
+            if frame is not None:
+                return frame
         except Exception:
-            return None
+            continue
+    return None
 
 
-def record_minigrid_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fps: int = 20, fmt: str = "mp4"):
-    if not IMAGEIO_AVAILABLE:
-        print("[viz] imageio not available. Install with `pip install imageio imageio-ffmpeg`.")
-        return None
+def record_minigrid_frames(ppo: NovelD_PPO, env_id: str, max_steps: int = 500):
+    """Run one episode and return frames as a numpy array (T, H, W, C) uint8 for W&B logging."""
     # Build env consistent with training obs (FullyObs + Flat) so the agent input matches
     env = minigrid_env_factory(env_id, seed=0, idx=123)
     obs = env.reset()
@@ -176,9 +181,12 @@ def record_minigrid_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fp
     done = False
     steps = 0
     while not done and steps < max_steps:
-        # Frame BEFORE step to include initial state
+        # Capture frame BEFORE step to include initial state
         frame = _get_frame_minigrid(env)
         if frame is not None:
+            # Ensure uint8
+            if frame.dtype != np.uint8:
+                frame = np.clip(frame, 0, 255).astype(np.uint8)
             frames.append(frame)
         obs_tensor = torch.tensor(obs, dtype=torch.float32, device=ppo.device).unsqueeze(0)
         with torch.no_grad():
@@ -196,29 +204,7 @@ def record_minigrid_video(ppo: NovelD_PPO, env_id: str, max_steps: int = 500, fp
     if not frames:
         print("[viz] No frames captured from MiniGrid.")
         return None
-    out_dir = os.path.join(REPO_ROOT, "outputs")
-    os.makedirs(out_dir, exist_ok=True)
-    base = os.path.join(out_dir, "ppo_minigrid_episode")
-    try:
-        if fmt == "gif":
-            path = base + ".gif"
-            imageio.mimsave(path, frames, fps=fps)
-            print(f"[viz] Saved MiniGrid GIF with {len(frames)} frames to {path}")
-            return path
-        elif fmt == "mp4":
-            path = base + ".mp4"
-            writer = imageio.get_writer(path, fps=fps)
-            for f in frames:
-                writer.append_data(f)
-            writer.close()
-            print(f"[viz] Saved MiniGrid MP4 with {len(frames)} frames to {path}")
-            return path
-        else:
-            print(f"[viz] Unsupported video format: {fmt}")
-            return None
-    except Exception as e:
-        print(f"[viz] Could not write video: {e}")
-        return None
+    return np.stack(frames, axis=0)
 
 
 def main():
@@ -325,11 +311,13 @@ def main():
             "eval/improvement": post - pre
         }, step=total_timesteps)
 
-    # Optional video logging
-    if args.log_video:
-        vid_path = record_minigrid_video(ppo, args.env_id, max_steps=500, fps=20, fmt=args.video_format)
-        if vid_path and args.wandb:
-            wandb.log({"eval/video_env": wandb.Video(vid_path, fps=20, format=args.video_format)}, step=total_timesteps)
+    # Optional video logging: log frames directly to W&B without saving locally
+    if args.log_video and args.wandb:
+        frames = record_minigrid_frames(ppo, args.env_id, max_steps=500)
+        if frames is not None:
+            # Prefer GIF on headless VMs to avoid codec issues
+            fmt = args.video_format
+            wandb.log({"eval/video_env": wandb.Video(frames, fps=20, format=fmt)}, step=total_timesteps)
 
     if args.wandb:
         try:
