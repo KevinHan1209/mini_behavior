@@ -4,6 +4,7 @@ import os
 import sys
 import numpy as np
 import torch
+import tempfile
 
 # Ensure project root on path
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -315,9 +316,31 @@ def main():
     if args.log_video and args.wandb:
         frames = record_minigrid_frames(ppo, args.env_id, max_steps=500)
         if frames is not None:
-            # Prefer GIF on headless VMs to avoid codec issues
             fmt = args.video_format
-            wandb.log({"eval/video_env": wandb.Video(frames, fps=20, format=fmt)}, step=total_timesteps)
+            if IMAGEIO_AVAILABLE:
+                # Write to a temporary file to avoid requiring moviepy
+                suffix = f".{fmt}"
+                tmp = tempfile.NamedTemporaryFile(prefix="minigrid_video_", suffix=suffix, delete=False)
+                tmp_path = tmp.name
+                tmp.close()
+                try:
+                    if fmt == "gif":
+                        imageio.mimsave(tmp_path, frames, fps=20)
+                    elif fmt == "mp4":
+                        writer = imageio.get_writer(tmp_path, fps=20)
+                        for f in frames:
+                            writer.append_data(f)
+                        writer.close()
+                    else:
+                        print(f"[viz] Unsupported video format for logging: {fmt}")
+                        tmp_path = None
+                except Exception as e:
+                    print(f"[viz] Failed to encode video via imageio: {e}")
+                    tmp_path = None
+                if tmp_path:
+                    wandb.log({"eval/video_env": wandb.Video(tmp_path, fps=20, format=fmt)}, step=total_timesteps)
+            else:
+                print("[viz] imageio not available; cannot encode video for W&B. Install imageio/imageio-ffmpeg or use --video_format gif.")
 
     if args.wandb:
         try:
