@@ -5,6 +5,7 @@ import sys
 import numpy as np
 import torch
 import tempfile
+import re
 
 # Ensure project root on path
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -119,8 +120,24 @@ class FlatObsWrapper(gym.ObservationWrapper):
             raise RuntimeError(f"Unsupported obs type for flattening: {type(obs)}")
 
 
+def _build_crossing_from_id(env_id: str):
+    # Parse CrossingS{S}N{N}-v{X}
+    m = re.search(r"CrossingS(\d+)N(\d+)-v\d+", env_id)
+    size = int(m.group(1)) if m else 9
+    n = int(m.group(2)) if m else 1
+    try:
+        from minigrid.envs.crossing import CrossingEnv  # type: ignore
+    except Exception:
+        from gym_minigrid.envs.crossing import CrossingEnv  # type: ignore
+    return CrossingEnv(size=size, N=n)
+
+
 def minigrid_env_factory(env_id: str, seed: int, idx: int):
-    env = gym.make(env_id)
+    try:
+        env = gym.make(env_id)
+    except Exception:
+        # Fallback: construct Crossing env programmatically if not registered
+        env = _build_crossing_from_id(env_id)
     # Disable partial observability by wrapping with FullyObsWrapper
     env = FullyObsWrapper(env)
     # Flatten to 1D vector to be similar to current repo style
