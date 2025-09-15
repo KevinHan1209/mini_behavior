@@ -25,11 +25,19 @@ try:
     # Newer package name
     import minigrid
     from minigrid.wrappers import FullyObsWrapper
+    try:
+        import minigrid.envs  # ensure envs are registered
+    except Exception:
+        pass
 except Exception:
     try:
         # Older package name
         import gym_minigrid as minigrid  # type: ignore
         from gym_minigrid.wrappers import FullyObsWrapper  # type: ignore
+        try:
+            import gym_minigrid.envs  # ensure envs are registered
+        except Exception:
+            pass
     except Exception:
         MINIGRID_AVAILABLE = False
 
