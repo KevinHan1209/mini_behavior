@@ -125,11 +125,45 @@ def _build_crossing_from_id(env_id: str):
     m = re.search(r"CrossingS(\d+)N(\d+)-v\d+", env_id)
     size = int(m.group(1)) if m else 9
     n = int(m.group(2)) if m else 1
+    # Try multiple constructor variants across versions
+    CrossingEnv = None
+    LavaCrossingEnv = None
     try:
-        from minigrid.envs.crossing import CrossingEnv  # type: ignore
+        from minigrid.envs.crossing import CrossingEnv as _CE  # type: ignore
+        CrossingEnv = _CE
+        try:
+            from minigrid.envs.crossing import LavaCrossingEnv as _LCE  # type: ignore
+            LavaCrossingEnv = _LCE
+        except Exception:
+            pass
     except Exception:
-        from gym_minigrid.envs.crossing import CrossingEnv  # type: ignore
-    return CrossingEnv(size=size, N=n)
+        try:
+            from gym_minigrid.envs.crossing import CrossingEnv as _CE  # type: ignore
+            CrossingEnv = _CE
+            try:
+                from gym_minigrid.envs.crossing import LavaCrossingEnv as _LCE  # type: ignore
+                LavaCrossingEnv = _LCE
+            except Exception:
+                pass
+        except Exception:
+            raise
+    # Try with num_crossings first (newer), then N (older)
+    if CrossingEnv is not None:
+        try:
+            return CrossingEnv(size=size, num_crossings=n)
+        except TypeError:
+            try:
+                return CrossingEnv(size=size, N=n)
+            except TypeError:
+                pass
+    # Fallback to LavaCrossingEnv if available
+    if LavaCrossingEnv is not None:
+        try:
+            return LavaCrossingEnv(size=size, num_crossings=n)
+        except TypeError:
+            return LavaCrossingEnv(size=size, N=n)
+    # If nothing worked, raise a clear error
+    raise RuntimeError("Could not construct a Crossing environment from id '{}' with available MiniGrid version".format(env_id))
 
 
 def minigrid_env_factory(env_id: str, seed: int, idx: int):
