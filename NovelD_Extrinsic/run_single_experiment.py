@@ -51,7 +51,7 @@ def build_obs_header(env):
     return header
 
 
-def run_experiment(config_path, output_dir='results', log_obs=False, obs_csv_path=None, max_obs_steps=500):
+def run_experiment(config_path, output_dir='results', log_obs=False, obs_csv_path=None, max_obs_steps=500, max_updates=None):
     """Run a single experiment based on config file"""
     
     # Load configuration
@@ -60,6 +60,15 @@ def run_experiment(config_path, output_dir='results', log_obs=False, obs_csv_pat
     
     exp_name = config['name']
     hyperparams = config['hyperparameters']
+    # Optionally override total_timesteps based on max_updates
+    if max_updates is not None:
+        try:
+            batch_size = int(hyperparams['num_envs']) * int(hyperparams['num_steps'])
+            override_total_timesteps = int(max_updates) * batch_size
+            print(f"[Override] Limiting to max_updates={max_updates} -> total_timesteps={override_total_timesteps}")
+            hyperparams = {**hyperparams, 'total_timesteps': override_total_timesteps}
+        except Exception as e:
+            print(f"[Override] Failed to apply max_updates override: {e}")
     extrinsic_rewards = config['extrinsic_rewards']
     
     print(f"\n{'='*60}")
@@ -262,6 +271,8 @@ def main():
                        help='Optional explicit path for observation CSV; defaults to results/<exp_name>/obs_logs/obs_<exp>_<ts>.csv')
     parser.add_argument('--max-obs-steps', type=int, default=500,
                        help='Max steps to log in the post-training observation episode')
+    parser.add_argument('--max-updates', type=int, default=None,
+                       help='Override number of PPO updates. If set, total_timesteps = num_envs*num_steps*max_updates')
     
     args = parser.parse_args()
     
@@ -270,7 +281,7 @@ def main():
         sys.exit(1)
     
     try:
-        output_dir = run_experiment(args.config, args.output_dir, log_obs=args.log_obs, obs_csv_path=args.obs_csv, max_obs_steps=args.max_obs_steps)
+        output_dir = run_experiment(args.config, args.output_dir, log_obs=args.log_obs, obs_csv_path=args.obs_csv, max_obs_steps=args.max_obs_steps, max_updates=args.max_updates)
         print(f"\nResults saved to: {output_dir}")
     except Exception as e:
         print(f"\nError running experiment: {e}")
