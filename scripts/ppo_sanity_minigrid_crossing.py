@@ -6,6 +6,8 @@ import numpy as np
 import torch
 import tempfile
 import re
+import csv
+from datetime import datetime
 
 # Ensure project root on path
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -202,14 +204,16 @@ def _get_frame_minigrid(env):
     return None
 
 
-def record_minigrid_frames(ppo: NovelD_PPO, env_id: str, max_steps: int = 500):
-    """Run one episode and return frames as a numpy array (T, H, W, C) uint8 for W&B logging."""
-    # Build env consistent with training obs (FullyObs + Flat) so the agent input matches
+def record_minigrid_episode(ppo: NovelD_PPO, env_id: str, max_steps: int = 500):
+    """Run one episode and return (frames, obs_rows, actions, rewards).\n    - frames: numpy array (T, H, W, C) uint8 for W&B logging\n    - obs_rows: list of flattened observation vectors (float32) per step\n    - actions: list of ints per step\n    - rewards: list of floats per step\n    """
     env = minigrid_env_factory(env_id, seed=0, idx=123)
     obs = env.reset()
     if isinstance(obs, tuple):
         obs = obs[0]
     frames = []
+    obs_rows = []
+    actions = []
+    rewards = []
     done = False
     steps = 0
     while not done and steps < max_steps:
@@ -219,23 +223,35 @@ def record_minigrid_frames(ppo: NovelD_PPO, env_id: str, max_steps: int = 500):
             if frame.dtype != np.uint8:
                 frame = np.clip(frame, 0, 255).astype(np.uint8)
             frames.append(frame)
+        # Log current flattened observation
+        try:
+            obs_rows.append(np.asarray(obs, dtype=np.float32).reshape(-1))
+        except Exception:
+            # If obs was a dict or unexpected shape, be defensive
+            if isinstance(obs, dict) and 'image' in obs:
+                img = np.asarray(obs['image'], dtype=np.float32)
+                if img.max() > 1.0:
+                    img = img / 255.0
+                obs_rows.append(img.reshape(-1))
+            else:
+                obs_rows.append(np.array([], dtype=np.float32))
+        # Policy step
         obs_tensor = torch.tensor(obs, dtype=torch.float32, device=ppo.device).unsqueeze(0)
         with torch.no_grad():
             action, _, _, _, _ = ppo.agent.get_action_and_value(obs_tensor)
         act = int(action.detach().cpu().numpy().squeeze())
+        actions.append(act)
         step_out = env.step(act)
         if len(step_out) == 5:
             obs, reward, terminated, truncated, _ = step_out
             done = bool(terminated or truncated)
         else:
             obs, reward, done, _ = step_out
+        rewards.append(float(reward))
         steps += 1
     env.close()
-
-    if not frames:
-        print("[viz] No frames captured from MiniGrid.")
-        return None
-    return np.stack(frames, axis=0)
+    frames_arr = np.stack(frames, axis=0) if frames else None
+    return frames_arr, obs_rows, actions, rewards
 
 
 def evaluate_agent(ppo: NovelD_PPO, env_id: str, episodes: int = 5) -> float:
@@ -283,6 +299,8 @@ def main():
     parser.add_argument("--wandb_run_name", type=str, default=None)
     parser.add_argument("--log_video", action="store_true", help="record and log a MiniGrid video after training")
     parser.add_argument("--video_format", choices=["gif", "mp4"], default="gif")
+    parser.add_argument("--log_obs", action="store_true", help="save per-step flattened observations to CSV after training")
+    parser.add_argument("--obs_csv", type=str, default=None, help="path to CSV file; if not set, a default in outputs/obs_logs is used")
     args = parser.parse_args()
 
     if not MINIGRID_AVAILABLE:
@@ -372,31 +390,67 @@ def main():
             "eval/improvement": post - pre
         }, step=total_timesteps)
 
-    # Optional video logging: encode to temp file and log to W&B
-    if args.log_video and args.wandb:
-        frames = record_minigrid_frames(ppo, env_id, max_steps=500)
-        if frames is not None and IMAGEIO_AVAILABLE:
-            fmt = args.video_format
-            suffix = f".{fmt}"
-            tmp = tempfile.NamedTemporaryFile(prefix="minigrid_crossing_video_", suffix=suffix, delete=False)
-            tmp_path = tmp.name
-            tmp.close()
-            try:
-                if fmt == "gif":
-                    imageio.mimsave(tmp_path, frames, fps=20)
-                elif fmt == "mp4":
-                    writer = imageio.get_writer(tmp_path, fps=20)
-                    for f in frames:
-                        writer.append_data(f)
-                    writer.close()
-                else:
-                    print(f"[viz] Unsupported video format for logging: {fmt}")
-                    tmp_path = None
-            except Exception as e:
-                print(f"[viz] Failed to encode video via imageio: {e}")
+    # Optional video logging and observation CSV: run one episode once
+    frames = None
+    obs_rows = None
+    actions = None
+    rewards = None
+    if args.log_video or args.log_obs:
+        frames, obs_rows, actions, rewards = record_minigrid_episode(ppo, env_id, max_steps=500)
+
+    if args.log_video and args.wandb and frames is not None and IMAGEIO_AVAILABLE:
+        fmt = args.video_format
+        suffix = f".{fmt}"
+        tmp = tempfile.NamedTemporaryFile(prefix="minigrid_crossing_video_", suffix=suffix, delete=False)
+        tmp_path = tmp.name
+        tmp.close()
+        try:
+            if fmt == "gif":
+                imageio.mimsave(tmp_path, frames, fps=20)
+            elif fmt == "mp4":
+                writer = imageio.get_writer(tmp_path, fps=20)
+                for f in frames:
+                    writer.append_data(f)
+                writer.close()
+            else:
+                print(f"[viz] Unsupported video format for logging: {fmt}")
                 tmp_path = None
-            if tmp_path:
-                wandb.log({"eval/video_env": wandb.Video(tmp_path, fps=20, format=fmt)}, step=total_timesteps)
+        except Exception as e:
+            print(f"[viz] Failed to encode video via imageio: {e}")
+            tmp_path = None
+        if tmp_path:
+            wandb.log({"eval/video_env": wandb.Video(tmp_path, fps=20, format=fmt)}, step=total_timesteps)
+
+    # Observation CSV logging
+    if args.log_obs and obs_rows is not None:
+        out_dir = os.path.join(REPO_ROOT, "outputs", "obs_logs")
+        os.makedirs(out_dir, exist_ok=True)
+        if args.obs_csv:
+            csv_path = args.obs_csv
+        else:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_env = env_id.replace("/", "_")
+            csv_path = os.path.join(out_dir, f"obs_{safe_env}_{ts}.csv")
+        try:
+            with open(csv_path, mode='w', newline='') as f:
+                writer = csv.writer(f)
+                # Header
+                num_obs = len(obs_rows[0]) if obs_rows and len(obs_rows[0]) > 0 else 0
+                header = ["step", "action", "reward", "done"] + [f"obs_{i}" for i in range(num_obs)]
+                writer.writerow(header)
+                # Rows
+                T = len(obs_rows)
+                for t in range(T):
+                    row = [t,
+                           actions[t] if actions is not None and t < len(actions) else '',
+                           rewards[t] if rewards is not None and t < len(rewards) else '',
+                           1 if (t == T - 1) else 0]
+                    if num_obs > 0:
+                        row.extend(obs_rows[t].tolist())
+                    writer.writerow(row)
+            print(f"Saved observations to {csv_path}")
+        except Exception as e:
+            print(f"[obs] Failed to save observations CSV: {e}")
 
     if args.wandb:
         try:
