@@ -7,15 +7,51 @@ import os
 import json
 import argparse
 import shutil
+import csv
+from datetime import datetime
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from algorithms.NovelD_PPO import NovelD_PPO
 import torch
+import gym
+from env_wrapper import CustomObservationWrapper
+from mini_behavior.utils.states_base import RelativeObjectState
 from mini_behavior.register import register
 
-def run_experiment(config_path, output_dir='results'):
+def build_obs_header(env):
+    """Construct labeled header matching CustomObservationWrapper observation layout.
+    Layout:
+      - agent_x, agent_y, agent_dir
+      - For each object: {obj_type}_{idx}_x, {obj_type}_{idx}_y, then non-default binary flags
+    """
+    default_states = [
+        'atsamelocation',
+        'infovofrobot',
+        'inleftreachofrobot',
+        'inrightreachofrobot',
+        'inside',
+        'nextto',
+        'inlefthandofrobot',
+        'inrighthandofrobot',
+    ]
+    header = ['agent_x', 'agent_y', 'agent_dir']
+    # Iterate objects in the same order as CustomObservationWrapper
+    for obj_type, obj_list in env.objs.items():
+        for idx, obj in enumerate(obj_list):
+            # Position
+            header.append(f"{obj_type}_{idx}_x")
+            header.append(f"{obj_type}_{idx}_y")
+            # Binary non-relative states except defaults
+            for state_name, state in obj.states.items():
+                if not isinstance(state, RelativeObjectState):
+                    if state_name not in default_states:
+                        header.append(f"{obj_type}_{idx}_{state_name}")
+    return header
+
+
+def run_experiment(config_path, output_dir='results', log_obs=False, obs_csv_path=None, max_obs_steps=500):
     """Run a single experiment based on config file"""
     
     # Load configuration
@@ -134,6 +170,72 @@ def run_experiment(config_path, output_dir='results'):
         
         print(f"\nTraining completed for {exp_name}")
         
+        # Optional: log one episode of observations with labeled header
+        if log_obs:
+            # Build a single test env matching training obs (CustomObservationWrapper)
+            test_env = CustomObservationWrapper(gym.make(env_id))
+            # Header
+            env_unwrapped = getattr(test_env, 'env', test_env)
+            header = build_obs_header(env_unwrapped)
+            # Actions may be multi-discrete; we will log action vector columns upfront
+            action_dims = getattr(agent, 'action_dims', None)
+            act_cols = [f"act_{i}" for i in range(len(action_dims))] if action_dims is not None else ["act"]
+            # Prepare CSV path
+            obs_dir = os.path.join(exp_output_dir, 'obs_logs')
+            os.makedirs(obs_dir, exist_ok=True)
+            if obs_csv_path:
+                csv_path = obs_csv_path
+            else:
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                csv_path = os.path.join(obs_dir, f"obs_{exp_name}_{ts}.csv")
+            # Write CSV
+            with open(csv_path, mode='w', newline='') as f:
+                writer = csv.writer(f)
+                # Combined header: step, actions..., reward, done, then labeled obs fields
+                writer.writerow(['step'] + act_cols + ['reward', 'done'] + header)
+                # Run episode
+                obs = test_env.reset()
+                done = False
+                step = 0
+                while not done and step < max_obs_steps:
+                    obs_vec = obs if isinstance(obs, (list, tuple,)) else os
+                    obs_arr = None
+                    try:
+                        import numpy as _np
+                        obs_arr = _np.asarray(obs, dtype=_np.float32).reshape(-1)
+                    except Exception:
+                        # Fallback: if dict-like, skip
+                        pass
+                    # Policy action
+                    import numpy as np
+                    import torch as th
+                    obs_tensor = th.tensor(obs_arr if obs_arr is not None else obs, dtype=th.float32, device=agent.device).unsqueeze(0)
+                    with th.no_grad():
+                        action, _, _, _, _ = agent.agent.get_action_and_value(obs_tensor)
+                    act_np = action.detach().cpu().numpy()
+                    # Flatten action to list
+                    if act_np.ndim > 1:
+                        act_list = act_np[0].tolist()
+                    else:
+                        act_list = [int(act_np.item())]
+                    # Step
+                    obs, reward, done, _ = test_env.step(action.cpu().numpy()[0] if act_np.ndim > 1 else int(act_np.item()))
+                    # Pad / truncate action columns to match act_cols
+                    if len(act_list) < len(act_cols):
+                        act_list = act_list + [""] * (len(act_cols) - len(act_list))
+                    elif len(act_list) > len(act_cols):
+                        act_list = act_list[:len(act_cols)]
+                    # Ensure obs array
+                    if obs_arr is None:
+                        try:
+                            obs_arr = np.asarray(obs, dtype=np.float32).reshape(-1)
+                        except Exception:
+                            obs_arr = np.array([], dtype=np.float32)
+                    # Row
+                    writer.writerow([step] + act_list + [float(reward), 1 if done else 0] + obs_arr.tolist())
+                    step += 1
+            print(f"Saved observation log to {csv_path}")
+        
         # Create success marker
         with open(os.path.join(exp_output_dir, 'SUCCESS'), 'w') as f:
             f.write(f"Experiment {exp_name} completed successfully\n")
@@ -154,6 +256,12 @@ def main():
     parser.add_argument('config', help='Path to experiment configuration JSON file')
     parser.add_argument('--output-dir', default='results',
                        help='Directory to save results (default: results)')
+    parser.add_argument('--log-obs', action='store_true',
+                       help='After training, run one episode and log labeled observations to CSV')
+    parser.add_argument('--obs-csv', default=None,
+                       help='Optional explicit path for observation CSV; defaults to results/<exp_name>/obs_logs/obs_<exp>_<ts>.csv')
+    parser.add_argument('--max-obs-steps', type=int, default=500,
+                       help='Max steps to log in the post-training observation episode')
     
     args = parser.parse_args()
     
@@ -162,7 +270,7 @@ def main():
         sys.exit(1)
     
     try:
-        output_dir = run_experiment(args.config, args.output_dir)
+        output_dir = run_experiment(args.config, args.output_dir, log_obs=args.log_obs, obs_csv_path=args.obs_csv, max_obs_steps=args.max_obs_steps)
         print(f"\nResults saved to: {output_dir}")
     except Exception as e:
         print(f"\nError running experiment: {e}")
