@@ -37,6 +37,11 @@ class MultiCategorical:
         entropies = [dist.entropy() for dist in self.distributions]
         return sum(entropies)
 
+    def mode(self):
+        # Take the most likely action for each categorical component.
+        modes = [dist.logits.argmax(dim=-1) for dist in self.distributions]
+        return torch.stack(modes, dim=-1)
+
 def layer_init(layer, std=torch.sqrt(torch.tensor(2.0)), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
     torch.nn.init.constant_(layer.bias, bias_const)
