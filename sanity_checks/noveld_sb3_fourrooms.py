@@ -6,8 +6,9 @@ import argparse
 import os
 import sys
 import warnings
+from datetime import datetime
 from enum import IntEnum
-from typing import Callable
+from typing import Callable, Optional, Type
 
 import numpy as np
 import torch
@@ -32,6 +33,14 @@ except Exception:
 from stable_baselines3 import NovelD_PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv
+
+try:
+    import imageio
+
+    IMAGEIO_AVAILABLE = True
+except Exception:
+    imageio = None  # type: ignore
+    IMAGEIO_AVAILABLE = False
 
 
 class LocalFlatObsWrapper(gym.ObservationWrapper):
@@ -144,11 +153,11 @@ class LegacyActionWrapper(gym.ActionWrapper):
         return self._actions_enum(int(action))
 
 
-def build_env_fn(env_id: str, seed: int, wrapper_factory: Callable[[gym.Env], gym.Env]) -> Callable[[], gym.Env]:
+def build_env_fn(env_id: str, seed: int, wrapper_cls: Type[gym.ObservationWrapper]) -> Callable[[], gym.Env]:
     def thunk():
         env = gym.make(env_id)
         env = GymV26ToV21Wrapper(env)
-        env = wrapper_factory(env)
+        env = wrapper_cls(env)
         env = Float32ObsWrapper(env)
         env = LegacyActionWrapper(env)
         env = Monitor(env)
@@ -164,7 +173,140 @@ def build_env_fn(env_id: str, seed: int, wrapper_factory: Callable[[gym.Env], gy
     return thunk
 
 
-def resolve_flat_wrapper() -> Callable[[gym.Env], gym.Env]:
+def make_single_env(env_id: str, seed: int, idx: int, wrapper_cls: Type[gym.ObservationWrapper]) -> gym.Env:
+    env = gym.make(env_id)
+    env = GymV26ToV21Wrapper(env)
+    env = wrapper_cls(env)
+    env = Float32ObsWrapper(env)
+    env = LegacyActionWrapper(env)
+    try:
+        env.reset(seed=seed + idx)
+    except TypeError:
+        if hasattr(env, "seed"):
+            env.seed(seed + idx)
+    if hasattr(env.action_space, "seed"):
+        env.action_space.seed(seed + idx)
+    return env
+
+
+def make_render_env(env_id: str, seed: int, idx: int, wrapper_cls: Type[gym.ObservationWrapper]) -> gym.Env:
+    try:
+        env = gym.make(env_id, render_mode="rgb_array")
+    except TypeError:
+        env = gym.make(env_id)
+    env = GymV26ToV21Wrapper(env)
+    env = wrapper_cls(env)
+    env = Float32ObsWrapper(env)
+    env = LegacyActionWrapper(env)
+    try:
+        env.reset(seed=seed + idx)
+    except TypeError:
+        if hasattr(env, "seed"):
+            env.seed(seed + idx)
+    return env
+
+
+def evaluate_noveld_policy(
+    model: NovelD_PPO,
+    env_id: str,
+    seed: int,
+    episodes: int,
+    wrapper_cls: Type[gym.ObservationWrapper],
+    eval_idx: int = 10_000,
+) -> float:
+    env = make_single_env(env_id, seed, eval_idx, wrapper_cls)
+    returns: list[float] = []
+    try:
+        for ep in range(episodes):
+            try:
+                obs = env.reset(seed=seed + eval_idx + ep)
+            except TypeError:
+                obs = env.reset()
+            done = False
+            ep_return = 0.0
+            while not done:
+                action, _ = model.predict(obs, deterministic=True)
+                if isinstance(action, np.ndarray):
+                    if action.shape == ():
+                        action = int(action)
+                    else:
+                        action = action.item()
+                obs, reward, done, _ = env.step(int(action))
+                ep_return += float(reward)
+            returns.append(ep_return)
+    finally:
+        env.close()
+    return float(np.mean(returns)) if returns else 0.0
+
+
+def record_policy_video(
+    policy_fn: Callable[[np.ndarray], int],
+    env_id: str,
+    seed: int,
+    idx: int,
+    wrapper_cls: Type[gym.ObservationWrapper],
+    max_steps: int,
+    out_path: str,
+    video_format: str,
+    fps: int,
+) -> bool:
+    if not IMAGEIO_AVAILABLE:
+        print("[video] imageio not available; skipping recording")
+        return False
+    env = make_render_env(env_id, seed, idx, wrapper_cls)
+    frames = []
+    try:
+        obs = env.reset()
+        if isinstance(obs, tuple):
+            obs = obs[0]
+        done = False
+        steps = 0
+        while not done and steps < max_steps:
+            frame = env.render("rgb_array") if hasattr(env, "render") else None
+            if frame is not None:
+                frame = np.asarray(frame)
+                if frame.dtype != np.uint8:
+                    frame = np.clip(frame, 0, 255).astype(np.uint8)
+                frames.append(frame)
+            action = policy_fn(np.asarray(obs))
+            step_out = env.step(int(action))
+            if len(step_out) == 5:
+                obs, reward, terminated, truncated, _ = step_out
+                done = bool(terminated or truncated)
+            else:
+                obs, reward, done, _ = step_out
+            if isinstance(obs, tuple):
+                obs = obs[0]
+            steps += 1
+        final_frame = env.render("rgb_array") if hasattr(env, "render") else None
+        if final_frame is not None:
+            final_frame = np.asarray(final_frame)
+            if final_frame.dtype != np.uint8:
+                final_frame = np.clip(final_frame, 0, 255).astype(np.uint8)
+            frames.append(final_frame)
+    finally:
+        env.close()
+    if not frames:
+        return False
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    try:
+        if video_format == "gif":
+            imageio.mimsave(out_path, frames, fps=fps)
+        elif video_format == "mp4":
+            writer = imageio.get_writer(out_path, fps=fps)
+            for frame in frames:
+                writer.append_data(frame)
+            writer.close()
+        else:
+            raise ValueError(f"Unsupported video format: {video_format}")
+    except Exception as exc:
+        print(f"[video] Failed to save video: {exc}")
+        return False
+    print(f"[video] Saved evaluation rollout to {out_path}")
+    return True
+
+
+def resolve_flat_wrapper() -> Type[gym.ObservationWrapper]:
     if DefaultFlatObsWrapper is not None:
         return DefaultFlatObsWrapper
     return LocalFlatObsWrapper
@@ -218,27 +360,90 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--clip-range", type=float, default=0.2, help="PPO clip range.")
     parser.add_argument("--ent-coef", type=float, default=0.0, help="Entropy regularisation coefficient.")
     parser.add_argument("--n-epochs", type=int, default=10, help="PPO optimisation epochs.")
-    parser.add_argument("--int-coef", type=float, default=1.0, help="Intrinsic reward scale.")
+    parser.add_argument(
+        "--int-coef",
+        type=float,
+        default=0.0,
+        help="Intrinsic reward scale (set >0.0 to re-enable NovelD intrinsic rewards).",
+    )
     parser.add_argument("--ext-coef", type=float, default=1.0, help="Extrinsic reward scale.")
     parser.add_argument("--tensorboard-log", type=str, default=None, help="TensorBoard log directory.")
     parser.add_argument("--model-path", type=str, default=None, help="Optional path to save the trained model.")
     parser.add_argument("--device", type=str, default="auto", help="Computation device, e.g. 'cpu', 'cuda', 'cuda:0'.")
+    parser.add_argument("--eval-episodes", type=int, default=5, help="Number of episodes for mean return eval.")
+    parser.add_argument("--record-eval", action="store_true", help="Record pre/post training evaluation rollouts.")
+    parser.add_argument(
+        "--video-dir",
+        type=str,
+        default=os.path.join(REPO_ROOT, "outputs", "videos"),
+        help="Directory for saving evaluation videos.",
+    )
+    parser.add_argument("--video-format", choices=["gif", "mp4"], default="gif", help="Evaluation video format.")
+    parser.add_argument("--video-fps", type=int, default=15, help="Frames per second for evaluation videos.")
+    parser.add_argument("--video-max-steps", type=int, default=500, help="Max steps per evaluation rollout video.")
+    parser.add_argument("--video-seed-idx", type=int, default=4242, help="Seed offset used for evaluation videos.")
+    parser.add_argument(
+        "--eval-video-offset",
+        type=int,
+        default=100,
+        help="Base offset added to the seed for post-training evaluation rollouts.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
 
+    if args.int_coef <= 0.0:
+        print("[noveld] Intrinsic rewards disabled; running NovelD_PPO in pure PPO mode.")
+
     flat_wrapper_cls = resolve_flat_wrapper()
     env_id = resolve_env_id(args.env_id)
     if env_id != args.env_id:
         print(f"[env] Requested {args.env_id} unavailable; using {env_id} instead.")
+
+    safe_env = env_id.replace("/", "_")
+    run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    video_root = os.path.abspath(args.video_dir)
+    final_eval_dir = os.path.join(video_root, safe_env, f"eval_rollouts_{run_timestamp}")
+    os.makedirs(final_eval_dir, exist_ok=True)
+    seeds_manifest = os.path.join(final_eval_dir, "seeds.txt")
+    if os.path.exists(seeds_manifest):
+        final_eval_seeds: list[int] = []
+        with open(seeds_manifest, "r", encoding="utf-8") as manifest:
+            for line in manifest:
+                if ":" not in line:
+                    continue
+                try:
+                    _, raw_seed = line.split(":", 1)
+                    final_eval_seeds.append(int(raw_seed.strip()))
+                except ValueError:
+                    continue
+        if len(final_eval_seeds) != 10:
+            final_eval_seeds = [args.video_seed_idx + args.eval_video_offset + i for i in range(10)]
+    else:
+        final_eval_seeds = [args.video_seed_idx + args.eval_video_offset + i for i in range(10)]
+        with open(seeds_manifest, "w", encoding="utf-8") as manifest:
+            for idx, seed_val in enumerate(final_eval_seeds, start=1):
+                manifest.write(f"rollout_{idx:02d}: {seed_val}\n")
+
+    pre_video_path: Optional[str] = None
+    post_video_path: Optional[str] = None
+    if args.record_eval:
+        if not IMAGEIO_AVAILABLE:
+            print("[video] imageio not available; disabling eval recording")
+            args.record_eval = False
+        else:
+            os.makedirs(video_root, exist_ok=True)
+            pre_video_path = os.path.join(video_root, f"{safe_env}_noveld_pre_{run_timestamp}.{args.video_format}")
+            post_video_path = os.path.join(video_root, f"{safe_env}_noveld_post_{run_timestamp}.{args.video_format}")
+
     device_arg = args.device
     if device_arg != "auto" and device_arg.startswith("cuda") and not torch.cuda.is_available():
         print(f"[device] CUDA requested but not available; falling back to cpu.")
         device_arg = "cpu"
     env_fns = [
-        build_env_fn(env_id, seed=args.seed + idx, wrapper_factory=flat_wrapper_cls) for idx in range(args.n_envs)
+        build_env_fn(env_id, seed=args.seed + idx, wrapper_cls=flat_wrapper_cls) for idx in range(args.n_envs)
     ]
     vec_env = DummyVecEnv(env_fns)
 
@@ -268,15 +473,87 @@ def main() -> None:
         device=device_arg,
     )
 
-    model.learn(total_timesteps=args.total_timesteps, log_interval=10)
+    def policy_fn(obs: np.ndarray) -> int:
+        action, _ = model.predict(obs, deterministic=True)
+        if isinstance(action, np.ndarray):
+            if action.shape == ():
+                return int(action)
+            return int(action.item())
+        return int(action)
 
-    if args.model_path:
-        save_dir = os.path.dirname(args.model_path)
-        if save_dir:
-            os.makedirs(save_dir, exist_ok=True)
-        model.save(args.model_path)
+    try:
+        if args.eval_episodes > 0:
+            pre_return = evaluate_noveld_policy(
+                model,
+                env_id=env_id,
+                seed=args.seed,
+                episodes=args.eval_episodes,
+                wrapper_cls=flat_wrapper_cls,
+            )
+            print(f"[noveld] Average return before training: {pre_return:.2f}")
+        if args.record_eval and pre_video_path:
+            record_policy_video(
+                policy_fn,
+                env_id,
+                args.seed,
+                args.video_seed_idx,
+                flat_wrapper_cls,
+                args.video_max_steps,
+                pre_video_path,
+                args.video_format,
+                args.video_fps,
+            )
 
-    vec_env.close()
+        model.learn(total_timesteps=args.total_timesteps, log_interval=10)
+
+        if args.eval_episodes > 0:
+            post_return = evaluate_noveld_policy(
+                model,
+                env_id=env_id,
+                seed=args.seed,
+                episodes=args.eval_episodes,
+                wrapper_cls=flat_wrapper_cls,
+                eval_idx=20_000,
+            )
+            print(f"[noveld] Average return after training: {post_return:.2f}")
+        if args.record_eval and post_video_path:
+            record_policy_video(
+                policy_fn,
+                env_id,
+                args.seed,
+                args.video_seed_idx + 1,
+                flat_wrapper_cls,
+                args.video_max_steps,
+                post_video_path,
+                args.video_format,
+                args.video_fps,
+            )
+
+        if IMAGEIO_AVAILABLE:
+            print("[video] Recording final evaluation rollouts (10 episodes)...")
+            for rollout_idx, rollout_seed in enumerate(final_eval_seeds, start=1):
+                rollout_path = os.path.join(final_eval_dir, f"rollout_{rollout_idx:02d}.gif")
+                record_policy_video(
+                    policy_fn,
+                    env_id,
+                    args.seed,
+                    rollout_seed,
+                    flat_wrapper_cls,
+                    args.video_max_steps,
+                    rollout_path,
+                    "gif",
+                    args.video_fps,
+                )
+        else:
+            print("[video] imageio not available; skipping final evaluation rollouts.")
+
+        if args.model_path:
+            save_dir = os.path.dirname(args.model_path)
+            if save_dir:
+                os.makedirs(save_dir, exist_ok=True)
+            model.save(args.model_path)
+    finally:
+        vec_env.close()
 
 
 if __name__ == "__main__":
