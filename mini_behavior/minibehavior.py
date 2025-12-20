@@ -68,6 +68,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         hitwithobject = 12
         mouthing = 13
         brush = 14
+        noop = 15
 
     class LocoActions(IntEnum):
         left = 0
@@ -149,9 +150,9 @@ class MiniBehaviorEnv(MiniGridEnv):
 
         # Use MultiDiscrete action space (3D)
         self.action_space = spaces.MultiDiscrete([
-            len(manipulation_actions),  # First dimension: left arm actions
-            len(manipulation_actions),  # Second dimension: right arm actions
-            len(locomotion_actions)     # Third dimension: locomotion actions
+            len(self.manipulation_actions),  # First dimension: left arm actions
+            len(self.manipulation_actions),  # Second dimension: right arm actions
+            len(self.locomotion_actions)     # Third dimension: locomotion actions
         ])
 
 
@@ -185,6 +186,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         # Track rewards accumulated in current step
         self.step_reward = 0
         self.reward_breakdown = {'noise': 0, 'interaction': 0, 'location_change': 0}
+        self.last_action_success = {'left': False, 'right': False, 'loco': False}
 
     @property
     def left_vec(self):
@@ -289,6 +291,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.reward = 0
         self.step_reward = 0
         self.reward_breakdown = {'noise': 0, 'interaction': 0, 'location_change': 0}
+        self.last_action_success = {'left': False, 'right': False, 'loco': False}
 
         # Generate a new random grid at the start of each episode
         # To keep the same grid for each episode, call env.seed() with
@@ -624,6 +627,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.last_action = action
         self.step_count += 1
         self.action_done = True
+        self.last_action_success = {'left': False, 'right': False, 'loco': False}
         
         # Track noise states before actions
         prev_noise_states = self.get_noise_states()
@@ -662,6 +666,10 @@ class MiniBehaviorEnv(MiniGridEnv):
                 action_name = curr_action.name  # Convert index to action name
                 self.action_done = False
 
+                if action_name == 'noop':
+                    self.action_done = True
+                    continue
+
                 # Define dimension if picking up, dropping, or throwing (dim = 0 always for infant exploration)
                 if action_name in ['pickup_0', 'drop_0', 'throw_0']:
                     action_name = action_name.split('_')[0]  # list: [action, dim]
@@ -679,6 +687,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                             if is_obj(obj) and action_class(self).can(obj, arm):
                                 action_class(self).do(obj, arm)
                                 self.action_done = True
+                                self.last_action_success[arm] = True
                                 self.award_action_reward(action_name)
                                 break
                         if self.action_done:
@@ -693,6 +702,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 if int(0) in drop_dim:
                                     action_class(self).do(obj, int(0), arm, pos)
                                     self.action_done = True
+                                    self.last_action_success[arm] = True
                                     self.award_action_reward(action_name)
                                     was_dropped = True
                                     break
@@ -704,6 +714,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                         if action_class(self).can(obj, arm, fwd_pos):
                             action_class(self).do(obj, int(0), arm, fwd_pos)
                             self.action_done = True
+                            self.last_action_success[arm] = True
                             self.award_action_reward(action_name)
                             break
                 elif action_name in ["takeout", "dropin"]:
@@ -715,6 +726,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 if is_obj(obj) and action_class(self).can(obj, arm):
                                     action_class(self).do(obj, arm)
                                     self.action_done = True
+                                    self.last_action_success[arm] = True
                                     self.award_action_reward(action_name)
                                     break
                             if self.action_done:
@@ -730,6 +742,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                             if is_obj(obj) and action_class(self).can(obj, arm):
                                 action_class(self).do(obj, arm)
                                 self.action_done = True
+                                self.last_action_success[arm] = True
                                 self.award_action_reward(action_name)
                                 null_loco = True
                                 break
@@ -745,6 +758,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 if is_obj(obj) and action_class(self).can(obj, arm):
                                     action_class(self).do(obj, arm)
                                     self.action_done = True
+                                    self.last_action_success[arm] = True
                                     self.award_action_reward(action_name)
                                     break
                             if self.action_done:
@@ -753,10 +767,11 @@ class MiniBehaviorEnv(MiniGridEnv):
                             break
                 # The agent should not be able to perform any other action if it is holding an object, so the action will perform on the object in agent's hand
                 elif self.carrying[arm]:
-                        if action_class(self).can(list(self.carrying[arm])[0], arm):
-                            action_class(self).do(list(self.carrying[arm])[0], arm)
-                            self.action_done = True
-                            self.award_action_reward(action_name)
+                    if action_class(self).can(list(self.carrying[arm])[0], arm):
+                        action_class(self).do(list(self.carrying[arm])[0], arm)
+                        self.action_done = True
+                        self.last_action_success[arm] = True
+                        self.award_action_reward(action_name)
                 # If the agent is not holding an object, then it will perform the action on surrounding objects
                 else:
                     for cell in seq:
@@ -767,6 +782,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                                 if is_obj(obj) and action_class(self).can(obj, arm):
                                     action_class(self).do(obj, arm)
                                     self.action_done = True
+                                    self.last_action_success[arm] = True
                                     self.award_action_reward(action_name)
                                     break
                             if self.action_done:
@@ -792,8 +808,10 @@ class MiniBehaviorEnv(MiniGridEnv):
                 self.agent_dir -= 1
                 if self.agent_dir < 0:
                     self.agent_dir += 4
+                self.last_action_success['loco'] = True
             elif locomotion_action == self.locomotion_actions.right:
                 self.agent_dir = (self.agent_dir + 1) % 4  # Rotate right
+                self.last_action_success['loco'] = True
             elif locomotion_action == self.locomotion_actions.forward:
                 can_overlap = True
                 for dim in fwd_cell:
@@ -804,6 +822,8 @@ class MiniBehaviorEnv(MiniGridEnv):
                 if can_overlap and not was_dropped:
                     prev_pos = np.array(self.agent_pos)
                     self.agent_pos = fwd_pos
+                    if not np.array_equal(prev_pos, self.agent_pos):
+                        self.last_action_success['loco'] = True
                     # Award reward if walking with object (actually moved position)
                     if (self.carrying['left'] or self.carrying['right']) and not np.array_equal(prev_pos, self.agent_pos):
                         self.award_action_reward('walk_with_object')
@@ -824,6 +844,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                             obj.update_pos(new_pos)
                             self.grid.set(*new_pos, obj, dim)
                             obj.states['kicked'].set_value(True)
+                            self.last_action_success['loco'] = True
                             self.award_action_reward('kick')
                             break
             elif locomotion_action == self.locomotion_actions.climb:
@@ -835,6 +856,7 @@ class MiniBehaviorEnv(MiniGridEnv):
                             self.currently_climbing = not self.currently_climbing
                             obj.states['climbed'].set_value(True)
                             self.action_done = True
+                            self.last_action_success['loco'] = True
                             break
 
 
@@ -862,8 +884,8 @@ class MiniBehaviorEnv(MiniGridEnv):
         if self.test_env:
             self.update_exploration_metrics()
         
-        # Prepare info dict with reward breakdown
-        info = {}
+        # Prepare info dict with reward breakdown and current action mask for policy use
+        info = {'action_mask': self.get_action_mask()}
         if self.extrinsic_rewards:
             info['reward_breakdown'] = self.reward_breakdown.copy()
             # Reset breakdown for next step
@@ -888,6 +910,157 @@ class MiniBehaviorEnv(MiniGridEnv):
             last_obj = obj
 
         return dims
+
+    def _manip_action_valid(self, action_enum, arm, seq, fwd_cell, fwd_pos, upper_left_pos, upper_right_pos, left_pos, right_pos):
+        """
+        Compute whether a manipulation action is valid without executing it.
+        Mirrors the branching logic in step() but only uses .can() checks.
+        """
+        action_name = action_enum.name
+        if action_name == 'noop':
+            return True
+
+        base_name = action_name.split('_')[0] if action_name in ['pickup_0', 'drop_0', 'throw_0'] else action_name
+        action_class = ACTION_FUNC_MAPPING.get(base_name)
+        if action_class is None:
+            return False
+
+        pos_seq = [fwd_pos, upper_left_pos, left_pos] if arm == 'left' else [fwd_pos, upper_right_pos, right_pos]
+        carrying_set = self.carrying[arm]
+
+        # Helper to scan surrounding cells for an actionable object
+        def scan_cells():
+            for cell in seq:
+                for dim in cell:
+                    for obj in dim:
+                        if isinstance(obj, FurnitureObj):
+                            continue
+                        if is_obj(obj):
+                            try:
+                                if action_class(self).can(obj, arm):
+                                    return True
+                            except KeyError:
+                                # Some objects may not implement all states (e.g., contains); treat as invalid target
+                                continue
+            return False
+
+        if base_name == 'pickup':
+            for cell in seq:
+                for obj in cell[int(0)]:
+                    if isinstance(obj, FurnitureObj):
+                        continue
+                    if is_obj(obj) and action_class(self).can(obj, arm):
+                        return True
+            return False
+
+        if base_name == 'drop':
+            for obj in carrying_set:
+                for pos in pos_seq:
+                    if action_class(self).can(obj, arm, pos):
+                        drop_dim = obj.available_dims
+                        if int(0) in drop_dim:
+                            return True
+            return False
+
+        if base_name == 'throw':
+            for obj in carrying_set:
+                if action_class(self).can(obj, arm, fwd_pos):
+                    return True
+            return False
+
+        if base_name in ['takeout', 'dropin']:
+            return scan_cells()
+
+        if base_name in ['push', 'pull']:
+            for dim in fwd_cell:
+                for obj in dim:
+                    if isinstance(obj, FurnitureObj):
+                        continue
+                    if is_obj(obj) and action_class(self).can(obj, arm):
+                        return True
+            return False
+
+        if base_name in ['hit', 'hitwithobject']:
+            return scan_cells()
+
+        # Default: act on carried object if present, otherwise nearby
+        if carrying_set:
+            obj = list(carrying_set)[0]
+            if action_class(self).can(obj, arm):
+                return True
+        return scan_cells()
+
+    def _locomotion_action_mask(self, fwd_cell, fwd_pos):
+        """
+        Build a locomotion validity mask.
+        """
+        mask = np.zeros(len(self.locomotion_actions), dtype=bool)
+        mask[self.locomotion_actions.left] = True
+        mask[self.locomotion_actions.right] = True
+
+        # Forward is blocked by non-overlap objects
+        can_overlap = True
+        for dim in fwd_cell:
+            for obj in dim:
+                if is_obj(obj) and not obj.can_overlap:
+                    can_overlap = False
+                    break
+            if not can_overlap:
+                break
+        if can_overlap:
+            mask[self.locomotion_actions.forward] = True
+
+        # Kickable object ahead with landing space
+        dim = int(0)
+        for obj in fwd_cell[dim]:
+            if isinstance(obj, FurnitureObj):
+                continue
+            if is_obj(obj) and obj.possible_action('kick'):
+                new_pos = fwd_pos + self.dir_vec * self.kick_length
+                dims = self.drop_dims(new_pos)
+                if dim in dims:
+                    mask[self.locomotion_actions.kick] = True
+                    break
+
+        # Climbable object ahead
+        for obj in fwd_cell[int(0)]:
+            if isinstance(obj, FurnitureObj):
+                continue
+            if is_obj(obj) and obj.possible_action('climb'):
+                if 'stroller' in obj.get_name() or 'cart_toy' in obj.get_name() or 'tree_busy_box' in obj.get_name():
+                    mask[self.locomotion_actions.climb] = True
+                    break
+
+        # Ensure at least one locomotion action is available
+        if not mask.any():
+            mask[self.locomotion_actions.left] = True
+            mask[self.locomotion_actions.right] = True
+        return mask
+
+    def get_action_mask(self):
+        """
+        Returns a dict of boolean masks for (left arm, right arm, locomotion) indicating valid actions.
+        Includes a noop manipulation action that is always allowed (or becomes the fallback when nothing else is valid).
+        """
+        fwd_pos, right_pos, left_pos, upper_right_pos, upper_left_pos = self.front_pos, self.right_pos, self.left_pos, self.upper_right_pos, self.upper_left_pos
+        fwd_cell, right_cell, left_cell, upper_right_cell, upper_left_cell = self.grid.get(*fwd_pos), self.grid.get(*right_pos), self.grid.get(*left_pos), self.grid.get(*upper_right_pos), self.grid.get(*upper_left_pos)
+        left_seq, right_seq = [fwd_cell, upper_left_cell, left_cell], [fwd_cell, upper_right_cell, right_cell]
+
+        left_mask = np.zeros(len(self.manipulation_actions), dtype=bool)
+        right_mask = np.zeros(len(self.manipulation_actions), dtype=bool)
+
+        for action_enum in self.manipulation_actions:
+            idx = action_enum.value
+            left_mask[idx] = self._manip_action_valid(action_enum, 'left', left_seq, fwd_cell, fwd_pos, upper_left_pos, upper_right_pos, left_pos, right_pos)
+            right_mask[idx] = self._manip_action_valid(action_enum, 'right', right_seq, fwd_cell, fwd_pos, upper_left_pos, upper_right_pos, left_pos, right_pos)
+
+        # Ensure noop is always available
+        noop_idx = self.manipulation_actions.noop
+        left_mask[noop_idx] = True
+        right_mask[noop_idx] = True
+
+        loco_mask = self._locomotion_action_mask(fwd_cell, fwd_pos)
+        return {'left': left_mask, 'right': right_mask, 'loco': loco_mask}
     
     def update_exploration_metrics(self):
         default_states = [
@@ -1145,4 +1318,3 @@ class MiniBehaviorEnv(MiniGridEnv):
             self.agent_dir = 0
 
         return pos
-

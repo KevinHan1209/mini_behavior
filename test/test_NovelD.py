@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 # Ensure the repository root is on sys.path for relative imports.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
 from gym import Env
@@ -29,7 +29,7 @@ except Exception:  # pragma: no cover - optional dependency
     def write_gif(*_args, **_kwargs):
         raise RuntimeError("array2gif is not installed. Install with `pip install array2gif` to enable GIF export.")
 
-from stable_baselines3 import NovelD_PPO
+from sb3_maskable_noveld import MaskableNovelD_PPO
 from stable_baselines3.common import utils
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback, EveryNTimesteps
 from stable_baselines3.common.monitor import Monitor
@@ -39,6 +39,7 @@ from stable_baselines3.common.logger import KVWriter
 from env_wrapper import CustomObservationWrapper
 from mini_behavior.register import env_list, register
 from mini_behavior.utils.states_base import RelativeObjectState
+from SB3_Extrinsic_Experiments.run_experiment import flatten_action_mask, ActionMaskWrapper, create_base_env  # reuse helper
 
 # Default training configuration aligned with the legacy runner.
 TOTAL_TIMESTEPS = 2_500_000
@@ -104,8 +105,9 @@ def make_vec_env(env_id: str, env_kwargs: Optional[Dict[str, object]], seed: int
 
     def make_thunk(rank: int):
         def _init():
-            env = gym.make(env_id, **(env_kwargs or {}))
+            env = create_base_env(env_id, env_kwargs)
             env = CustomObservationWrapper(env)
+            env = ActionMaskWrapper(env)
             env = Monitor(env)
             try:
                 env.reset(seed=seed + rank)
@@ -209,7 +211,7 @@ def train_agent(
     device: torch.device,
     total_timesteps: int = TOTAL_TIMESTEPS,
     wandb_run=None,
-) -> NovelD_PPO:
+) -> MaskableNovelD_PPO:
     """Train the Stable-Baselines3 NovelD_PPO agent on MultiToy."""
 
     print("\n=== Starting SB3 NovelD_PPO Training ===")
@@ -219,7 +221,7 @@ def train_agent(
 
     vec_env = make_vec_env(env_id, env_kwargs, seed=1, num_envs=NUM_ENVS)
 
-    model = NovelD_PPO(
+    model = MaskableNovelD_PPO(
         policy="MlpPolicy",
         env=vec_env,
         learning_rate=3e-4,

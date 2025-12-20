@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 import numpy as np
 from mini_behavior.utils.states_base import RelativeObjectState
 
@@ -118,3 +118,7 @@ class CustomObservationWrapper(gym.ObservationWrapper):
         obj_states = self._collect_object_features(env, agent_pos)
         obs = [float(agent_pos[0]), float(agent_pos[1]), float(env.agent_dir)] + obj_states
         return np.array(obs, dtype=np.float32)
+
+    def __getattr__(self, name):
+        # Delegate missing attributes to underlying env
+        return getattr(self.env, name)

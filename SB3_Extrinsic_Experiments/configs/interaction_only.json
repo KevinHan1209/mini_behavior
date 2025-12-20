@@ -1,0 +1,36 @@
+{
+  "name": "sb3_interaction_only",
+  "description": "SB3 NovelD with only interaction extrinsic rewards (no intrinsic)",
+  "extrinsic_rewards": {
+    "interaction": 0.1
+  },
+  "hyperparameters": {
+    "total_timesteps": 2500000,
+    "num_envs": 8,
+    "n_steps": 200,
+    "batch_size": 64,
+    "n_epochs": 1,
+    "learning_rate": 0.0001,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.0,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "int_coef": 0.0,
+    "ext_coef": 1.0,
+    "int_gamma": 0.99,
+    "update_proportion": 0.25
+  },
+  "env_config": {
+    "env_id": "MiniGrid-MultiToy-8x8-N2-v0",
+    "task": "MultiToy",
+    "room_size": 8,
+    "max_steps": 200
+  },
+  "wandb_config": {
+    "project": "sb3-noveld-extrinsic-new",
+    "group": "interaction_only",
+    "tags": ["sb3", "noveld", "extrinsic", "interaction"]
+  }
+}

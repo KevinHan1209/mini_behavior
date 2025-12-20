@@ -9,16 +9,28 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional, TypeVar, Union
 
 class MultiCategorical:
-    def __init__(self, logits, action_dims):
+    def __init__(self, logits, action_dims, masks=None):
         """
         :param logits: Tensor of shape [batch, sum(action_dims)]
         :param action_dims: List of integers for each discrete action space.
+        :param masks: Optional tensor of shape [batch, sum(action_dims)] with 1 for valid, 0 for invalid.
         """
         self.action_dims = action_dims
-        # Split the logits for each action dimension.
         self.logits_split = torch.split(logits, tuple(action_dims), dim=-1)
-        # Create a Categorical distribution for each split.
-        self.distributions = [Categorical(logits=logit) for logit in self.logits_split]
+        mask_splits = None
+        if masks is not None:
+            mask_splits = torch.split(masks, tuple(action_dims), dim=-1)
+
+        distributions = []
+        for idx, logit in enumerate(self.logits_split):
+            if mask_splits is not None:
+                mask = mask_splits[idx]
+                # Avoid -inf to keep gradients finite; assumes at least one valid action per branch.
+                masked_logits = logit + torch.where(mask > 0, torch.zeros_like(logit), torch.full_like(logit, -1e9))
+                distributions.append(Categorical(logits=masked_logits))
+            else:
+                distributions.append(Categorical(logits=logit))
+        self.distributions = distributions
 
     def sample(self):
         # Sample an action from each distribution and stack them into a single tensor.
@@ -76,13 +88,13 @@ class Agent(nn.Module):
         self.critic_ext = layer_init(nn.Linear(448, 1), std=0.01)
         self.critic_int = layer_init(nn.Linear(448, 1), std=0.01)
 
-    def get_action_and_value(self, x, action=None):
+    def get_action_and_value(self, x, action=None, masks=None):
         hidden = self.network(x)
         actor_h = self.actor_hidden(hidden)
         logits = self.actor_logits(actor_h)
         
         # Build our custom multi-categorical distribution from the logits.
-        multi_dist = MultiCategorical(logits, self.action_dims)
+        multi_dist = MultiCategorical(logits, self.action_dims, masks=masks)
         
         if action is None:
             action = multi_dist.sample()

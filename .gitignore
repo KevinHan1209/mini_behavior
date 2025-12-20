@@ -18,3 +18,10 @@ models/
 img/
 artifacts/
 *.key
+wandb_export*.csv
+
+# Experiment outputs and checkpoints
+*result*/
+*results*/
+*checkpoint*/
+*checkpoints*/

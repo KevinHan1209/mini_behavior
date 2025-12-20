@@ -130,6 +130,21 @@ def extract_binary_flags(obs, env):
                     
     return np.array(flags)
 
+def flatten_action_mask(mask_dict, action_dims):
+    """
+    Convert a dict mask {'left': ..., 'right': ..., 'loco': ...} into a flat vector aligned with action_dims.
+    """
+    if mask_dict is None:
+        return np.ones(sum(action_dims), dtype=np.float32)
+    ordered = []
+    for key in ['left', 'right', 'loco']:
+        branch = mask_dict.get(key)
+        if branch is None:
+            ordered.append(np.ones(action_dims[len(ordered)], dtype=np.float32))
+        else:
+            ordered.append(np.array(branch, dtype=np.float32))
+    return np.concatenate(ordered, axis=0)
+
 
 class NovelD_PPO:
     """
@@ -361,6 +376,7 @@ class NovelD_PPO:
         obs = torch.zeros((self.num_steps, self.num_envs) + self.obs_space.shape, dtype=torch.float32).to(self.device)
         action_dims = self.action_dims
         actions = torch.zeros((self.num_steps, self.num_envs, len(action_dims)), dtype=torch.long).to(self.device)
+        action_masks = torch.ones((self.num_steps, self.num_envs, sum(action_dims)), dtype=torch.float32).to(self.device)
         logprobs = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
         curiosity_rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32).to(self.device)
@@ -372,6 +388,13 @@ class NovelD_PPO:
         global_step = 0
         next_done = torch.zeros(self.num_envs).to(self.device)
         num_updates = self.total_timesteps // self.batch_size
+        # Initial masks from env reset
+        try:
+            init_masks = self.envs.call("get_action_mask")
+            flat_init = [flatten_action_mask(m, action_dims) for m in init_masks]
+            next_mask = torch.tensor(flat_init, dtype=torch.float32).to(self.device)
+        except Exception:
+            next_mask = torch.ones((self.num_envs, sum(action_dims)), dtype=torch.float32).to(self.device)
 
         for update in range(1, num_updates + 1):
 
@@ -385,9 +408,10 @@ class NovelD_PPO:
                 global_step += self.num_envs
                 obs[step] = next_obs
                 dones[step] = next_done
+                action_masks[step] = next_mask
 
                 with torch.no_grad():
-                    action, logprob, _, value_ext, value_int = self.agent.get_action_and_value(obs[step])
+                    action, logprob, _, value_ext, value_int = self.agent.get_action_and_value(obs[step], masks=next_mask)
                 actions[step] = action
                 logprobs[step] = logprob
                 ext_values[step] = value_ext.flatten()
@@ -401,6 +425,13 @@ class NovelD_PPO:
                 rewards[step] = torch.FloatTensor(reward).to(self.device)
                 next_obs = torch.FloatTensor(next_obs).to(self.device)
                 next_done = torch.FloatTensor(done).to(self.device)
+                
+                try:
+                    masks_from_info = [env_info.get('action_mask') for env_info in info]
+                    flat_masks = [flatten_action_mask(m, action_dims) for m in masks_from_info]
+                    next_mask = torch.tensor(flat_masks, dtype=torch.float32).to(self.device)
+                except Exception:
+                    next_mask = torch.ones((self.num_envs, sum(action_dims)), dtype=torch.float32).to(self.device)
                 
                 # Track extrinsic rewards if available from info dict
                 if hasattr(self, 'extrinsic_reward_trackers') or (info and any('reward_breakdown' in i for i in info)):
@@ -437,6 +468,7 @@ class NovelD_PPO:
             b_obs = obs.reshape((-1,) + (self.obs_dim,))
             b_logprobs = logprobs.reshape(-1)
             b_actions = actions.reshape(-1, actions.shape[-1])
+            b_masks = action_masks.reshape(-1, action_masks.shape[-1])
             b_ext_advantages = ext_advantages.reshape(-1)
             b_int_advantages = int_advantages.reshape(-1)
             b_ext_returns = (b_ext_advantages + ext_values.reshape(-1))
@@ -453,7 +485,7 @@ class NovelD_PPO:
             # Optimize policy and value networks while collecting metrics.
             opt_metrics = self.optimize(
                 b_obs, b_logprobs, b_actions, b_advantages,
-                b_ext_returns, b_int_returns, optimizer, global_step
+                b_ext_returns, b_int_returns, b_masks, optimizer, global_step
             )
 
             # Log update-level training metrics.
@@ -571,7 +603,7 @@ class NovelD_PPO:
 
         return ext_advantages, int_advantages
 
-    def optimize(self, b_obs, b_logprobs, b_actions, b_advantages, b_ext_returns, b_int_returns, optimizer, global_step):
+    def optimize(self, b_obs, b_logprobs, b_actions, b_advantages, b_ext_returns, b_int_returns, b_masks, optimizer, global_step):
         # Normalize observations for the RND loss.
         rnd_next_obs = self.normalize_obs(b_obs)
         metrics = {
@@ -602,7 +634,9 @@ class NovelD_PPO:
                 metrics["rnd_forward_loss"].append(forward_loss.item())
 
                 # New log probabilities, entropy and value predictions.
-                _, newlogprob, entropy, new_ext_values, new_int_values = self.agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
+                _, newlogprob, entropy, new_ext_values, new_int_values = self.agent.get_action_and_value(
+                    b_obs[mb_inds], b_actions.long()[mb_inds], masks=b_masks[mb_inds]
+                )
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
@@ -716,6 +750,11 @@ class NovelD_PPO:
         
         for ep in range(num_episodes):
             obs = test_env.reset()
+            try:
+                current_mask = flatten_action_mask(env_unwrapped.get_action_mask(), self.action_dims)
+                current_mask_t = torch.tensor(current_mask, dtype=torch.float32, device=self.device).unsqueeze(0)
+            except Exception:
+                current_mask_t = None
             done = False
             steps = 0
             frames = []
@@ -730,9 +769,14 @@ class NovelD_PPO:
                 
                 obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(self.device)
                 with torch.no_grad():
-                    action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor)
+                    action, _, _, _, _ = self.agent.get_action_and_value(obs_tensor, masks=current_mask_t)
                 
-                obs, _, done, _ = test_env.step(action.cpu().numpy()[0])
+                obs, _, done, info = test_env.step(action.cpu().numpy()[0])
+                try:
+                    current_mask = flatten_action_mask(info.get('action_mask'), self.action_dims)
+                    current_mask_t = torch.tensor(current_mask, dtype=torch.float32, device=self.device).unsqueeze(0)
+                except Exception:
+                    current_mask_t = None
 
                 # Extract binary flags and count active states
                 current_flags = extract_binary_flags(obs, env_unwrapped)
