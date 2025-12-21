@@ -18,6 +18,7 @@ class AutoGenerateEnv(RoomGrid):
             scene_id='marple_0',
             initial_dict=None,
             max_steps=1e5,
+            render_mode=None,
     ):
         self.mission = initial_dict["Grid"]["mission"]
 
@@ -42,6 +43,7 @@ class AutoGenerateEnv(RoomGrid):
         super().__init__(mode=mode,
                          init_dict=initial_dict,
                          max_steps=max_steps,
+                         render_mode=render_mode,
                          )
 
     def _gen_random_floorplan(self, room_num):

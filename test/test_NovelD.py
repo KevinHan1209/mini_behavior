@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gymnasium as gym
 import numpy as np
 import torch
-from gym import Env
+from gymnasium import Env
 
 try:
     import wandb

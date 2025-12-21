@@ -1,7 +1,16 @@
-## FROM MINIGRID REPO
+import sys
 
-# Import the envs module so that envs register themselves
-import mini_behavior.envs
+import gymnasium as gym
+import minigrid
 
-# Import wrappers so it's accessible when installing with pip
-import gym_minigrid.wrappers
+# Expose gymnasium under the legacy "gym" name for callers expecting gym.
+sys.modules.setdefault("gym", gym)
+
+# Provide minimal compatibility aliases for legacy gym_minigrid imports.
+sys.modules.setdefault("gym_minigrid", minigrid)
+sys.modules.setdefault("gym_minigrid.wrappers", minigrid.wrappers)
+sys.modules.setdefault("gym_minigrid.envs", minigrid.envs)
+import minigrid.utils.rendering as _mg_render
+sys.modules.setdefault("gym_minigrid.rendering", _mg_render)
+
+# Import envs lazily when needed to avoid side effects at import time.

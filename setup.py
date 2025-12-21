@@ -36,7 +36,8 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     install_requires=[
-        "gym==0.21",
+        "gymnasium>=1.1.0,<1.2",
+        "minigrid>=3.0.0",
         "numpy>=1.18.0",
         "matplotlib>=3.0",
         "h5py",

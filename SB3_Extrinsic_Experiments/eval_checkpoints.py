@@ -10,13 +10,14 @@ from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
+from stable_baselines3.common import utils
 from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
 from sb3_contrib.common.maskable.utils import get_action_masks
 
 from sb3_maskable_noveld import MaskableNovelD_PPO
 
 from mini_behavior.register import env_list, register
-from run_experiment import make_vec_env
+from SB3_Extrinsic_Experiments.run_experiment import make_vec_env, validate_action_space
 
 CHECKPOINT_RE = re.compile(r"checkpoint_(\d+)_steps\.zip$")
 
@@ -72,13 +73,12 @@ def evaluate_mean_return(
     vec_env,
     n_episodes: int,
     deterministic: bool,
-    use_masks: bool,
 ) -> Tuple[float, float]:
     obs = vec_env.reset()
     running_returns = np.zeros(vec_env.num_envs, dtype=np.float64)
     completed: List[float] = []
     while len(completed) < n_episodes:
-        action_masks = get_action_masks(vec_env) if use_masks else None
+        action_masks = get_action_masks(vec_env)
         actions, _ = model.predict(obs, deterministic=deterministic, action_masks=action_masks)
         obs, rewards, dones, _infos = vec_env.step(actions)
         running_returns += np.asarray(rewards, dtype=np.float64)
@@ -107,11 +107,6 @@ def main() -> None:
         action="store_true",
         help="Use deterministic actions during evaluation.",
     )
-    parser.add_argument(
-        "--no-masks",
-        action="store_true",
-        help="Disable action masks during evaluation.",
-    )
     args = parser.parse_args()
 
     result_path = Path(args.result_path)
@@ -135,7 +130,9 @@ def main() -> None:
     if args.n_episodes <= 0:
         raise ValueError("--n-episodes must be positive")
 
+    utils.set_random_seed(args.seed)
     vec_env = make_vec_env(env_id, env_kwargs, seed=args.seed, num_envs=args.n_episodes)
+    validate_action_space(vec_env)
     env_nvec = np.asarray(vec_env.action_space.nvec, dtype=np.int64)
 
     checkpoints = find_checkpoints(checkpoint_dir)
@@ -143,7 +140,6 @@ def main() -> None:
         raise FileNotFoundError(f"No checkpoint files found in {checkpoint_dir}")
 
     print(f"Evaluating {len(checkpoints)} checkpoints from {checkpoint_dir}")
-    use_masks = not args.no_masks
     for ckpt in checkpoints:
         validate_checkpoint(ckpt, expected_nvec=env_nvec)
         model = MaskableNovelD_PPO.load(
@@ -152,13 +148,12 @@ def main() -> None:
             device="cpu",
             custom_objects={"policy_class": MaskableActorCriticPolicy},
         )
-        model.use_masking = use_masks
+        model.use_masking = True
         mean_reward, std_reward = evaluate_mean_return(
             model,
             vec_env,
             n_episodes=args.n_episodes,
             deterministic=args.deterministic,
-            use_masks=use_masks,
         )
         print(f"{ckpt.name}: ep_rew_mean_masked={mean_reward:.3f} (std={std_reward:.3f})")
 

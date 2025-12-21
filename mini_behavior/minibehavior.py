@@ -3,8 +3,9 @@
 import os
 import pickle as pkl
 from enum import IntEnum
-from gym import spaces
-from gym_minigrid.minigrid import MiniGridEnv
+from gymnasium import spaces
+from minigrid.minigrid_env import MiniGridEnv
+from minigrid.core.mission import MissionSpace
 from mini_bddl.actions import ACTION_FUNC_MAPPING
 from .objects import *
 from .grid import BehaviorGrid, GridDimension, is_obj
@@ -16,6 +17,7 @@ from mini_behavior.actions import Pickup, Drop, Toggle, Open, Close
 import numpy as np
 import torch
 import math
+from gymnasium.utils import seeding
 
 # Size in pixels of a tile in the full-scale human view
 TILE_PIXELS = 32
@@ -93,7 +95,8 @@ class MiniBehaviorEnv(MiniGridEnv):
         highlight=True,
         tile_size=TILE_PIXELS,
         extrinsic_rewards=None,
-        kick_length = 1
+        kick_length = 1,
+        render_mode=None,
     ):
         self.test_env = test_env
         if self.test_env:
@@ -156,12 +159,16 @@ class MiniBehaviorEnv(MiniGridEnv):
         ])
 
 
-        super().__init__(grid_size=grid_size,
+        mission_space = MissionSpace(mission_func=lambda: getattr(self, "mission", "explore"))
+
+        super().__init__(mission_space=mission_space,
+                         grid_size=grid_size,
                          width=width,
                          height=height,
                          max_steps=max_steps,
                          see_through_walls=see_through_walls,
                          agent_view_size=agent_view_size,
+                         render_mode=render_mode,
                          )
 
         self.grid = BehaviorGrid(width, height)
@@ -175,7 +182,9 @@ class MiniBehaviorEnv(MiniGridEnv):
             dtype='uint8'
         )
         self.observation_space = spaces.Dict({
-            'image': self.observation_space
+            'image': self.observation_space,
+            'direction': spaces.Discrete(4),
+            'mission': spaces.Text(max_length=64),
         })
 
         self.mode = mode
@@ -187,6 +196,11 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.step_reward = 0
         self.reward_breakdown = {'noise': 0, 'interaction': 0, 'location_change': 0}
         self.last_action_success = {'left': False, 'right': False, 'loco': False}
+
+    def seed(self, seed=None):
+        """Set RNG for gymnasium compatibility."""
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
 
     @property
     def left_vec(self):
@@ -278,7 +292,9 @@ class MiniBehaviorEnv(MiniGridEnv):
             self.agent_dir = state['agent_dir']
         return self.grid
 
-    def reset(self):
+    def reset(self, *, seed=None, options=None):
+        if seed is not None:
+            self.seed(seed)
         # Reinitialize episode-specific variables
         self.agent_pos = (-1, -1)
         self.agent_dir = -1
@@ -294,8 +310,6 @@ class MiniBehaviorEnv(MiniGridEnv):
         self.last_action_success = {'left': False, 'right': False, 'loco': False}
 
         # Generate a new random grid at the start of each episode
-        # To keep the same grid for each episode, call env.seed() with
-        # the same seed before calling env.reset()
         self._gen_grid(self.width, self.height)
         
 
@@ -331,7 +345,7 @@ class MiniBehaviorEnv(MiniGridEnv):
         if self.test_env:
             self.update_exploration_metrics()
 
-        return obs
+        return obs, {}
 
     def gen_full_obs(self):
         full_grid = self.grid.encode()
@@ -875,7 +889,9 @@ class MiniBehaviorEnv(MiniGridEnv):
                     self.reward_breakdown['noise'] += noise_reward
         
         reward = self._reward()
-        done = self._end_conditions() or self.step_count >= self.max_steps
+        terminated = self._end_conditions()
+        truncated = self.step_count >= self.max_steps
+        done = terminated or truncated
         if self.use_full_obs:
             obs = self.gen_full_obs()
         else:
@@ -891,7 +907,7 @@ class MiniBehaviorEnv(MiniGridEnv):
             # Reset breakdown for next step
             self.reward_breakdown = {'noise': 0, 'interaction': 0, 'location_change': 0}
         
-        return obs, reward, done, info
+        return obs, reward, terminated, truncated, info
     
     def drop_dims(self, pos):
         dims = []
@@ -1157,15 +1173,25 @@ class MiniBehaviorEnv(MiniGridEnv):
                     state._update(self)
         self.grid.state_values = {obj: obj.get_ability_values(self) for obj in self.obj_instances.values()}
 
-    def render(self, mode='human', highlight=True, tile_size=TILE_PIXELS):
+    def render(self, mode=None, highlight=True, tile_size=TILE_PIXELS, **kwargs):
         """
         Render the whole-grid human view
         """
+        if mode is None:
+            # Default to env render_mode when no explicit mode is provided.
+            mode = getattr(self, "render_mode", None) or "rgb_array"
+
+        # Align attributes used by MiniGridEnv.render
+        self.highlight = highlight
+        self.tile_size = tile_size
+        if getattr(self, "render_mode", None) != mode:
+            self.render_mode = mode
+
         if mode == "human" and not self.window:
             self.window = Window("mini_behavior")
             self.window.show(block=False)
 
-        img = super().render(mode='rgb_array', highlight=highlight, tile_size=tile_size)
+        img = super().render()
 
         if self.render_dim is None:
             img = self.render_furniture_states(img)

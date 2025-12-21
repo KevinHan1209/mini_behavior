@@ -23,6 +23,7 @@ from SB3_Extrinsic_Experiments.run_experiment import (
     TrueEpisodeRewardCallback,
     WandbOutputFormat,
     make_vec_env,
+    validate_action_space,
 )
 from mini_behavior.register import env_list, register
 
@@ -79,7 +80,6 @@ def main():
     parser.add_argument("--seed", type=int, default=1, help="Base seed for envs (matches training seeds when unchanged).")
     parser.add_argument("--num-envs", type=int, default=None, help="Override num_envs (defaults to value from config).")
     parser.add_argument("--deterministic", action="store_true", help="Use deterministic actions during rollout.")
-    parser.add_argument("--no-masks", action="store_true", help="Disable action masks during rollout.")
     parser.add_argument("--wandb", action="store_true", help="Log rollout metrics to Weights & Biases.")
     parser.add_argument("--wandb-project", default=None, help="W&B project (defaults to config or 'sb3-noveld-extrinsic').")
     parser.add_argument("--wandb-group", default=None, help="W&B group (defaults to config or 'no_update_rollout').")
@@ -108,6 +108,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     vec_env = make_vec_env(env_id, env_kwargs, seed=args.seed, num_envs=num_envs)
+    validate_action_space(vec_env)
     env_nvec = np.asarray(vec_env.action_space.nvec, dtype=np.int64)
     validate_checkpoint(checkpoint_path, env_nvec)
 
@@ -117,8 +118,7 @@ def main():
         device=device,
         custom_objects={"policy_class": MaskableActorCriticPolicy},
     )
-    use_masks = not args.no_masks
-    model.use_masking = use_masks
+    model.use_masking = True
 
     logger = utils.configure_logger(
         model.verbose,
@@ -143,7 +143,7 @@ def main():
                 "seed": args.seed,
                 "num_envs": num_envs,
                 "deterministic": args.deterministic,
-                "use_masks": not args.no_masks,
+                "use_masks": True,
             },
         )
         if not any(isinstance(fmt, WandbOutputFormat) for fmt in logger.output_formats):
@@ -159,7 +159,7 @@ def main():
             eval_env=vec_env,
             n_eval_episodes=num_envs,
             eval_freq=num_envs * model.n_steps,
-            use_masks=use_masks,
+            use_masks=True,
             deterministic=args.deterministic,
             verbose=1,
         ),

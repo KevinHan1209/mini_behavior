@@ -100,7 +100,8 @@ class RoomGrid(MiniBehaviorEnv):
         highlight=True,
         init_dict=None,
         extrinsic_rewards=None,
-        agent_pos=None
+        agent_pos=None,
+        render_mode=None,
     ):
         if init_dict:
             self.init_dict = init_dict
@@ -140,6 +141,7 @@ class RoomGrid(MiniBehaviorEnv):
             agent_view_size=agent_view_size,
             highlight=highlight,
             extrinsic_rewards=extrinsic_rewards,
+            render_mode=render_mode,
         )
     
     def add_walls(self, width, height):
@@ -456,17 +458,17 @@ class RoomGrid(MiniBehaviorEnv):
         assert j < self.num_rows
         return self.room_grid[j][i]
 
-    def reset(self):
-        super().reset()
+    def reset(self, *, seed=None, options=None):
+        obs, info = super().reset(seed=seed, options=options)
         if self.init_dict:
             for room in self.room_instances:
-                    room.reset()
+                room.reset()
         else:
             for row in self.room_grid:
                 for room in row:
                     room.reset()
-                    
-        return self.gen_obs()
+        obs = self.gen_obs()
+        return obs, info
 
     def _gen_grid(self, width, height):
         if not self.init_dict:

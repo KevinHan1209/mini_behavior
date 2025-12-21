@@ -1,5 +1,6 @@
 from PIL import Image
-from gym_minigrid.rendering import *
+import numpy as np
+from minigrid.utils.rendering import *
 
 
 def img_to_array(img_path):

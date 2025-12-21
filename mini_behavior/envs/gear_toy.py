@@ -12,7 +12,8 @@ class GearToyEnv(RoomGrid):
             num_rows=1,
             num_cols=1,
             max_steps=1e5,
-            num_gears = 3
+            num_gears = 3,
+            render_mode=None,
     ):
         self.num_gears = num_gears
         num_objs = {'gear': num_gears, 'gear_pole': 1, 'bucket': 1}
@@ -24,7 +25,8 @@ class GearToyEnv(RoomGrid):
                 room_size=room_size,
                 num_rows=num_rows,
                 num_cols=num_cols,
-                max_steps=max_steps
+                max_steps=max_steps,
+                render_mode=render_mode,
                 )
         
     def _gen_objs(self):

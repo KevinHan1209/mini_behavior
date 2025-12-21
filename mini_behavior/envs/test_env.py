@@ -1,7 +1,7 @@
 from mini_behavior.roomgrid import *
 from mini_behavior.register import register
 from enum import IntEnum
-from gym import spaces
+from gymnasium import spaces
 
 
 class TestEnv(RoomGrid):
@@ -17,6 +17,7 @@ class TestEnv(RoomGrid):
             num_rows=1,
             num_cols=1,
             max_steps=1e5,
+            render_mode=None,
     ):
         num_objs = {'alligator_busy_box': 1, 'ball': 1, 'music_toy': 1}
 
@@ -28,7 +29,8 @@ class TestEnv(RoomGrid):
                          room_size=room_size,
                          num_rows=num_rows,
                          num_cols=num_cols,
-                         max_steps=max_steps
+                         max_steps=max_steps,
+                         render_mode=render_mode,
                          )
 
         self.actions = TestEnv.Actions

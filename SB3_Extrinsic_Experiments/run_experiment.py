@@ -16,15 +16,17 @@ import gymnasium as gym
 import imageio
 import numpy as np
 import torch
+from matplotlib import pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from stable_baselines3.common import utils
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback
 from stable_baselines3.common.logger import KVWriter
-from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv
 from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
 from sb3_contrib.common.maskable.utils import get_action_masks
 
 from sb3_maskable_noveld import MaskableNovelD_PPO
+from PIL import Image, ImageDraw, ImageFont
 
 from env_wrapper import CustomObservationWrapper
 from mini_behavior.register import env_list, register
@@ -89,10 +91,13 @@ def flatten_action_mask(mask_dict: Optional[Dict[str, np.ndarray]], action_space
 
 
 def mask_fn(env) -> np.ndarray:
-    mask_dict = getattr(env, "get_action_mask", lambda: None)()
+    base_env = unwrap_base_env(env)
+    mask_dict = getattr(base_env, "get_action_mask", lambda: None)()
     flat = flatten_action_mask(mask_dict, env.action_space)
     if flat is None:
-        raise RuntimeError("Action mask missing or None; aborting to avoid unmasked training.")
+        raise RuntimeError(
+            f"Action mask missing or None for env {base_env.__class__.__name__}; aborting to avoid unmasked training."
+        )
     return flat
 
 
@@ -106,18 +111,53 @@ class ActionMaskWrapper(gym.Wrapper):
         return getattr(self.env, name)
 
 
-def create_base_env(env_id: str, env_kwargs: Dict[str, object]):
+def create_base_env(env_id: str, env_kwargs: Dict[str, object], render_mode: Optional[str] = None):
     """Bare env constructor kept for legacy helpers/tests."""
-    return gym.make(env_id, **env_kwargs)
+    kwargs = dict(env_kwargs)
+    if render_mode is not None and "render_mode" not in kwargs:
+        kwargs["render_mode"] = render_mode
+    return gym.make(env_id, **kwargs)
 
 
-def create_env(env_id: str, env_kwargs: Dict[str, object], seed: int) -> gym.Env:
-    env = create_base_env(env_id, env_kwargs)
+def unwrap_base_env(env) -> gym.Env:
+    base = env
+    while hasattr(base, "env"):
+        base = base.env
+    return getattr(base, "unwrapped", base)
+
+
+def expected_action_nvec(base_env) -> np.ndarray:
+    manip = getattr(base_env, "manipulation_actions", None)
+    loco = getattr(base_env, "locomotion_actions", None)
+    if manip is None or loco is None:
+        raise ValueError("Environment missing manipulation_actions/locomotion_actions for maskable action space.")
+    return np.asarray([len(manip), len(manip), len(loco)], dtype=np.int64)
+
+
+def validate_action_space(vec_env) -> np.ndarray:
+    """Ensure the vec env exposes the same nvec as the base env + noop branch."""
+    env_space_nvec = getattr(vec_env.action_space, "nvec", None)
+    base_env = unwrap_base_env(vec_env.envs[0])
+    base_space_nvec = getattr(base_env.action_space, "nvec", None)
+    if env_space_nvec is None or base_space_nvec is None:
+        raise ValueError("Action space is missing nvec; maskable policy requires MultiDiscrete with nvec.")
+
+    env_nvec = np.asarray(env_space_nvec, dtype=np.int64)
+    base_nvec = np.asarray(base_space_nvec, dtype=np.int64)
+    expected = expected_action_nvec(base_env)
+    if env_nvec.shape != expected.shape or not np.array_equal(env_nvec, expected):
+        raise ValueError(f"Vectorized env nvec {env_nvec.tolist()} does not match expected {expected.tolist()}.")
+    if base_nvec.shape != expected.shape or not np.array_equal(base_nvec, expected):
+        raise ValueError(f"Base env nvec {base_nvec.tolist()} does not match expected {expected.tolist()}.")
+    return expected
+
+
+def create_env(env_id: str, env_kwargs: Dict[str, object], seed: int, render_mode: Optional[str] = None) -> gym.Env:
+    env = create_base_env(env_id, env_kwargs, render_mode=render_mode)
     env.reset(seed=seed)
     env.action_space.seed(seed)
     env = CustomObservationWrapper(env)
     env = ActionMaskWrapper(env)
-    env = Monitor(env)
     return env
 
 
@@ -131,30 +171,53 @@ def make_vec_env(env_id: str, env_kwargs: Dict[str, object], seed: int, num_envs
     return DummyVecEnv([make_thunk(i) for i in range(num_envs)])
 
 
-class TrueEpisodeRewardCallback(BaseCallback):
-    """Log Monitor-style episode rewards from the latest rollout."""
+class EpisodeReturnLogger(BaseCallback):
+    """
+    Log per-episode returns without relying on sb3's Monitor.
+    Accumulates rewards per env and records stats at rollout end.
+    """
 
-    def __init__(self, verbose: int = 0):
+    def __init__(self, num_envs: int, verbose: int = 0):
         super().__init__(verbose)
-        self._episode_rewards: List[float] = []
+        self.num_envs = int(num_envs)
+        self._running_returns = np.zeros(self.num_envs, dtype=np.float64)
+        self._episode_returns: List[float] = []
+        self._running_lengths = np.zeros(self.num_envs, dtype=np.int64)
+        self._episode_lengths: List[int] = []
 
     def _on_step(self) -> bool:
-        infos = self.locals.get("infos")
-        if not infos:
+        rewards = self.locals.get("rewards")
+        dones = self.locals.get("dones")
+        if rewards is None or dones is None:
             return True
-        for info in infos:
-            episode = info.get("episode") if isinstance(info, dict) else None
-            if isinstance(episode, dict) and "r" in episode:
-                self._episode_rewards.append(float(episode["r"]))
+        rewards_arr = np.asarray(rewards, dtype=np.float64).reshape(-1)
+        dones_arr = np.asarray(dones, dtype=np.bool_).reshape(-1)
+        if rewards_arr.shape[0] != self.num_envs:
+            # If vec env size changes unexpectedly, resize buffers defensively.
+            self.num_envs = rewards_arr.shape[0]
+            self._running_returns = np.zeros(self.num_envs, dtype=np.float64)
+            self._running_lengths = np.zeros(self.num_envs, dtype=np.int64)
+        self._running_returns[: rewards_arr.shape[0]] += rewards_arr
+        self._running_lengths[: rewards_arr.shape[0]] += 1
+        for idx, done in enumerate(dones_arr):
+            if done:
+                self._episode_returns.append(float(self._running_returns[idx]))
+                self._episode_lengths.append(int(self._running_lengths[idx]))
+                self._running_returns[idx] = 0.0
+                self._running_lengths[idx] = 0
         return True
 
     def _on_rollout_end(self) -> None:
-        if not self._episode_rewards:
+        if not self._episode_returns:
             return
-        mean_reward = float(np.mean(self._episode_rewards))
-        self.logger.record("rollout/true_ep_rew_mean", mean_reward)
-        self.logger.record("rollout/true_ep_rew_count", len(self._episode_rewards))
-        self._episode_rewards.clear()
+        mean_reward = float(np.mean(self._episode_returns))
+        count = len(self._episode_returns)
+        self.logger.record("rollout/ep_rew_mean", mean_reward)
+        self.logger.record("rollout/ep_rew_count", count, exclude="tensorboard")
+        mean_length = float(np.mean(self._episode_lengths)) if self._episode_lengths else 0.0
+        self.logger.record("rollout/ep_len_mean", mean_length)
+        self._episode_returns.clear()
+        self._episode_lengths.clear()
 
 
 class EvalEpRewMeanCallback(BaseCallback):
@@ -229,9 +292,73 @@ class GifLoggerCallback(BaseCallback):
         self.seed = seed
         self.deterministic = deterministic
         self._next_log = self.log_interval
+        self._font = ImageFont.load_default()
 
-    def _rollout_frames(self) -> Optional[Tuple[List[np.ndarray], float]]:
-        env = create_env(self.env_id, self.env_kwargs, seed=self.seed)
+    def _render_hist_panel(self, branch_counts: Dict[str, np.ndarray], branch_labels: Dict[str, List[str]], target_height: int) -> np.ndarray:
+        """Render stacked histograms with labeled axes using matplotlib."""
+        branches = ("left", "right", "loco")
+        colors = [(66 / 255, 135 / 255, 245 / 255), (245 / 255, 99 / 255, 66 / 255), (66 / 255, 189 / 255, 86 / 255)]
+        fig, axes = plt.subplots(len(branches), 1, figsize=(3.2, max(2.4, target_height / 100)), constrained_layout=True)
+        if len(branches) == 1:
+            axes = [axes]
+        for ax, branch, color in zip(axes, branches, colors):
+            counts = np.asarray(branch_counts.get(branch), dtype=np.int64)
+            labels = branch_labels.get(branch, [])
+            ax.bar(range(len(counts)), counts, color=color)
+            ax.set_title(branch, fontsize=8)
+            ax.set_xticks(range(len(counts)))
+            ax.set_xticklabels(labels if labels else [str(i) for i in range(len(counts))], rotation=45, ha="right", fontsize=6)
+            ax.tick_params(axis="y", labelsize=6)
+            for spine in ax.spines.values():
+                spine.set_visible(True)
+            ax.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.5)
+        canvas = FigureCanvas(fig)
+        canvas.draw()
+        buf = canvas.buffer_rgba()
+        out = np.asarray(buf).copy()
+        plt.close(fig)
+        # Ensure height matches target; preserve aspect ratio
+        img = Image.fromarray(out)
+        if img.height != target_height:
+            new_w = int(img.width * (target_height / img.height))
+            img = img.resize((new_w, target_height), resample=Image.BILINEAR)
+        return np.array(img.convert("RGB"), dtype=np.uint8)
+
+    def _render_sidebars(
+        self,
+        frame: np.ndarray,
+        branch_counts: Dict[str, np.ndarray],
+        branch_labels: Dict[str, List[str]],
+        cumulative_reward: float,
+        carrying: Dict[str, list],
+        step_idx: int,
+    ) -> np.ndarray:
+        """Compose left sidebar text + right matplotlib histogram panel with axes/labels."""
+        h, w, _ = frame.shape
+        left_w = 180
+
+        # Left sidebar: status text
+        left_img = Image.new("RGB", (left_w, h), color=(255, 255, 255))
+        draw = ImageDraw.Draw(left_img)
+        lines = [
+            f"Step: {step_idx}",
+            f"Total reward: {cumulative_reward:.2f}",
+            f"Carry L: {', '.join(carrying.get('left', [])) or 'empty'}",
+            f"Carry R: {', '.join(carrying.get('right', [])) or 'empty'}",
+        ]
+        y = 10
+        for line in lines:
+            draw.text((10, y), line, fill=(0, 0, 0), font=self._font)
+            y += 18
+        left_arr = np.array(left_img, dtype=np.uint8)
+
+        # Right sidebar via matplotlib
+        hist_panel = self._render_hist_panel(branch_counts, branch_labels, target_height=h)
+
+        return np.concatenate([left_arr, frame, hist_panel], axis=1)
+
+    def _rollout_frames(self) -> Optional[Tuple[List[np.ndarray], float, Dict[str, Any]]]:
+        env = create_env(self.env_id, self.env_kwargs, seed=self.seed, render_mode="rgb_array")
         try:
             reset_out = env.reset()
             obs = reset_out[0] if isinstance(reset_out, tuple) else reset_out
@@ -239,25 +366,73 @@ class GifLoggerCallback(BaseCallback):
             total_reward = 0.0
             done = False
             steps = 0
+            base_env = unwrap_base_env(env)
+            branch_counts = {
+                "left": np.zeros(env.action_space.nvec[0], dtype=np.int64),
+                "right": np.zeros(env.action_space.nvec[1], dtype=np.int64),
+                "loco": np.zeros(env.action_space.nvec[2], dtype=np.int64),
+            }
+            branch_valid = {
+                "left": np.zeros(env.action_space.nvec[0], dtype=np.int64),
+                "right": np.zeros(env.action_space.nvec[1], dtype=np.int64),
+                "loco": np.zeros(env.action_space.nvec[2], dtype=np.int64),
+            }
+            branch_labels = {
+                "left": [a.name for a in getattr(base_env, "manipulation_actions", [])],
+                "right": [a.name for a in getattr(base_env, "manipulation_actions", [])],
+                "loco": [a.name for a in getattr(base_env, "locomotion_actions", [])],
+            }
             while steps < self.gif_steps and not done:
-                action_masks = get_action_masks(env)
+                mask_dict = getattr(base_env, "get_action_mask", lambda: None)()
+                if mask_dict is not None:
+                    # Record mask validity counts per branch
+                    for key in ("left", "right", "loco"):
+                        branch_valid[key] += np.asarray(mask_dict[key], dtype=np.int64)
+                action_masks = flatten_action_mask(mask_dict, env.action_space)
                 action, _ = self.model.predict(
                     obs,
                     deterministic=self.deterministic,
                     action_masks=action_masks,
                 )
+                if isinstance(action, np.ndarray):
+                    act_arr = action.reshape(-1)
+                else:
+                    act_arr = np.asarray(action).reshape(-1)
+                # Track chosen actions per branch
+                for idx, key in enumerate(("left", "right", "loco")):
+                    act_idx = int(act_arr[idx])
+                    branch_counts[key][act_idx] += 1
                 step_out = env.step(action)
                 if len(step_out) == 5:
                     obs, reward, terminated, truncated, _info = step_out
                     done = bool(terminated or truncated)
                 else:
                     obs, reward, done, _info = step_out
-                total_reward += float(np.asarray(reward).sum())
+                step_rew = float(np.asarray(reward).sum())
+                total_reward += step_rew
                 frame = env.render()
+                carry_names = {
+                    "left": [obj.name for obj in getattr(base_env, "carrying", {}).get("left", [])],
+                    "right": [obj.name for obj in getattr(base_env, "carrying", {}).get("right", [])],
+                }
+                frame = self._render_sidebars(
+                    frame,
+                    branch_counts=branch_counts,
+                    branch_labels=branch_labels,
+                    cumulative_reward=total_reward,
+                    carrying=carry_names,
+                    step_idx=steps,
+                )
                 if frame is not None:
                     frames.append(np.asarray(frame, dtype=np.uint8))
                 steps += 1
-            return frames, total_reward
+            stats = {
+                "steps": steps,
+                "total_reward": total_reward,
+                "branch_counts": branch_counts,
+                "branch_valid": branch_valid,
+            }
+            return frames, total_reward, stats
         finally:
             env.close()
 
@@ -272,7 +447,7 @@ class GifLoggerCallback(BaseCallback):
             return
         if rollout is None:
             return
-        frames, total_reward = rollout
+        frames, total_reward, stats = rollout
         if not frames:
             return
         tmp: Optional[tempfile.NamedTemporaryFile] = None
@@ -280,15 +455,29 @@ class GifLoggerCallback(BaseCallback):
             with tempfile.NamedTemporaryFile(suffix=".gif", delete=False) as tmp:
                 imageio.mimsave(tmp.name, frames, fps=10)
                 video = wandb.Video(tmp.name, fps=10, format="gif")
+            gif_metrics = {
+                f"rollout/gif_reward_{self.num_timesteps}": total_reward,
+            }
+            # Log action distributions per branch
+            branch_counts = stats.get("branch_counts", {})
+            branch_valid = stats.get("branch_valid", {})
+            for branch in ("left", "right", "loco"):
+                if branch in branch_counts:
+                    gif_metrics[f"rollout/{branch}_action_counts_{self.num_timesteps}"] = branch_counts[branch].tolist()
+                if branch in branch_valid:
+                    gif_metrics[f"rollout/{branch}_mask_counts_{self.num_timesteps}"] = branch_valid[branch].tolist()
             wandb.log(
                 {
                     f"rollout/gif_{self.num_timesteps}": video,
-                    f"rollout/gif_reward_{self.num_timesteps}": total_reward,
+                    **gif_metrics,
                 },
                 step=self.num_timesteps,
             )
             if self.verbose:
-                print(f"[GifLogger] Logged GIF at step {self.num_timesteps} (reward {total_reward:.3f})")
+                print(
+                    f"[GifLogger] Logged GIF at step {self.num_timesteps} (reward {total_reward:.3f}, "
+                    f"invalid {stats.get('invalid_choices', 0)}, steps {stats.get('steps', 0)})"
+                )
         finally:
             if tmp is not None:
                 try:
@@ -342,6 +531,12 @@ def run_experiment(config_path: str, output_dir: str = "results", seed: int = 1)
     vec_env = make_vec_env(env_id, env_kwargs, seed=seed, num_envs=num_envs)
     eval_num_envs = int(hyperparams.get("eval_num_envs", num_envs))
     eval_env = make_vec_env(env_id, env_kwargs, seed=seed, num_envs=eval_num_envs)
+    expected_nvec = validate_action_space(vec_env)
+    validate_action_space(eval_env)
+    for e in vec_env.envs:
+        mask_fn(e)
+    for e in eval_env.envs:
+        mask_fn(e)
 
     model = MaskableNovelD_PPO(
         policy=MaskableActorCriticPolicy,
@@ -399,7 +594,7 @@ def run_experiment(config_path: str, output_dir: str = "results", seed: int = 1)
         callbacks.append(
             CheckpointCallback(save_freq=checkpoint_interval, save_path=str(checkpoint_dir), name_prefix="checkpoint")
         )
-    callbacks.append(TrueEpisodeRewardCallback())
+    callbacks.append(EpisodeReturnLogger(num_envs=num_envs))
     callbacks.append(
         EvalEpRewMeanCallback(
             eval_env=eval_env,
@@ -427,6 +622,12 @@ def run_experiment(config_path: str, output_dir: str = "results", seed: int = 1)
         callback_arg = callbacks[0] if len(callbacks) == 1 else CallbackList(callbacks)
 
     model.learn(total_timesteps=hyperparams["total_timesteps"], callback=callback_arg)
+
+    model_nvec = np.asarray(getattr(model.action_space, "nvec", None), dtype=np.int64)
+    if model_nvec.shape != expected_nvec.shape or not np.array_equal(model_nvec, expected_nvec):
+        raise ValueError(
+            f"Model action_space.nvec {model_nvec.tolist()} does not match expected {expected_nvec.tolist()}."
+        )
 
     final_model_path = exp_output_dir / "final_model"
     model.save(str(final_model_path))

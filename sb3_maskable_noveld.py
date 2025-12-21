@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, Tuple, Type, Union
 
 import numpy as np
 import torch as th
-from gym import spaces
+from gymnasium import spaces
 from torch import nn
 from torch.nn import functional as F
 

@@ -1,8 +1,9 @@
-from gym_minigrid.window import *
+import numpy as np
+import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 
-class Window(Window):
+class Window:
     """
     Window to draw a gridworld instance using Matplotlib
     """
@@ -121,3 +122,29 @@ class Window(Window):
 
     def save_img(self, out_filepath):
         self.fig.savefig(out_filepath)
+
+    def show(self, block=False):
+        """
+        Display the window. Kept for compatibility with minigrid rendering API.
+        """
+        try:
+            self.fig.show()
+            plt.show(block=block)
+        except Exception:
+            # Fallback to non-blocking draw to avoid crashing headless usage.
+            self.fig.canvas.draw_idle()
+            self.fig.canvas.flush_events()
+
+    def close(self):
+        plt.close(self.fig)
+
+    def show_img(self, img):
+        """
+        Display an image array on the main axes. Mirrors the minigrid Window API.
+        """
+        if self.imshow_obj is None:
+            self.imshow_obj = self.ax.imshow(img, interpolation='bilinear')
+        else:
+            self.imshow_obj.set_data(img)
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()

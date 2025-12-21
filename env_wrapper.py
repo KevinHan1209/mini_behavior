@@ -75,15 +75,17 @@ class CustomObservationWrapper(gym.ObservationWrapper):
 
     def _gen_single_obs(self, env_idx=0):
         env = self.env.envs[env_idx] if hasattr(self.env, 'envs') else self.env
+        env = getattr(env, "unwrapped", env)
         agent_pos = np.array(env.agent_pos, dtype=np.float32)
         obj_states = self._collect_object_features(env, agent_pos)
         obs = [float(agent_pos[0]), float(agent_pos[1]), float(env.agent_dir)] + obj_states
         return np.array(obs, dtype=np.float32)
 
     def get_obs_space(self):
-        width = getattr(self.env, "width", None)
-        height = getattr(self.env, "height", None)
-        fallback_dim = getattr(self.env, "room_width", None)
+        base_env = getattr(self.env, "unwrapped", self.env)
+        width = getattr(base_env, "width", None)
+        height = getattr(base_env, "height", None)
+        fallback_dim = getattr(base_env, "room_width", None)
         dims = [d for d in [width, height, fallback_dim] if d is not None]
         max_dim = max(dims) if dims else 1
 
@@ -95,7 +97,7 @@ class CustomObservationWrapper(gym.ObservationWrapper):
         ]
 
         agent_pos = np.zeros(2, dtype=np.float32)
-        for obj_type in self.env.objs.values():
+        for obj_type in base_env.objs.values():
             for obj in obj_type:
                 # Two slots for relative x/y
                 lows.extend([-float(max_dim), -float(max_dim)])
@@ -113,7 +115,7 @@ class CustomObservationWrapper(gym.ObservationWrapper):
         return gym.spaces.Box(low=low_arr, high=high_arr, dtype=np.float32)
 
     def gen_obs(self):
-        env = self.env
+        env = getattr(self.env, "unwrapped", self.env)
         agent_pos = np.array(env.agent_pos, dtype=np.float32)
         obj_states = self._collect_object_features(env, agent_pos)
         obs = [float(agent_pos[0]), float(agent_pos[1]), float(env.agent_dir)] + obj_states

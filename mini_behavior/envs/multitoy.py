@@ -1,7 +1,7 @@
 from mini_behavior.roomgrid import *
 from mini_behavior.register import register
 from enum import IntEnum
-from gym import spaces
+from gymnasium import spaces
 
 
 class MultiToyEnv(RoomGrid):
@@ -40,7 +40,8 @@ class MultiToyEnv(RoomGrid):
                 'broom': (8, 14),
                 'winnie_cabinet': (5, 14),
                 'rattle': (14, 11)
-            }
+            },
+            render_mode=None,
     ):
         '''
         All unique objects in the dataset: 
@@ -71,7 +72,8 @@ class MultiToyEnv(RoomGrid):
                          room_width=room_width,
                          room_height=room_height,
                          agent_pos=agent_pos,
-                         extrinsic_rewards=extrinsic_rewards
+                         extrinsic_rewards=extrinsic_rewards,
+                         render_mode=render_mode,
                          )
 
         self.locomotion_actions = MiniBehaviorEnv.LocoActions

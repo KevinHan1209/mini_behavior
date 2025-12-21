@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import gym
+import gymnasium as gym
 try:
     import wandb
     WANDB_AVAILABLE = True
@@ -17,7 +17,7 @@ from networks.actor_critic import Agent
 from mini_behavior.roomgrid import *
 from mini_behavior.utils.utils import RewardForwardFilter, RMS
 from env_wrapper import CustomObservationWrapper
-from gym.wrappers.normalize import RunningMeanStd
+from gymnasium.wrappers.normalize import RunningMeanStd
 from mini_behavior.utils.states_base import RelativeObjectState
 import random
 

@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 try:
     import wandb
     WANDB_AVAILABLE = True
@@ -37,7 +37,7 @@ def make_env(env_id, seed, idx):
     def thunk():
         env = gym.make(env_id)
         env = CustomObservationWrapper(env)
-        env.seed(seed + idx)
+        env.reset(seed=seed + idx)
         return env
     return thunk
 
