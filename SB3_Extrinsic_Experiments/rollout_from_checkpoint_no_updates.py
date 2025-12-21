@@ -20,8 +20,9 @@ from sb3_maskable_noveld import MaskableNovelD_PPO
 from SB3_Extrinsic_Experiments.eval_checkpoints import checkpoint_metadata
 from SB3_Extrinsic_Experiments.run_experiment import (
     EvalEpRewMeanCallback,
-    TrueEpisodeRewardCallback,
+    EpisodeReturnLogger,
     WandbOutputFormat,
+    mask_fn,
     make_vec_env,
     validate_action_space,
 )
@@ -110,7 +111,14 @@ def main():
     vec_env = make_vec_env(env_id, env_kwargs, seed=args.seed, num_envs=num_envs)
     validate_action_space(vec_env)
     env_nvec = np.asarray(vec_env.action_space.nvec, dtype=np.int64)
+    for e in vec_env.envs:
+        mask_fn(e)
     validate_checkpoint(checkpoint_path, env_nvec)
+
+    eval_env = make_vec_env(env_id, env_kwargs, seed=args.seed, num_envs=num_envs)
+    validate_action_space(eval_env)
+    for e in eval_env.envs:
+        mask_fn(e)
 
     model: MaskableNovelD_PPO = MaskableNovelD_PPO.load(
         str(checkpoint_path),
@@ -153,17 +161,17 @@ def main():
         logger.output_formats = [fmt for fmt in logger.output_formats if not isinstance(fmt, WandbOutputFormat)]
     model.set_logger(logger)
 
-    callbacks = [
-        TrueEpisodeRewardCallback(),
+    callbacks = [EpisodeReturnLogger(num_envs=num_envs)]
+    callbacks.append(
         EvalEpRewMeanCallback(
-            eval_env=vec_env,
+            eval_env=eval_env,
             n_eval_episodes=num_envs,
             eval_freq=num_envs * model.n_steps,
             use_masks=True,
             deterministic=args.deterministic,
             verbose=1,
-        ),
-    ]
+        )
+    )
     callback = CallbackList(callbacks)
 
     original_train = patch_no_train(model)
@@ -179,6 +187,7 @@ def main():
     finally:
         model.train = original_train
         vec_env.close()
+        eval_env.close()
         if wandb_run is not None:
             try:
                 wandb.finish()

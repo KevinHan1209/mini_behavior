@@ -209,6 +209,9 @@ class EpisodeReturnLogger(BaseCallback):
 
     def _on_rollout_end(self) -> None:
         if not self._episode_returns:
+            # Clear stale ep_info_buffer to avoid SB3 overwriting our logged value with old Monitor data.
+            if getattr(self.model, "ep_info_buffer", None) is not None:
+                self.model.ep_info_buffer.clear()
             return
         mean_reward = float(np.mean(self._episode_returns))
         count = len(self._episode_returns)
@@ -216,6 +219,8 @@ class EpisodeReturnLogger(BaseCallback):
         self.logger.record("rollout/ep_rew_count", count, exclude="tensorboard")
         mean_length = float(np.mean(self._episode_lengths)) if self._episode_lengths else 0.0
         self.logger.record("rollout/ep_len_mean", mean_length)
+        if getattr(self.model, "ep_info_buffer", None) is not None:
+            self.model.ep_info_buffer.clear()
         self._episode_returns.clear()
         self._episode_lengths.clear()
 

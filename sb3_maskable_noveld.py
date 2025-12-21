@@ -5,6 +5,8 @@ This mirrors the NovelD logic from the legacy stable_baselines3 NovelD_PPO while
 from __future__ import annotations
 
 import math
+import sys
+import time
 from typing import Any, Dict, Optional, Tuple, Type, Union
 
 import numpy as np
@@ -20,7 +22,7 @@ from sb3_contrib.common.maskable.utils import get_action_masks, is_masking_suppo
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.policies import ActorCriticPolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
-from stable_baselines3.common.utils import explained_variance, obs_as_tensor
+from stable_baselines3.common.utils import explained_variance, obs_as_tensor, safe_mean
 from stable_baselines3.common.vec_env import VecEnv
 
 
@@ -441,3 +443,19 @@ class MaskableNovelD_PPO(MaskablePPO):
         th.nn.utils.clip_grad_norm_(self._rnd.predictor.parameters(), self.max_grad_norm)
         self._rnd_optimizer.step()
         return float(forward_loss.item())
+
+    def dump_logs(self, iteration: int = 0) -> None:
+        """
+        Write logs without relying on ep_info_buffer (which requires Monitor).
+        Episode returns are logged by EpisodeReturnLogger instead.
+        """
+        time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
+        fps = int((self.num_timesteps - self._num_timesteps_at_start) / time_elapsed)
+        if iteration > 0:
+            self.logger.record("time/iterations", iteration, exclude="tensorboard")
+        self.logger.record("time/fps", fps)
+        self.logger.record("time/time_elapsed", int(time_elapsed), exclude="tensorboard")
+        self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
+        if len(self.ep_success_buffer) > 0:
+            self.logger.record("rollout/success_rate", safe_mean(self.ep_success_buffer))
+        self.logger.dump(step=self.num_timesteps)
